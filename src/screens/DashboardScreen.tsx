@@ -11,6 +11,9 @@ import {
   Platform,
 } from 'react-native';
 import { Plus, TrendingUp, ArrowRight, Activity } from 'lucide-react-native';
+import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { RootStackParamList } from '../../App';
 
 // --- TYPY ---
 export interface Subscription {
@@ -69,6 +72,7 @@ const Skeleton = ({ width, height, style, borderRadius = 8 }: any) => {
 };
 
 export const DashboardScreen = () => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -187,7 +191,10 @@ export const DashboardScreen = () => {
         <View style={styles.sectionContainer}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Nadchodzące płatności</Text>
-            <TouchableOpacity style={styles.seeAllBtn}>
+            <TouchableOpacity 
+              style={styles.seeAllBtn}
+              onPress={() => navigation.navigate('SubscriptionList')}
+            >
               <Text style={styles.seeAllText}>Wszystkie</Text>
               <ArrowRight size={16} color="#6366F1" />
             </TouchableOpacity>
@@ -223,7 +230,11 @@ export const DashboardScreen = () => {
       </ScrollView>
 
       {/* Quick Action Button (FAB) */}
-      <TouchableOpacity style={[styles.fab, styles.shadowLg]} activeOpacity={0.8}>
+      <TouchableOpacity 
+        style={[styles.fab, styles.shadowLg]} 
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('AddSubscription')}
+      >
         <Plus size={28} color="#FFFFFF" />
       </TouchableOpacity>
     </SafeAreaView>

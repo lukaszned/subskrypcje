@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler'; // Musi być na samej górze
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
@@ -6,11 +7,15 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 // Import ekranów
 import DashboardScreen from './src/screens/DashboardScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
+import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
+import AddSubscriptionScreen from './src/screens/AddSubscriptionScreen';
 
 // Typy parametrów nawigacji
 export type RootStackParamList = {
   Onboarding: undefined;
   Dashboard: undefined;
+  SubscriptionList: undefined;
+  AddSubscription: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -36,6 +41,17 @@ export default function App() {
           options={{
             // Wyłączamy gest cofania na iOS dla ekranu głównego
             gestureEnabled: false,
+          }}
+        />
+        <Stack.Screen
+          name="SubscriptionList"
+          component={SubscriptionListScreen}
+        />
+        <Stack.Screen
+          name="AddSubscription"
+          component={AddSubscriptionScreen}
+          options={{
+            presentation: 'modal', // Płynne przejście typu modal
           }}
         />
       </Stack.Navigator>
