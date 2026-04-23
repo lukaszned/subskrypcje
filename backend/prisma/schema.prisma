@@ -1,0 +1,56 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SubscriptionCategory {
+  entertainment
+  utilities
+  shopping
+  health
+  education
+  other
+}
+
+enum BillingCycle {
+  monthly
+  yearly
+  weekly
+  one_time
+}
+
+enum SubscriptionStatus {
+  pending
+  paid
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+}
+
+model Subscription {
+  id              String               @id @default(cuid())
+  name            String
+  amount          Decimal              @db.Decimal(10, 2)
+  currency        String               @default("PLN")
+  category        SubscriptionCategory
+  billingCycle    BillingCycle
+  nextPaymentDate DateTime
+  isTrial         Boolean              @default(false)
+  status          SubscriptionStatus   @default(pending)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  userId          String
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
