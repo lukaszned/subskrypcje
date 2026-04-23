@@ -9,6 +9,8 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
 import ManualAddScreen from './src/screens/ManualAddScreen';
+import NotificationsTestScreen from './src/screens/NotificationsTestScreen';
+import { NotificationManager } from './src/utils/NotificationManager';
 
 // Typy parametrów nawigacji
 export type RootStackParamList = {
@@ -16,11 +18,18 @@ export type RootStackParamList = {
   Dashboard: undefined;
   SubscriptionList: undefined;
   AddSubscription: undefined;
+  NotificationsTest: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export default function App() {
+  React.useEffect(() => {
+    // Inicjalizacja nasłuchiwaczy powiadomień
+    const cleanup = NotificationManager.setupNotificationListener();
+    return cleanup;
+  }, []);
+
   return (
     <NavigationContainer>
       <StatusBar style="light" />
@@ -52,6 +61,13 @@ export default function App() {
           component={ManualAddScreen}
           options={{
             presentation: 'modal', // Płynne przejście typu modal
+          }}
+        />
+        <Stack.Screen
+          name="NotificationsTest"
+          component={NotificationsTestScreen}
+          options={{
+            presentation: 'modal', // Żeby testy łatwo było odrzucić z powrotem
           }}
         />
       </Stack.Navigator>

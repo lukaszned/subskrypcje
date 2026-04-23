@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
-import { Pause, Trash2 } from 'lucide-react-native';
+import { Pause, Trash2, Users } from 'lucide-react-native';
 
 export interface SubscriptionItem {
   id: string;
@@ -12,6 +12,7 @@ export interface SubscriptionItem {
   nextPaymentDate: string;
   cycle: string;
   status: 'active' | 'cancelled';
+  splitWith?: number;
 }
 
 interface Props {

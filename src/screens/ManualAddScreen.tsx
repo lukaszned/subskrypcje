@@ -15,13 +15,17 @@ import {
 } from 'react-native';
 import { X, Edit2, Calendar, LayoutGrid, RotateCw } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSubscriptionStore } from '../store/useSubscriptionStore';
+import { Users } from 'lucide-react-native';
 
 const CATEGORIES = [
   { id: 'rozrywka', label: 'Rozrywka', color: '#E0E7FF', textColor: '#4F46E5' },
   { id: 'muzyka', label: 'Muzyka', color: '#FEF08A', textColor: '#CA8A04' },
   { id: 'zdrowie', label: 'Zdrowie', color: '#DCFCE7', textColor: '#16A34A' },
   { id: 'narzedzia', label: 'Narzędzia', color: '#DBEAFE', textColor: '#2563EB' },
+  { id: 'auto', label: 'Auto / OC', color: '#FCE7F3', textColor: '#BE185D' },
   { id: 'inne', label: 'Inne', color: '#F1F5F9', textColor: '#64748B' },
+  { id: 'wlasna', label: '+ Własna', color: '#E2E8F0', textColor: '#0F172A' },
 ];
 
 const CYCLES = ['Co miesiąc', 'Co rok', 'Niestandardowy'];
@@ -34,7 +38,12 @@ export const ManualAddScreen = () => {
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
   const [cycle, setCycle] = useState('Co miesiąc');
+
   const [category, setCategory] = useState('rozrywka');
+  const [customCategory, setCustomCategory] = useState('');
+  const [splitWith, setSplitWith] = useState(1);
+  const addSubscription = useSubscriptionStore(state => state.addSubscription);
+
 
   // Walidacja: nazwa niepusta, kwota > 0
   const parsedAmount = parseFloat(amount.replace(',', '.'));
@@ -56,12 +65,27 @@ export const ManualAddScreen = () => {
     return () => clearTimeout(timer);
   }, []);
 
+
   const handleSave = () => {
     if (!isValid) return;
     
+    const finalCategory = category === 'wlasna' ? customCategory || 'Własna' : CATEGORIES.find(c => c.id === category)?.label || category;
+
+    // Dodanie do store
+    addSubscription({
+      name,
+      category: finalCategory,
+      amount: parsedAmount,
+      currency: 'PLN',
+      nextPaymentDate: formattedDate,
+      cycle,
+      status: 'active',
+      splitWith
+    });
+
     Alert.alert(
       "Sukces", 
-      `Zapisano subskrypcję ${name} na kwotę ${parsedAmount.toFixed(2)} PLN.\n(Mock)`,
+      `Subskrypcja została dodana pomyślnie.`,
       [{ text: "OK", onPress: () => navigation.goBack() }]
     );
   };
@@ -177,7 +201,39 @@ export const ManualAddScreen = () => {
                   </TouchableOpacity>
                 </View>
 
+
+                {/* WSPÓŁDZIELENIE */}
+                <View style={styles.inputGroup}>
+                  <View style={styles.labelRow}>
+                    <Users size={16} color="#64748B" />
+                    <Text style={[styles.label, { marginBottom: 0, marginLeft: 6 }]}>Dzielę koszty z...</Text>
+                  </View>
+                  <View style={styles.pillsContainer}>
+                    {[1, 2, 3, 4, 5, 6].map(num => {
+                      const isActive = splitWith === num;
+                      return (
+                        <TouchableOpacity
+                          key={num}
+                          activeOpacity={0.8}
+                          onPress={() => setSplitWith(num)}
+                          style={[styles.pill, isActive && styles.pillActive, { paddingHorizontal: 12 }]}
+                        >
+                          <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
+                            {num === 1 ? 'Tylko ja' : `${num} osoby`}
+                          </Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                  {splitWith > 1 && parsedAmount > 0 && (
+                    <Text style={{ marginTop: 8, fontSize: 13, color: '#6366F1', fontWeight: '500' }}>
+                      Twój koszt wyniesie {(parsedAmount / splitWith).toFixed(2)} PLN
+                    </Text>
+                  )}
+                </View>
+
                 {/* KATEGORIA */}
+
                 <View style={[styles.inputGroup, { borderBottomWidth: 0 }]}>
                   <View style={styles.labelRow}>
                     <LayoutGrid size={16} color="#64748B" />
@@ -208,6 +264,18 @@ export const ManualAddScreen = () => {
                       );
                     })}
                   </ScrollView>
+                  {category === 'wlasna' && (
+                    <View style={[styles.textInputWrapper, { marginTop: 12 }]}>
+                      <LayoutGrid size={20} color="#94A3B8" style={styles.inputIcon} />
+                      <TextInput
+                        style={styles.textInput}
+                        placeholder="Wpisz własną kategorię..."
+                        placeholderTextColor="#94A3B8"
+                        value={customCategory}
+                        onChangeText={setCustomCategory}
+                      />
+                    </View>
+                  )}
                 </View>
 
               </View>

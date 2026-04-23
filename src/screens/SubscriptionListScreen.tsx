@@ -10,44 +10,65 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Search, ArrowUpDown, Frown } from 'lucide-react-native';
+import { Search, ArrowUpDown, Frown, ArrowLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
 import SubscriptionListItem, { SubscriptionItem } from './SubscriptionListItem';
+import { useSubscriptionStore } from '../store/useSubscriptionStore';
 
-const INITIAL_DATA: SubscriptionItem[] = [
-  { id: '1', name: 'Netflix', category: 'Rozrywka', amount: 43.00, currency: 'PLN', nextPaymentDate: '12 Maj 2026', cycle: 'Miesięcznie', status: 'active' },
-  { id: '2', name: 'Spotify', category: 'Muzyka', amount: 19.99, currency: 'PLN', nextPaymentDate: '24 Kwi 2026', cycle: 'Miesięcznie', status: 'active' },
-  { id: '3', name: 'Adobe CC', category: 'Narzędzia', amount: 249.00, currency: 'PLN', nextPaymentDate: '1 Maj 2026', cycle: 'Miesięcznie', status: 'active' },
-  { id: '4', name: 'Gym', category: 'Zdrowie', amount: 120.00, currency: 'PLN', nextPaymentDate: '29 Kwi 2026', cycle: 'Miesięcznie', status: 'active' },
-  { id: '5', name: 'Vercel Pro', category: 'Narzędzia', amount: 80.00, currency: 'PLN', nextPaymentDate: '10 Maj 2026', cycle: 'Miesięcznie', status: 'active' },
-  { id: '6', name: 'Amazon Prime', category: 'Rozrywka', amount: 49.00, currency: 'PLN', nextPaymentDate: '-', cycle: 'Rocznie', status: 'cancelled' },
-];
 
 export const SubscriptionListScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
-  const [data, setData] = useState<SubscriptionItem[]>(INITIAL_DATA);
+
+  const { subscriptions, removeSubscription, togglePauseStatus } = useSubscriptionStore();
+  const data = subscriptions;
+
+
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'active' | 'cancelled'>('active');
+  const [sortBy, setSortBy] = useState<'none' | 'priceAsc' | 'priceDesc' | 'dateAsc'>('none');
+
+  const toggleSort = () => {
+    if (sortBy === 'none') setSortBy('priceDesc');
+    else if (sortBy === 'priceDesc') setSortBy('priceAsc');
+    else if (sortBy === 'priceAsc') setSortBy('dateAsc');
+    else setSortBy('none');
+  };
+
 
   const handleDelete = (id: string) => {
-    // Symulacja usuwania wiersza (usuwamy ze stanu lokalnego)
-    setData(prev => prev.filter(item => item.id !== id));
+    removeSubscription(id);
   };
 
   const handlePause = (id: string) => {
-    // Symulacja pauzowania -> przeniesienie do "cancelled" dla testów
-    setData(prev => prev.map(item => item.id === id ? { ...item, status: 'cancelled' } : item));
+    togglePauseStatus(id);
   };
 
+
   const filteredData = useMemo(() => {
-    return data.filter(item => {
+    let result = data.filter(item => {
       const matchesTab = item.status === activeTab;
       const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
-  }, [data, activeTab, searchQuery]);
+
+    if (sortBy === 'priceAsc') {
+      result.sort((a, b) => a.amount - b.amount);
+    } else if (sortBy === 'priceDesc') {
+      result.sort((a, b) => b.amount - a.amount);
+    } else if (sortBy === 'dateAsc') {
+      // Proste sortowanie daty - mock.
+      result.sort((a, b) => {
+        if (a.nextPaymentDate === '-') return 1;
+        if (b.nextPaymentDate === '-') return -1;
+        return a.nextPaymentDate.localeCompare(b.nextPaymentDate);
+      });
+    }
+
+    return result;
+  }, [data, activeTab, searchQuery, sortBy]);
+
 
   const renderEmptyState = () => (
     <View style={styles.emptyStateContainer}>
@@ -80,6 +101,13 @@ export const SubscriptionListScreen = () => {
       >
         {/* Header: Wyszukiwarka i Sortowanie */}
         <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ArrowLeft size={24} color="#0F172A" />
+          </TouchableOpacity>
           <View style={styles.searchContainer}>
             <Search size={20} color="#94A3B8" style={styles.searchIcon} />
             <TextInput
@@ -91,8 +119,19 @@ export const SubscriptionListScreen = () => {
               autoCorrect={false}
             />
           </View>
-          <TouchableOpacity style={styles.sortButton} activeOpacity={0.7}>
-            <ArrowUpDown size={20} color="#475569" />
+          <TouchableOpacity 
+            style={[styles.sortButton, sortBy !== 'none' && { borderColor: '#6366F1', backgroundColor: '#EEF2FF' }]} 
+            activeOpacity={0.7}
+            onPress={toggleSort}
+          >
+            <ArrowUpDown size={20} color={sortBy !== 'none' ? '#6366F1' : '#475569'} />
+            {sortBy !== 'none' && (
+              <View style={{ position: 'absolute', top: -6, right: -6, backgroundColor: '#6366F1', borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 }}>
+                <Text style={{ fontSize: 10, color: 'white', fontWeight: 'bold' }}>
+                  {sortBy === 'priceDesc' ? '$$$' : sortBy === 'priceAsc' ? '$' : 'Data'}
+                </Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -153,6 +192,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'center',
     gap: 12,
+  },
+  backButton: {
+    padding: 4,
   },
   searchContainer: {
     flex: 1,
