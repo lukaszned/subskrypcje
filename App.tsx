@@ -8,7 +8,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import DashboardScreen from './src/screens/DashboardScreen';
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
-import AddSubscriptionScreen from './src/screens/AddSubscriptionScreen';
+import ManualAddScreen from './src/screens/ManualAddScreen';
 
 // Typy parametrów nawigacji
 export type RootStackParamList = {
@@ -49,7 +49,7 @@ export default function App() {
         />
         <Stack.Screen
           name="AddSubscription"
-          component={AddSubscriptionScreen}
+          component={ManualAddScreen}
           options={{
             presentation: 'modal', // Płynne przejście typu modal
           }}
