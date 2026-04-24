@@ -1,0 +1,138 @@
+import { prisma } from "../lib/prisma";
+import {
+    BillingCycle,
+    SubscriptionCategory,
+    SubscriptionStatus,
+} from "@prisma/client";
+import {
+    CreateSubscriptionInput,
+    UpdateSubscriptionInput,
+} from "../validators/subscription";
+
+export async function getSubscriptions(filters?: {
+    userId?: string;
+    category?: string;
+    status?: string;
+}) {
+    return prisma.subscription.findMany({
+        where: {
+            ...(filters?.userId ? { userId: filters.userId } : {}),
+            ...(filters?.category
+                ? { category: filters.category as SubscriptionCategory }
+                : {}),
+            ...(filters?.status
+                ? { status: filters.status as SubscriptionStatus }
+                : {}),
+        },
+        orderBy: {
+            nextPaymentDate: "asc",
+        },
+    });
+}
+
+export async function getSubscriptionById(id: string) {
+    return prisma.subscription.findUnique({
+        where: { id },
+    });
+}
+
+export async function createSubscription(data: CreateSubscriptionInput) {
+    return prisma.subscription.create({
+        data: {
+            userId: data.userId,
+            name: data.name,
+            provider: data.provider ?? null,
+            planName: data.planName ?? null,
+            amount: data.amount,
+            currency: data.currency,
+            category: data.category as SubscriptionCategory,
+            billingCycle: data.billingCycle as BillingCycle,
+            nextPaymentDate: new Date(data.nextPaymentDate),
+            lastPaymentDate: data.lastPaymentDate
+                ? new Date(data.lastPaymentDate)
+                : null,
+            trialEndDate: data.trialEndDate ? new Date(data.trialEndDate) : null,
+            isTrial: data.isTrial ?? false,
+            isRecurringBill: data.isRecurringBill ?? true,
+            reminderDaysBefore: data.reminderDaysBefore ?? 1,
+            paymentMethodLabel: data.paymentMethodLabel ?? null,
+            cancelUrl: data.cancelUrl ?? null,
+            notes: data.notes ?? null,
+            status: (data.status as SubscriptionStatus) || SubscriptionStatus.pending,
+        },
+    });
+}
+
+export async function updateSubscription(
+    id: string,
+    data: UpdateSubscriptionInput
+) {
+    return prisma.subscription.update({
+        where: { id },
+        data: {
+            ...(data.name !== undefined && { name: data.name }),
+            ...(data.provider !== undefined && { provider: data.provider ?? null }),
+            ...(data.planName !== undefined && { planName: data.planName ?? null }),
+            ...(data.amount !== undefined && { amount: data.amount }),
+            ...(data.currency !== undefined && { currency: data.currency }),
+            ...(data.category !== undefined && {
+                category: data.category as SubscriptionCategory,
+            }),
+            ...(data.billingCycle !== undefined && {
+                billingCycle: data.billingCycle as BillingCycle,
+            }),
+            ...(data.nextPaymentDate !== undefined && {
+                nextPaymentDate: new Date(data.nextPaymentDate),
+            }),
+            ...(data.lastPaymentDate !== undefined && {
+                lastPaymentDate: data.lastPaymentDate
+                    ? new Date(data.lastPaymentDate)
+                    : null,
+            }),
+            ...(data.trialEndDate !== undefined && {
+                trialEndDate: data.trialEndDate ? new Date(data.trialEndDate) : null,
+            }),
+            ...(data.isTrial !== undefined && { isTrial: data.isTrial }),
+            ...(data.isRecurringBill !== undefined && {
+                isRecurringBill: data.isRecurringBill,
+            }),
+            ...(data.reminderDaysBefore !== undefined && {
+                reminderDaysBefore: data.reminderDaysBefore,
+            }),
+            ...(data.paymentMethodLabel !== undefined && {
+                paymentMethodLabel: data.paymentMethodLabel ?? null,
+            }),
+            ...(data.cancelUrl !== undefined && {
+                cancelUrl: data.cancelUrl ?? null,
+            }),
+            ...(data.notes !== undefined && {
+                notes: data.notes ?? null,
+            }),
+            ...(data.status !== undefined && {
+                status: data.status as SubscriptionStatus,
+            }),
+        },
+    });
+}
+
+export async function markSubscriptionAsPaid(id: string) {
+    return prisma.subscription.update({
+        where: { id },
+        data: {
+            status: SubscriptionStatus.paid,
+            lastPaymentDate: new Date(),
+        },
+    });
+}
+
+export async function deleteSubscription(id: string) {
+    return prisma.subscription.delete({
+        where: { id },
+    });
+}
+
+export async function getUserById(userId: string) {
+    return prisma.user.findUnique({
+        where: { id: userId },
+    });
+}
