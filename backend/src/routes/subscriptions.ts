@@ -5,6 +5,11 @@ import {
     SubscriptionCategory,
     SubscriptionStatus,
 } from "@prisma/client";
+import {
+    createSubscriptionSchema,
+    updateSubscriptionSchema,
+} from "../validators/subscription";
+import { ZodError } from "zod";
 
 const router = Router();
 
@@ -53,43 +58,10 @@ router.get("/:id", async (req, res) => {
 
 router.post("/", async (req, res) => {
     try {
-        const {
-            userId,
-            name,
-            provider,
-            planName,
-            amount,
-            currency,
-            category,
-            billingCycle,
-            nextPaymentDate,
-            lastPaymentDate,
-            trialEndDate,
-            isTrial,
-            isRecurringBill,
-            reminderDaysBefore,
-            paymentMethodLabel,
-            cancelUrl,
-            notes,
-            status,
-        } = req.body;
-
-        if (
-            !userId ||
-            !name ||
-            amount === undefined ||
-            !currency ||
-            !category ||
-            !billingCycle ||
-            !nextPaymentDate
-        ) {
-            return res.status(400).json({
-                message: "Missing required fields",
-            });
-        }
+        const parsedData = createSubscriptionSchema.parse(req.body);
 
         const user = await prisma.user.findUnique({
-            where: { id: userId },
+            where: { id: parsedData.userId },
         });
 
         if (!user) {
@@ -98,32 +70,47 @@ router.post("/", async (req, res) => {
 
         const newSubscription = await prisma.subscription.create({
             data: {
-                userId,
-                name,
-                provider,
-                planName,
-                amount,
-                currency,
-                category: category as SubscriptionCategory,
-                billingCycle: billingCycle as BillingCycle,
-                nextPaymentDate: new Date(nextPaymentDate),
-                lastPaymentDate: lastPaymentDate ? new Date(lastPaymentDate) : undefined,
-                trialEndDate: trialEndDate ? new Date(trialEndDate) : undefined,
-                isTrial: Boolean(isTrial),
-                isRecurringBill:
-                    isRecurringBill !== undefined ? Boolean(isRecurringBill) : true,
-                reminderDaysBefore:
-                    reminderDaysBefore !== undefined ? Number(reminderDaysBefore) : 1,
-                paymentMethodLabel,
-                cancelUrl,
-                notes,
-                status: (status as SubscriptionStatus) || SubscriptionStatus.pending,
+                userId: parsedData.userId,
+                name: parsedData.name,
+                provider: parsedData.provider ?? null,
+                planName: parsedData.planName ?? null,
+                amount: parsedData.amount,
+                currency: parsedData.currency,
+                category: parsedData.category as SubscriptionCategory,
+                billingCycle: parsedData.billingCycle as BillingCycle,
+                nextPaymentDate: new Date(parsedData.nextPaymentDate),
+                lastPaymentDate: parsedData.lastPaymentDate
+                    ? new Date(parsedData.lastPaymentDate)
+                    : null,
+                trialEndDate: parsedData.trialEndDate
+                    ? new Date(parsedData.trialEndDate)
+                    : null,
+                isTrial: parsedData.isTrial ?? false,
+                isRecurringBill: parsedData.isRecurringBill ?? true,
+                reminderDaysBefore: parsedData.reminderDaysBefore ?? 1,
+                paymentMethodLabel: parsedData.paymentMethodLabel ?? null,
+                cancelUrl: parsedData.cancelUrl ?? null,
+                notes: parsedData.notes ?? null,
+                status:
+                    (parsedData.status as SubscriptionStatus) ||
+                    SubscriptionStatus.pending,
             },
         });
 
         res.status(201).json(newSubscription);
     } catch (error) {
         console.error("Error creating subscription:", error);
+
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                message: "Validation error",
+                errors: error.issues.map((issue) => ({
+                    field: issue.path.join("."),
+                    message: issue.message,
+                })),
+            });
+        }
+
         res.status(500).json({ message: "Internal server error" });
     }
 });
@@ -131,25 +118,7 @@ router.post("/", async (req, res) => {
 router.patch("/:id", async (req, res) => {
     try {
         const { id } = req.params;
-        const {
-            name,
-            provider,
-            planName,
-            amount,
-            currency,
-            category,
-            billingCycle,
-            nextPaymentDate,
-            lastPaymentDate,
-            trialEndDate,
-            isTrial,
-            isRecurringBill,
-            reminderDaysBefore,
-            paymentMethodLabel,
-            cancelUrl,
-            notes,
-            status,
-        } = req.body;
+        const parsedData = updateSubscriptionSchema.parse(req.body);
 
         const existingSubscription = await prisma.subscription.findUnique({
             where: { id },
@@ -162,38 +131,54 @@ router.patch("/:id", async (req, res) => {
         const updatedSubscription = await prisma.subscription.update({
             where: { id },
             data: {
-                ...(name !== undefined && { name }),
-                ...(provider !== undefined && { provider }),
-                ...(planName !== undefined && { planName }),
-                ...(amount !== undefined && { amount }),
-                ...(currency !== undefined && { currency }),
-                ...(category !== undefined && {
-                    category: category as SubscriptionCategory,
+                ...(parsedData.name !== undefined && { name: parsedData.name }),
+                ...(parsedData.provider !== undefined && {
+                    provider: parsedData.provider ?? null,
                 }),
-                ...(billingCycle !== undefined && {
-                    billingCycle: billingCycle as BillingCycle,
+                ...(parsedData.planName !== undefined && {
+                    planName: parsedData.planName ?? null,
                 }),
-                ...(nextPaymentDate !== undefined && {
-                    nextPaymentDate: new Date(nextPaymentDate),
+                ...(parsedData.amount !== undefined && { amount: parsedData.amount }),
+                ...(parsedData.currency !== undefined && {
+                    currency: parsedData.currency,
                 }),
-                ...(lastPaymentDate !== undefined && {
-                    lastPaymentDate: lastPaymentDate ? new Date(lastPaymentDate) : null,
+                ...(parsedData.category !== undefined && {
+                    category: parsedData.category as SubscriptionCategory,
                 }),
-                ...(trialEndDate !== undefined && {
-                    trialEndDate: trialEndDate ? new Date(trialEndDate) : null,
+                ...(parsedData.billingCycle !== undefined && {
+                    billingCycle: parsedData.billingCycle as BillingCycle,
                 }),
-                ...(isTrial !== undefined && { isTrial: Boolean(isTrial) }),
-                ...(isRecurringBill !== undefined && {
-                    isRecurringBill: Boolean(isRecurringBill),
+                ...(parsedData.nextPaymentDate !== undefined && {
+                    nextPaymentDate: new Date(parsedData.nextPaymentDate),
                 }),
-                ...(reminderDaysBefore !== undefined && {
-                    reminderDaysBefore: Number(reminderDaysBefore),
+                ...(parsedData.lastPaymentDate !== undefined && {
+                    lastPaymentDate: parsedData.lastPaymentDate
+                        ? new Date(parsedData.lastPaymentDate)
+                        : null,
                 }),
-                ...(paymentMethodLabel !== undefined && { paymentMethodLabel }),
-                ...(cancelUrl !== undefined && { cancelUrl }),
-                ...(notes !== undefined && { notes }),
-                ...(status !== undefined && {
-                    status: status as SubscriptionStatus,
+                ...(parsedData.trialEndDate !== undefined && {
+                    trialEndDate: parsedData.trialEndDate
+                        ? new Date(parsedData.trialEndDate)
+                        : null,
+                }),
+                ...(parsedData.isTrial !== undefined && { isTrial: parsedData.isTrial }),
+                ...(parsedData.isRecurringBill !== undefined && {
+                    isRecurringBill: parsedData.isRecurringBill,
+                }),
+                ...(parsedData.reminderDaysBefore !== undefined && {
+                    reminderDaysBefore: parsedData.reminderDaysBefore,
+                }),
+                ...(parsedData.paymentMethodLabel !== undefined && {
+                    paymentMethodLabel: parsedData.paymentMethodLabel ?? null,
+                }),
+                ...(parsedData.cancelUrl !== undefined && {
+                    cancelUrl: parsedData.cancelUrl ?? null,
+                }),
+                ...(parsedData.notes !== undefined && {
+                    notes: parsedData.notes ?? null,
+                }),
+                ...(parsedData.status !== undefined && {
+                    status: parsedData.status as SubscriptionStatus,
                 }),
             },
         });
@@ -201,6 +186,17 @@ router.patch("/:id", async (req, res) => {
         res.json(updatedSubscription);
     } catch (error) {
         console.error("Error updating subscription:", error);
+
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                message: "Validation error",
+                errors: error.issues.map((issue) => ({
+                    field: issue.path.join("."),
+                    message: issue.message,
+                })),
+            });
+        }
+
         res.status(500).json({ message: "Internal server error" });
     }
 });
