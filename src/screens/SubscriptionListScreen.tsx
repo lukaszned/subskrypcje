@@ -10,7 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { Search, ArrowUpDown, Frown } from 'lucide-react-native';
+import { Search, ArrowUpDown, Frown, ArrowLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RootStackParamList } from '../../App';
@@ -30,6 +30,7 @@ export const SubscriptionListScreen = () => {
   const [data, setData] = useState<SubscriptionItem[]>(INITIAL_DATA);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'active' | 'cancelled'>('active');
+  const [sortBy, setSortBy] = useState<'none' | 'price' | 'date'>('none');
 
   const handleDelete = (id: string) => {
     // Symulacja usuwania wiersza (usuwamy ze stanu lokalnego)
@@ -42,12 +43,37 @@ export const SubscriptionListScreen = () => {
   };
 
   const filteredData = useMemo(() => {
-    return data.filter(item => {
+    let result = data.filter(item => {
       const matchesTab = item.status === activeTab;
       const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
       return matchesTab && matchesSearch;
     });
-  }, [data, activeTab, searchQuery]);
+
+    if (sortBy === 'price') {
+      result.sort((a, b) => b.amount - a.amount);
+    } else if (sortBy === 'date') {
+      // Prosty parser dla mockowych dat "DD Miesiąc YYYY" lub "-"
+      const parseDate = (d: string) => {
+        if (d === '-') return new Date(8640000000000000); // Max date
+        const months: Record<string, number> = { 'stycznia': 0, 'lutego': 1, 'marca': 2, 'kwietnia': 3, 'maja': 4, 'czerwca': 5, 'lipca': 6, 'sierpnia': 7, 'września': 8, 'października': 9, 'listopada': 10, 'grudnia': 11, 'kwi': 3, 'maj': 4 };
+        const parts = d.split(' ');
+        if (parts.length < 3) return new Date(0);
+        const day = parseInt(parts[0]);
+        const month = months[parts[1].toLowerCase().substring(0, 3)] || 0;
+        const year = parseInt(parts[2]);
+        return new Date(year, month, day);
+      };
+      result.sort((a, b) => parseDate(a.nextPaymentDate).getTime() - parseDate(b.nextPaymentDate).getTime());
+    }
+
+    return result;
+  }, [data, activeTab, searchQuery, sortBy]);
+
+  const toggleSort = () => {
+    if (sortBy === 'none') setSortBy('price');
+    else if (sortBy === 'price') setSortBy('date');
+    else setSortBy('none');
+  };
 
   const renderEmptyState = () => (
     <View style={styles.emptyStateContainer}>
@@ -80,6 +106,13 @@ export const SubscriptionListScreen = () => {
       >
         {/* Header: Wyszukiwarka i Sortowanie */}
         <View style={styles.header}>
+          <TouchableOpacity 
+            style={styles.backButton} 
+            onPress={() => navigation.goBack()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <ArrowLeft size={24} color="#0F172A" />
+          </TouchableOpacity>
           <View style={styles.searchContainer}>
             <Search size={20} color="#94A3B8" style={styles.searchIcon} />
             <TextInput
@@ -91,8 +124,17 @@ export const SubscriptionListScreen = () => {
               autoCorrect={false}
             />
           </View>
-          <TouchableOpacity style={styles.sortButton} activeOpacity={0.7}>
-            <ArrowUpDown size={20} color="#475569" />
+          <TouchableOpacity 
+            style={[styles.sortButton, sortBy !== 'none' && { borderColor: '#6366F1', backgroundColor: '#EEF2FF' }]} 
+            activeOpacity={0.7}
+            onPress={toggleSort}
+          >
+            <ArrowUpDown size={20} color={sortBy !== 'none' ? "#6366F1" : "#475569"} />
+            {sortBy !== 'none' && (
+              <View style={styles.sortBadge}>
+                <Text style={styles.sortBadgeText}>{sortBy === 'price' ? '$$$' : 'D'}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -153,6 +195,9 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     alignItems: 'center',
     gap: 12,
+  },
+  backButton: {
+    padding: 4,
   },
   searchContainer: {
     flex: 1,
@@ -258,6 +303,22 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+  },
+  sortBadge: {
+    position: 'absolute',
+    top: -5,
+    right: -5,
+    backgroundColor: '#6366F1',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    minWidth: 16,
+    alignItems: 'center',
+  },
+  sortBadgeText: {
+    color: '#FFFFFF',
+    fontSize: 8,
+    fontWeight: '800',
   },
 });
 

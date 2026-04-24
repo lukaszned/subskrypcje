@@ -27,6 +27,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
       case 'muzyka': return '#FEF08A'; // yellow-200
       case 'narzędzia': return '#DBEAFE'; // blue-100
       case 'zdrowie': return '#DCFCE7'; // green-100
+      case 'auto': return '#FCE7F3'; // pink-100
       default: return '#F1F5F9'; // slate-100
     }
   };
@@ -37,6 +38,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
       case 'muzyka': return '#CA8A04'; // yellow-600
       case 'narzędzia': return '#2563EB'; // blue-600
       case 'zdrowie': return '#16A34A'; // green-600
+      case 'auto': return '#BE185D'; // pink-600
       default: return '#64748B'; // slate-500
     }
   };

@@ -1,0 +1,112 @@
+// Wszystkie importy MUSZĄ być na górze pliku
+import React from 'react';
+import { Platform, Text, View, ScrollView } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+
+// Import ekranów
+import DashboardScreen from './src/screens/DashboardScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
+import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
+import ManualAddScreen from './src/screens/ManualAddScreen';
+import NotificationsTestScreen from './src/screens/NotificationsTestScreen';
+import { NotificationManager } from './src/utils/NotificationManager';
+
+// Gesture handler tylko na natywnych platformach (web nie wspiera)
+if (Platform.OS !== 'web') {
+  require('react-native-gesture-handler');
+}
+
+// Typy parametrów nawigacji
+export type RootStackParamList = {
+  Onboarding: undefined;
+  Dashboard: undefined;
+  SubscriptionList: undefined;
+  AddSubscription: undefined;
+  NotificationsTest: undefined;
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+// Error Boundary - wyświetla szczegóły błędu zamiast białego ekranu
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error: Error | null; errorInfo: React.ErrorInfo | null }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: null, errorInfo: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+    this.setState({ errorInfo });
+    console.error('ErrorBoundary caught:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <ScrollView style={{ flex: 1, backgroundColor: '#f8d7da', padding: 20, paddingTop: 60 }}>
+          <Text style={{ fontSize: 22, color: '#721c24', fontWeight: 'bold' }}>
+            Błąd aplikacji:
+          </Text>
+          <Text style={{ fontSize: 16, color: '#721c24', marginTop: 10, fontWeight: 'bold' }}>
+            {this.state.error && this.state.error.toString()}
+          </Text>
+          <Text style={{ fontSize: 12, color: '#721c24', marginTop: 10 }}>
+            {this.state.errorInfo && this.state.errorInfo.componentStack}
+          </Text>
+        </ScrollView>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function App() {
+  React.useEffect(() => {
+    // Powiadomienia działają tylko na natywnych platformach
+    if (Platform.OS !== 'web') {
+      const cleanup = NotificationManager.setupNotificationListener();
+      return cleanup;
+    }
+  }, []);
+
+  return (
+    <ErrorBoundary>
+      <NavigationContainer>
+        <StatusBar style="light" />
+        <Stack.Navigator
+          initialRouteName="Onboarding"
+          screenOptions={{
+            headerShown: false,
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen
+            name="Dashboard"
+            component={DashboardScreen}
+            options={{ gestureEnabled: false }}
+          />
+          <Stack.Screen name="SubscriptionList" component={SubscriptionListScreen} />
+          <Stack.Screen
+            name="AddSubscription"
+            component={ManualAddScreen}
+            options={{ presentation: 'modal' }}
+          />
+          <Stack.Screen
+            name="NotificationsTest"
+            component={NotificationsTestScreen}
+            options={{ presentation: 'modal' }}
+          />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ErrorBoundary>
+  );
+}

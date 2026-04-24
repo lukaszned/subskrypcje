@@ -21,6 +21,8 @@ const CATEGORIES = [
   { id: 'muzyka', label: 'Muzyka', color: '#FEF08A', textColor: '#CA8A04' },
   { id: 'zdrowie', label: 'Zdrowie', color: '#DCFCE7', textColor: '#16A34A' },
   { id: 'narzedzia', label: 'Narzędzia', color: '#DBEAFE', textColor: '#2563EB' },
+  { id: 'auto', label: 'Auto / OC', color: '#FCE7F3', textColor: '#BE185D' },
+  { id: 'wlasna', label: 'Własna', color: '#F1F5F9', textColor: '#475569' },
   { id: 'inne', label: 'Inne', color: '#F1F5F9', textColor: '#64748B' },
 ];
 
@@ -35,6 +37,7 @@ export const ManualAddScreen = () => {
   const [name, setName] = useState('');
   const [cycle, setCycle] = useState('Co miesiąc');
   const [category, setCategory] = useState('rozrywka');
+  const [customCategory, setCustomCategory] = useState('');
 
   // Walidacja: nazwa niepusta, kwota > 0
   const parsedAmount = parseFloat(amount.replace(',', '.'));
@@ -59,9 +62,11 @@ export const ManualAddScreen = () => {
   const handleSave = () => {
     if (!isValid) return;
     
+    const finalCategory = category === 'wlasna' ? customCategory || 'Własna' : CATEGORIES.find(c => c.id === category)?.label || category;
+
     Alert.alert(
       "Sukces", 
-      `Zapisano subskrypcję ${name} na kwotę ${parsedAmount.toFixed(2)} PLN.\n(Mock)`,
+      `Zapisano subskrypcję ${name} na kwotę ${parsedAmount.toFixed(2)} PLN.\nKategoria: ${finalCategory}\n(Mock)`,
       [{ text: "OK", onPress: () => navigation.goBack() }]
     );
   };
@@ -210,6 +215,18 @@ export const ManualAddScreen = () => {
                   </ScrollView>
                 </View>
 
+                {category === 'wlasna' && (
+                  <View style={[styles.inputGroup, { marginTop: -10, borderBottomWidth: 0 }]}>
+                    <TextInput
+                      style={[styles.input, { backgroundColor: '#F8FAFC', borderRadius: 12, paddingHorizontal: 12, height: 44 }]}
+                      placeholder="Wpisz własną kategorię..."
+                      placeholderTextColor="#94A3B8"
+                      value={customCategory}
+                      onChangeText={setCustomCategory}
+                      autoFocus={true}
+                    />
+                  </View>
+                )}
               </View>
             </ScrollView>
           </View>
