@@ -175,6 +175,18 @@ export async function markSubscriptionAsPaidForUser(
     });
 }
 
+export async function cancelSubscriptionForUser(id: string, userId: string) {
+    return prisma.subscription.updateMany({
+        where: {
+            id,
+            userId,
+        },
+        data: {
+            status: SubscriptionStatus.canceled,
+        },
+    });
+}
+
 export async function deleteSubscriptionForUser(id: string, userId: string) {
     return prisma.subscription.deleteMany({
         where: {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+    cancelSubscriptionHandler,
     createSubscriptionHandler,
     deleteSubscriptionHandler,
     getSubscriptionByIdHandler,
@@ -16,6 +17,7 @@ router.get("/:id", requireAuth, getSubscriptionByIdHandler);
 router.post("/", requireAuth, createSubscriptionHandler);
 router.patch("/:id", requireAuth, updateSubscriptionHandler);
 router.patch("/:id/pay", requireAuth, markSubscriptionAsPaidHandler);
+router.patch("/:id/cancel", requireAuth, cancelSubscriptionHandler);
 router.delete("/:id", requireAuth, deleteSubscriptionHandler);
 
 export default router;

@@ -5,6 +5,7 @@ import {
     updateSubscriptionSchema,
 } from "../validators/subscription";
 import {
+    cancelSubscriptionForUser,
     createSubscription,
     deleteSubscriptionForUser,
     findPotentialDuplicateSubscription,
@@ -187,6 +188,40 @@ export async function markSubscriptionAsPaidHandler(
         res.json(updatedSubscription);
     } catch (error) {
         console.error("Error marking subscription as paid:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function cancelSubscriptionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const { id } = req.params;
+
+        const existingSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
+
+        if (!existingSubscription) {
+            return res.status(404).json({ message: "Subscription not found" });
+        }
+
+        await cancelSubscriptionForUser(id, req.appUser.id);
+
+        const canceledSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
+
+        res.json(canceledSubscription);
+    } catch (error) {
+        console.error("Error canceling subscription:", error);
         res.status(500).json({ message: "Internal server error" });
     }
 }
