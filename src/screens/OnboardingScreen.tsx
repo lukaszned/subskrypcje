@@ -9,15 +9,15 @@ import {
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from '../../App';
+import { AuthStackParamList } from '../../App';
 
 const { width } = Dimensions.get('window');
 
 export default function OnboardingScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
 
   const handleStart = () => {
-    navigation.replace('Dashboard');
+    navigation.navigate('Login');
   };
 
   const handleHelp = () => {
