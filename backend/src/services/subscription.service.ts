@@ -41,6 +41,38 @@ export async function getSubscriptionByIdForUser(id: string, userId: string) {
     });
 }
 
+export async function findPotentialDuplicateSubscription(
+    userId: string,
+    data: CreateSubscriptionInput
+) {
+    return prisma.subscription.findFirst({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+            name: {
+                equals: data.name,
+                mode: "insensitive",
+            },
+            provider:
+                data.provider && data.provider.trim().length > 0
+                    ? {
+                        equals: data.provider,
+                        mode: "insensitive",
+                    }
+                    : null,
+            planName:
+                data.planName && data.planName.trim().length > 0
+                    ? {
+                        equals: data.planName,
+                        mode: "insensitive",
+                    }
+                    : null,
+        },
+    });
+}
+
 export async function createSubscription(
     userId: string,
     data: CreateSubscriptionInput

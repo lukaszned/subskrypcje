@@ -7,6 +7,7 @@ import {
 import {
     createSubscription,
     deleteSubscriptionForUser,
+    findPotentialDuplicateSubscription,
     getSubscriptionByIdForUser,
     getSubscriptionsForUser,
     markSubscriptionAsPaidForUser,
@@ -71,6 +72,25 @@ export async function createSubscriptionHandler(
         }
 
         const parsedData = createSubscriptionSchema.parse(req.body);
+
+        const duplicate = await findPotentialDuplicateSubscription(
+            req.appUser.id,
+            parsedData
+        );
+
+        if (duplicate) {
+            return res.status(409).json({
+                message: "A similar subscription already exists",
+                duplicate: {
+                    id: duplicate.id,
+                    name: duplicate.name,
+                    provider: duplicate.provider,
+                    planName: duplicate.planName,
+                    status: duplicate.status,
+                },
+            });
+        }
+
         const newSubscription = await createSubscription(req.appUser.id, parsedData);
 
         res.status(201).json(newSubscription);

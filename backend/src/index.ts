@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import subscriptionsRouter from "./routes/subscriptions";
+import usersRouter from "./routes/users";
 import { prisma } from "./lib/prisma";
 
 dotenv.config();
@@ -35,6 +36,7 @@ app.get("/users", async (_req, res) => {
     }
 });
 
+app.use("/users", usersRouter);
 app.use("/subscriptions", subscriptionsRouter);
 
 app.listen(PORT, () => {
