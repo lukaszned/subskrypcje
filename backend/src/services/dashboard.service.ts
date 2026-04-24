@@ -116,3 +116,45 @@ export async function getDashboardSummaryForUser(userId: string) {
         overdueCount,
     };
 }
+
+export async function getUpcomingPaymentsForUser(
+    userId: string,
+    days: number = 7
+) {
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(now.getDate() + days);
+
+    const subscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+            nextPaymentDate: {
+                gte: now,
+                lte: futureDate,
+            },
+        },
+        orderBy: {
+            nextPaymentDate: "asc",
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            planName: true,
+            amount: true,
+            currency: true,
+            nextPaymentDate: true,
+            status: true,
+            isTrial: true,
+            reminderDaysBefore: true,
+        },
+    });
+
+    return subscriptions.map((subscription) => ({
+        ...subscription,
+        amount: Number(toNumber(subscription.amount).toFixed(2)),
+    }));
+}
