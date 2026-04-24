@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import subscriptionsRouter from "./routes/subscriptions";
 import usersRouter from "./routes/users";
+import dashboardRouter from "./routes/dashboard";
 import { prisma } from "./lib/prisma";
 
 dotenv.config();
@@ -38,6 +39,7 @@ app.get("/users", async (_req, res) => {
 
 app.use("/users", usersRouter);
 app.use("/subscriptions", subscriptionsRouter);
+app.use("/dashboard", dashboardRouter);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
