@@ -10,12 +10,18 @@ const router = Router();
 
 router.get("/", async (req, res) => {
     try {
-        const { userId } = req.query;
+        const { userId, category, status } = req.query;
 
         const subscriptions = await prisma.subscription.findMany({
-            where: userId ? { userId: String(userId) } : undefined,
+            where: {
+                ...(userId ? { userId: String(userId) } : {}),
+                ...(category
+                    ? { category: String(category) as SubscriptionCategory }
+                    : {}),
+                ...(status ? { status: String(status) as SubscriptionStatus } : {}),
+            },
             orderBy: {
-                createdAt: "desc",
+                nextPaymentDate: "asc",
             },
         });
 
@@ -50,12 +56,21 @@ router.post("/", async (req, res) => {
         const {
             userId,
             name,
+            provider,
+            planName,
             amount,
             currency,
             category,
             billingCycle,
             nextPaymentDate,
+            lastPaymentDate,
+            trialEndDate,
             isTrial,
+            isRecurringBill,
+            reminderDaysBefore,
+            paymentMethodLabel,
+            cancelUrl,
+            notes,
             status,
         } = req.body;
 
@@ -85,12 +100,23 @@ router.post("/", async (req, res) => {
             data: {
                 userId,
                 name,
+                provider,
+                planName,
                 amount,
                 currency,
                 category: category as SubscriptionCategory,
                 billingCycle: billingCycle as BillingCycle,
                 nextPaymentDate: new Date(nextPaymentDate),
+                lastPaymentDate: lastPaymentDate ? new Date(lastPaymentDate) : undefined,
+                trialEndDate: trialEndDate ? new Date(trialEndDate) : undefined,
                 isTrial: Boolean(isTrial),
+                isRecurringBill:
+                    isRecurringBill !== undefined ? Boolean(isRecurringBill) : true,
+                reminderDaysBefore:
+                    reminderDaysBefore !== undefined ? Number(reminderDaysBefore) : 1,
+                paymentMethodLabel,
+                cancelUrl,
+                notes,
                 status: (status as SubscriptionStatus) || SubscriptionStatus.pending,
             },
         });
@@ -107,12 +133,21 @@ router.patch("/:id", async (req, res) => {
         const { id } = req.params;
         const {
             name,
+            provider,
+            planName,
             amount,
             currency,
             category,
             billingCycle,
             nextPaymentDate,
+            lastPaymentDate,
+            trialEndDate,
             isTrial,
+            isRecurringBill,
+            reminderDaysBefore,
+            paymentMethodLabel,
+            cancelUrl,
+            notes,
             status,
         } = req.body;
 
@@ -128,6 +163,8 @@ router.patch("/:id", async (req, res) => {
             where: { id },
             data: {
                 ...(name !== undefined && { name }),
+                ...(provider !== undefined && { provider }),
+                ...(planName !== undefined && { planName }),
                 ...(amount !== undefined && { amount }),
                 ...(currency !== undefined && { currency }),
                 ...(category !== undefined && {
@@ -139,7 +176,22 @@ router.patch("/:id", async (req, res) => {
                 ...(nextPaymentDate !== undefined && {
                     nextPaymentDate: new Date(nextPaymentDate),
                 }),
+                ...(lastPaymentDate !== undefined && {
+                    lastPaymentDate: lastPaymentDate ? new Date(lastPaymentDate) : null,
+                }),
+                ...(trialEndDate !== undefined && {
+                    trialEndDate: trialEndDate ? new Date(trialEndDate) : null,
+                }),
                 ...(isTrial !== undefined && { isTrial: Boolean(isTrial) }),
+                ...(isRecurringBill !== undefined && {
+                    isRecurringBill: Boolean(isRecurringBill),
+                }),
+                ...(reminderDaysBefore !== undefined && {
+                    reminderDaysBefore: Number(reminderDaysBefore),
+                }),
+                ...(paymentMethodLabel !== undefined && { paymentMethodLabel }),
+                ...(cancelUrl !== undefined && { cancelUrl }),
+                ...(notes !== undefined && { notes }),
                 ...(status !== undefined && {
                     status: status as SubscriptionStatus,
                 }),
@@ -169,6 +221,7 @@ router.patch("/:id/pay", async (req, res) => {
             where: { id },
             data: {
                 status: SubscriptionStatus.paid,
+                lastPaymentDate: new Date(),
             },
         });
 

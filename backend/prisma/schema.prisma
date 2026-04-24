@@ -12,6 +12,9 @@ enum SubscriptionCategory {
   shopping
   health
   education
+  productivity
+  finance
+  transport
   other
 }
 
@@ -20,11 +23,14 @@ enum BillingCycle {
   yearly
   weekly
   one_time
+  custom
 }
 
 enum SubscriptionStatus {
   pending
   paid
+  overdue
+  canceled
 }
 
 model User {
@@ -37,20 +43,31 @@ model User {
 }
 
 model Subscription {
-  id              String               @id @default(cuid())
-  name            String
-  amount          Decimal              @db.Decimal(10, 2)
-  currency        String               @default("PLN")
-  category        SubscriptionCategory
-  billingCycle    BillingCycle
-  nextPaymentDate DateTime
-  isTrial         Boolean              @default(false)
-  status          SubscriptionStatus   @default(pending)
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
+  id                 String               @id @default(cuid())
+  name               String
+  provider           String?
+  planName           String?
+  amount             Decimal              @db.Decimal(10, 2)
+  currency           String               @default("PLN")
+  category           SubscriptionCategory
+  billingCycle       BillingCycle
+  nextPaymentDate    DateTime
+  lastPaymentDate    DateTime?
+  trialEndDate       DateTime?
+  isTrial            Boolean              @default(false)
+  isRecurringBill    Boolean              @default(true)
+  reminderDaysBefore Int                  @default(1)
+  paymentMethodLabel String?
+  cancelUrl          String?
+  notes              String?
+  status             SubscriptionStatus   @default(pending)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
-  userId          String
-  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([nextPaymentDate])
+  @@index([provider])
 }
