@@ -6,11 +6,11 @@ import {
 } from "../validators/subscription";
 import {
     createSubscription,
-    deleteSubscription,
-    getSubscriptionById,
-    getSubscriptions,
-    markSubscriptionAsPaid,
-    updateSubscription,
+    deleteSubscriptionForUser,
+    getSubscriptionByIdForUser,
+    getSubscriptionsForUser,
+    markSubscriptionAsPaidForUser,
+    updateSubscriptionForUser,
 } from "../services/subscription.service";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
@@ -19,10 +19,13 @@ export async function getSubscriptionsHandler(
     res: Response
 ) {
     try {
-        const { userId, category, status } = req.query;
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
 
-        const subscriptions = await getSubscriptions({
-            userId: userId ? String(userId) : undefined,
+        const { category, status } = req.query;
+
+        const subscriptions = await getSubscriptionsForUser(req.appUser.id, {
             category: category ? String(category) : undefined,
             status: status ? String(status) : undefined,
         });
@@ -39,9 +42,13 @@ export async function getSubscriptionByIdHandler(
     res: Response
 ) {
     try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
         const { id } = req.params;
 
-        const subscription = await getSubscriptionById(id);
+        const subscription = await getSubscriptionByIdForUser(id, req.appUser.id);
 
         if (!subscription) {
             return res.status(404).json({ message: "Subscription not found" });
@@ -89,16 +96,28 @@ export async function updateSubscriptionHandler(
     res: Response
 ) {
     try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
         const { id } = req.params;
         const parsedData = updateSubscriptionSchema.parse(req.body);
 
-        const existingSubscription = await getSubscriptionById(id);
+        const existingSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
 
         if (!existingSubscription) {
             return res.status(404).json({ message: "Subscription not found" });
         }
 
-        const updatedSubscription = await updateSubscription(id, parsedData);
+        await updateSubscriptionForUser(id, req.appUser.id, parsedData);
+
+        const updatedSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
 
         res.json(updatedSubscription);
     } catch (error) {
@@ -123,15 +142,27 @@ export async function markSubscriptionAsPaidHandler(
     res: Response
 ) {
     try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
         const { id } = req.params;
 
-        const existingSubscription = await getSubscriptionById(id);
+        const existingSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
 
         if (!existingSubscription) {
             return res.status(404).json({ message: "Subscription not found" });
         }
 
-        const updatedSubscription = await markSubscriptionAsPaid(id);
+        await markSubscriptionAsPaidForUser(id, req.appUser.id);
+
+        const updatedSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
 
         res.json(updatedSubscription);
     } catch (error) {
@@ -145,17 +176,24 @@ export async function deleteSubscriptionHandler(
     res: Response
 ) {
     try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
         const { id } = req.params;
 
-        const existingSubscription = await getSubscriptionById(id);
+        const existingSubscription = await getSubscriptionByIdForUser(
+            id,
+            req.appUser.id
+        );
 
         if (!existingSubscription) {
             return res.status(404).json({ message: "Subscription not found" });
         }
 
-        const deletedSubscription = await deleteSubscription(id);
+        await deleteSubscriptionForUser(id, req.appUser.id);
 
-        res.json(deletedSubscription);
+        res.json({ message: "Subscription deleted successfully" });
     } catch (error) {
         console.error("Error deleting subscription:", error);
         res.status(500).json({ message: "Internal server error" });

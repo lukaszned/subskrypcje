@@ -11,11 +11,11 @@ import { requireAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
-router.get("/", getSubscriptionsHandler);
-router.get("/:id", getSubscriptionByIdHandler);
+router.get("/", requireAuth, getSubscriptionsHandler);
+router.get("/:id", requireAuth, getSubscriptionByIdHandler);
 router.post("/", requireAuth, createSubscriptionHandler);
-router.patch("/:id", updateSubscriptionHandler);
-router.patch("/:id/pay", markSubscriptionAsPaidHandler);
-router.delete("/:id", deleteSubscriptionHandler);
+router.patch("/:id", requireAuth, updateSubscriptionHandler);
+router.patch("/:id/pay", requireAuth, markSubscriptionAsPaidHandler);
+router.delete("/:id", requireAuth, deleteSubscriptionHandler);
 
 export default router;

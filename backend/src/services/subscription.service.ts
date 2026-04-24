@@ -9,14 +9,16 @@ import {
     UpdateSubscriptionInput,
 } from "../validators/subscription";
 
-export async function getSubscriptions(filters?: {
-    userId?: string;
-    category?: string;
-    status?: string;
-}) {
+export async function getSubscriptionsForUser(
+    userId: string,
+    filters?: {
+        category?: string;
+        status?: string;
+    }
+) {
     return prisma.subscription.findMany({
         where: {
-            ...(filters?.userId ? { userId: filters.userId } : {}),
+            userId,
             ...(filters?.category
                 ? { category: filters.category as SubscriptionCategory }
                 : {}),
@@ -30,9 +32,12 @@ export async function getSubscriptions(filters?: {
     });
 }
 
-export async function getSubscriptionById(id: string) {
-    return prisma.subscription.findUnique({
-        where: { id },
+export async function getSubscriptionByIdForUser(id: string, userId: string) {
+    return prisma.subscription.findFirst({
+        where: {
+            id,
+            userId,
+        },
     });
 }
 
@@ -66,12 +71,16 @@ export async function createSubscription(
     });
 }
 
-export async function updateSubscription(
+export async function updateSubscriptionForUser(
     id: string,
+    userId: string,
     data: UpdateSubscriptionInput
 ) {
-    return prisma.subscription.update({
-        where: { id },
+    return prisma.subscription.updateMany({
+        where: {
+            id,
+            userId,
+        },
         data: {
             ...(data.name !== undefined && { name: data.name }),
             ...(data.provider !== undefined && { provider: data.provider ?? null }),
@@ -118,9 +127,15 @@ export async function updateSubscription(
     });
 }
 
-export async function markSubscriptionAsPaid(id: string) {
-    return prisma.subscription.update({
-        where: { id },
+export async function markSubscriptionAsPaidForUser(
+    id: string,
+    userId: string
+) {
+    return prisma.subscription.updateMany({
+        where: {
+            id,
+            userId,
+        },
         data: {
             status: SubscriptionStatus.paid,
             lastPaymentDate: new Date(),
@@ -128,8 +143,11 @@ export async function markSubscriptionAsPaid(id: string) {
     });
 }
 
-export async function deleteSubscription(id: string) {
-    return prisma.subscription.delete({
-        where: { id },
+export async function deleteSubscriptionForUser(id: string, userId: string) {
+    return prisma.subscription.deleteMany({
+        where: {
+            id,
+            userId,
+        },
     });
 }
