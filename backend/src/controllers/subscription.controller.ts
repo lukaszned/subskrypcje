@@ -1,4 +1,4 @@
-import { Request, Response } from "express";
+import { Response } from "express";
 import { ZodError } from "zod";
 import {
     createSubscriptionSchema,
@@ -9,12 +9,15 @@ import {
     deleteSubscription,
     getSubscriptionById,
     getSubscriptions,
-    getUserById,
     markSubscriptionAsPaid,
     updateSubscription,
 } from "../services/subscription.service";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
-export async function getSubscriptionsHandler(req: Request, res: Response) {
+export async function getSubscriptionsHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
     try {
         const { userId, category, status } = req.query;
 
@@ -31,7 +34,10 @@ export async function getSubscriptionsHandler(req: Request, res: Response) {
     }
 }
 
-export async function getSubscriptionByIdHandler(req: Request, res: Response) {
+export async function getSubscriptionByIdHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
     try {
         const { id } = req.params;
 
@@ -48,17 +54,17 @@ export async function getSubscriptionByIdHandler(req: Request, res: Response) {
     }
 }
 
-export async function createSubscriptionHandler(req: Request, res: Response) {
+export async function createSubscriptionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
     try {
-        const parsedData = createSubscriptionSchema.parse(req.body);
-
-        const user = await getUserById(parsedData.userId);
-
-        if (!user) {
-            return res.status(404).json({ message: "User not found" });
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
         }
 
-        const newSubscription = await createSubscription(parsedData);
+        const parsedData = createSubscriptionSchema.parse(req.body);
+        const newSubscription = await createSubscription(req.appUser.id, parsedData);
 
         res.status(201).json(newSubscription);
     } catch (error) {
@@ -78,7 +84,10 @@ export async function createSubscriptionHandler(req: Request, res: Response) {
     }
 }
 
-export async function updateSubscriptionHandler(req: Request, res: Response) {
+export async function updateSubscriptionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
     try {
         const { id } = req.params;
         const parsedData = updateSubscriptionSchema.parse(req.body);
@@ -110,7 +119,7 @@ export async function updateSubscriptionHandler(req: Request, res: Response) {
 }
 
 export async function markSubscriptionAsPaidHandler(
-    req: Request,
+    req: AuthenticatedRequest,
     res: Response
 ) {
     try {
@@ -131,7 +140,10 @@ export async function markSubscriptionAsPaidHandler(
     }
 }
 
-export async function deleteSubscriptionHandler(req: Request, res: Response) {
+export async function deleteSubscriptionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
     try {
         const { id } = req.params;
 

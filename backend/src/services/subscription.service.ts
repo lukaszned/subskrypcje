@@ -36,10 +36,13 @@ export async function getSubscriptionById(id: string) {
     });
 }
 
-export async function createSubscription(data: CreateSubscriptionInput) {
+export async function createSubscription(
+    userId: string,
+    data: CreateSubscriptionInput
+) {
     return prisma.subscription.create({
         data: {
-            userId: data.userId,
+            userId,
             name: data.name,
             provider: data.provider ?? null,
             planName: data.planName ?? null,
@@ -128,11 +131,5 @@ export async function markSubscriptionAsPaid(id: string) {
 export async function deleteSubscription(id: string) {
     return prisma.subscription.delete({
         where: { id },
-    });
-}
-
-export async function getUserById(userId: string) {
-    return prisma.user.findUnique({
-        where: { id: userId },
     });
 }

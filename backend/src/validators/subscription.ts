@@ -42,7 +42,6 @@ const optionalNullableStringSchema = z
     .optional();
 
 export const createSubscriptionSchema = z.object({
-    userId: z.string().trim().min(1, "userId is required"),
     name: z.string().trim().min(1, "name is required").max(100),
     provider: optionalNullableStringSchema,
     planName: optionalNullableStringSchema,
@@ -62,7 +61,11 @@ export const createSubscriptionSchema = z.object({
         .max(30, "reminderDaysBefore cannot be greater than 30")
         .optional(),
     paymentMethodLabel: optionalNullableStringSchema,
-    cancelUrl: z.string().url("cancelUrl must be a valid URL").nullable().optional(),
+    cancelUrl: z
+        .string()
+        .url("cancelUrl must be a valid URL")
+        .nullable()
+        .optional(),
     notes: z.string().trim().max(1000).nullable().optional(),
     status: z.enum(subscriptionStatusValues).optional(),
 });
