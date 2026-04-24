@@ -7,7 +7,10 @@ export async function getMeHandler(
 ) {
     try {
         if (!req.authUser || !req.appUser) {
-            return res.status(401).json({ message: "Unauthorized" });
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
         }
 
         return res.json({
@@ -23,6 +26,9 @@ export async function getMeHandler(
         });
     } catch (error) {
         console.error("Error fetching current user:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
     }
 }
