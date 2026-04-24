@@ -64,6 +64,11 @@ function calculateYearlyEquivalent(
     }
 }
 
+function getDaysLeft(targetDate: Date, now: Date): number {
+    const msInDay = 1000 * 60 * 60 * 24;
+    return Math.ceil((targetDate.getTime() - now.getTime()) / msInDay);
+}
+
 export async function getDashboardSummaryForUser(userId: string) {
     const subscriptions = await prisma.subscription.findMany({
         where: {
@@ -157,4 +162,51 @@ export async function getUpcomingPaymentsForUser(
         ...subscription,
         amount: Number(toNumber(subscription.amount).toFixed(2)),
     }));
+}
+
+export async function getTrialsForUser(userId: string, days: number = 30) {
+    const now = new Date();
+    const futureDate = new Date();
+    futureDate.setDate(now.getDate() + days);
+
+    const subscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            isTrial: true,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+            trialEndDate: {
+                not: null,
+                gte: now,
+                lte: futureDate,
+            },
+        },
+        orderBy: {
+            trialEndDate: "asc",
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            planName: true,
+            amount: true,
+            currency: true,
+            trialEndDate: true,
+            nextPaymentDate: true,
+            status: true,
+            cancelUrl: true,
+            reminderDaysBefore: true,
+        },
+    });
+
+    return subscriptions.map((subscription) => {
+        const trialEndDate = subscription.trialEndDate as Date;
+
+        return {
+            ...subscription,
+            amount: Number(toNumber(subscription.amount).toFixed(2)),
+            daysLeft: getDaysLeft(trialEndDate, now),
+        };
+    });
 }

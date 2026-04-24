@@ -2,6 +2,7 @@ import { Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
     getDashboardSummaryForUser,
+    getTrialsForUser,
     getUpcomingPaymentsForUser,
 } from "../services/dashboard.service";
 
@@ -50,6 +51,34 @@ export async function getUpcomingPaymentsHandler(
         });
     } catch (error) {
         console.error("Error fetching upcoming payments:", error);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function getTrialsHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const daysParam = req.query.days ? Number(req.query.days) : 30;
+        const days =
+            Number.isNaN(daysParam) || daysParam <= 0 || daysParam > 365
+                ? 30
+                : daysParam;
+
+        const trials = await getTrialsForUser(req.appUser.id, days);
+
+        return res.json({
+            days,
+            count: trials.length,
+            items: trials,
+        });
+    } catch (error) {
+        console.error("Error fetching trials:", error);
         return res.status(500).json({ message: "Internal server error" });
     }
 }
