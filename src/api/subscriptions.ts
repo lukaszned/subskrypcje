@@ -31,8 +31,11 @@ function normalizeSubscription(sub: any): Subscription {
 // ─────────────────────────────────────────────────────────────
 
 export interface GetSubscriptionsParams {
-  category?: SubscriptionCategory;
-  status?: SubscriptionStatus;
+  category?: SubscriptionCategory | string;
+  status?: SubscriptionStatus | string;
+  search?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
 }
 
 export async function getSubscriptions(
@@ -41,6 +44,9 @@ export async function getSubscriptions(
   const query = new URLSearchParams();
   if (params?.category) query.append('category', params.category);
   if (params?.status) query.append('status', params.status);
+  if (params?.search) query.append('search', params.search);
+  if (params?.sortBy) query.append('sortBy', params.sortBy);
+  if (params?.sortOrder) query.append('sortOrder', params.sortOrder);
 
   const qs = query.toString();
   const path = qs ? `/subscriptions?${qs}` : '/subscriptions';

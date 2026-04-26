@@ -14,14 +14,20 @@ import { DASHBOARD_SUMMARY_KEY } from './useDashboardSummary';
  *
  * Po sukcesie invaliduje listę i summary dashboardu.
  */
+// Notifications
+import { cancelSubscriptionReminder } from '../utils/notifications';
+
 export function useCancelSubscription() {
   const queryClient = useQueryClient();
 
   return useMutation<Subscription, Error, string>({
     mutationFn: (id: string) => cancelSubscription(id),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
       queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
+      
+      // Cancel notification (używamy id z zmiennych wejściowych)
+      cancelSubscriptionReminder(variables);
     },
   });
 }

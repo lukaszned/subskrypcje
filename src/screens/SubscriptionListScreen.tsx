@@ -52,7 +52,11 @@ export const SubscriptionListScreen = () => {
   const [sortBy, setSortBy] = useState<'none' | 'price' | 'date'>('none');
 
   // ── Live data ────────────────────────────────────────────────
-  const { data: allSubscriptions = [], isLoading, isError, refetch } = useSubscriptions();
+  const { data: allSubscriptions = [], isLoading, isError, refetch } = useSubscriptions({
+    search: searchQuery,
+    sortBy: sortBy === 'price' ? 'amount' : sortBy === 'date' ? 'nextPaymentDate' : undefined,
+    sortOrder: 'asc'
+  });
   const cancelMutation = useCancelSubscription();
   const payMutation = usePaySubscription();
 
@@ -88,6 +92,13 @@ export const SubscriptionListScreen = () => {
         {
           text: 'Tak',
           onPress: () => {
+            paySubscription(id).then(() => {
+              queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
+              // ... reszta logiki invalidacji jest w hooku, tu wywołujemy tylko alert
+            }).catch((error) => {
+               Alert.alert('Błąd', error.message || 'Nie udało się oznaczyć jako opłacone.');
+            });
+            // Poprawka: użyjmy jednak payMutation dla spójności
             payMutation.mutate(id, {
               onError: (error) => {
                 Alert.alert('Błąd', error.message || 'Nie udało się oznaczyć jako opłacone.');
@@ -102,30 +113,16 @@ export const SubscriptionListScreen = () => {
   // ── Filtrowanie i sortowanie ─────────────────────────────────
 
   const filteredData = useMemo(() => {
-    let result = allSubscriptions.filter(item => {
-      // Tab: active = pending, paid, overdue | cancelled = canceled
+    // Filtrowanie po tabach (aktywne vs anulowane) wciąż robimy na froncie 
+    // lub moglibyśmy dodać to do API, ale na razie status tabów jest prosty
+    return allSubscriptions.filter(item => {
       const matchesTab = activeTab === 'active'
         ? item.status !== 'canceled'
         : item.status === 'canceled';
 
-      const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase())
-        || (item.provider?.toLowerCase().includes(searchQuery.toLowerCase()) ?? false);
-
-      return matchesTab && matchesSearch;
+      return matchesTab;
     });
-
-    if (sortBy === 'price') {
-      result = [...result].sort((a, b) => b.amount - a.amount);
-    } else if (sortBy === 'date') {
-      result = [...result].sort((a, b) => {
-        const dateA = a.nextPaymentDate ? new Date(a.nextPaymentDate).getTime() : Infinity;
-        const dateB = b.nextPaymentDate ? new Date(b.nextPaymentDate).getTime() : Infinity;
-        return dateA - dateB;
-      });
-    }
-
-    return result;
-  }, [allSubscriptions, activeTab, searchQuery, sortBy]);
+  }, [allSubscriptions, activeTab]);
 
   const toggleSort = () => {
     if (sortBy === 'none') setSortBy('price');

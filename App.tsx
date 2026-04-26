@@ -139,11 +139,14 @@ function RootNavigator() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Root App — owinięty w Providery
-// ─────────────────────────────────────────────────────────────
+// Notifications
+import { requestNotificationPermissions } from './src/utils/notifications';
 
 export default function App() {
+  React.useEffect(() => {
+    requestNotificationPermissions();
+  }, []);
+
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>

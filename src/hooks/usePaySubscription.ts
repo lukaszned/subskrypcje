@@ -17,16 +17,29 @@ import { UPCOMING_PAYMENTS_KEY } from './useUpcomingPayments';
  *   - summary dashboardu
  *   - nadchodzące płatności (paid nie powinno być na liście upcoming)
  */
+// Notifications
+import { scheduleSubscriptionReminder } from '../utils/notifications';
+
 export function usePaySubscription() {
   const queryClient = useQueryClient();
 
   return useMutation<Subscription, Error, string>({
     mutationFn: (id: string) => paySubscription(id),
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
       queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
       // Invaliduj upcoming dla wszystkich wartości 'days'
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'upcoming'] });
+      
+      // Reschedule notification
+      scheduleSubscriptionReminder(
+        data.id,
+        data.name,
+        data.amount,
+        data.currency,
+        data.nextPaymentDate,
+        data.reminderDaysBefore
+      );
     },
   });
 }

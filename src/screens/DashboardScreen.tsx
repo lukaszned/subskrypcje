@@ -39,6 +39,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useUpcomingPayments } from '../hooks/useUpcomingPayments';
 import { useSubscriptions } from '../hooks/useSubscriptions';
+import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
 
 // Auth
 import { useAuth } from '../context/AuthContext';
@@ -84,9 +85,10 @@ export const DashboardScreen = () => {
   const summary = useDashboardSummary();
   const upcoming = useUpcomingPayments(7);
   const subscriptions = useSubscriptions();
+  const breakdown = useCategoryBreakdown();
 
   const isInitialLoading =
-    summary.isLoading && upcoming.isLoading && subscriptions.isLoading;
+    summary.isLoading && upcoming.isLoading && subscriptions.isLoading && breakdown.isLoading;
 
   // ── Pull-to-refresh ─────────────────────────────────────────
   const handleRefresh = async () => {
@@ -95,6 +97,7 @@ export const DashboardScreen = () => {
       summary.refetch(),
       upcoming.refetch(),
       subscriptions.refetch(),
+      breakdown.refetch(),
     ]);
     setIsRefreshing(false);
   };
@@ -236,6 +239,43 @@ export const DashboardScreen = () => {
   };
 
   // ─────────────────────────────────────────────────────────────
+  // ANALITYKA (Rozbicie na kategorie)
+  // ─────────────────────────────────────────────────────────────
+  
+  const renderCategoryBreakdown = () => {
+    const data = breakdown.data ?? [];
+    if (data.length === 0) return null;
+
+    // Znajdź max total dla skali pasków
+    const maxTotal = Math.max(...data.map(d => d.total));
+
+    return (
+      <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
+        <View style={dynamicStyles.analyticsHeader}>
+          <Text style={dynamicStyles.sectionTitle}>Wydatki wg kategorii</Text>
+          <Activity size={20} color="#64748B" />
+        </View>
+        <Text style={dynamicStyles.analyticsSubtitle}>Miesięczne zestawienie kosztów</Text>
+        
+        {data.sort((a, b) => b.total - a.total).slice(0, 4).map((item) => {
+          const percentage = (item.total / maxTotal) * 100;
+          return (
+            <View key={item.category} style={dynamicStyles.categoryRow}>
+              <View style={dynamicStyles.categoryInfoRow}>
+                <Text style={dynamicStyles.categoryLabel}>{CATEGORY_LABELS[item.category] || item.category}</Text>
+                <Text style={dynamicStyles.categoryValue}>{item.total.toFixed(2)} {item.currency}</Text>
+              </View>
+              <View style={dynamicStyles.progressBg}>
+                <View style={[dynamicStyles.progressFill, { width: `${percentage}%` as any }]} />
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    );
+  };
+
+  // ─────────────────────────────────────────────────────────────
   // LISTA SUBSKRYPCJI — live data
   // ─────────────────────────────────────────────────────────────
 
@@ -336,9 +376,9 @@ export const DashboardScreen = () => {
           </View>
         )}
 
-        {/* Analityka */}
+        {/* Analityka Kategorii */}
         <View style={dynamicStyles.sectionContainer}>
-          {renderAnalyticsPlaceholder()}
+          {renderCategoryBreakdown()}
         </View>
 
         {/* Lista Subskrypcji */}
@@ -487,6 +527,12 @@ const getStyles = (theme: any) => StyleSheet.create({
     right: 24, width: 60, height: 60, borderRadius: 30,
     backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center',
   },
+  categoryRow: { marginBottom: 16 },
+  categoryInfoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
+  categoryLabel: { fontSize: 14, color: theme.text, fontWeight: '600' },
+  categoryValue: { fontSize: 14, color: theme.textDim, fontWeight: '700' },
+  progressBg: { height: 8, backgroundColor: theme.border, borderRadius: 4, overflow: 'hidden' },
+  progressFill: { height: '100%', backgroundColor: '#6366F1', borderRadius: 4 },
 });
 
 export default DashboardScreen;

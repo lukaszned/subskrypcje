@@ -18,16 +18,28 @@ import { DASHBOARD_SUMMARY_KEY } from './useDashboardSummary';
  * Obsługa błędów (409 duplicate, 400 validation) po stronie komponentu
  * przez onError callback lub przez sprawdzenie error.status w ApiError.
  */
+// Notifications
+import { scheduleSubscriptionReminder } from '../utils/notifications';
+
 export function useCreateSubscription() {
   const queryClient = useQueryClient();
 
   return useMutation<Subscription, Error, CreateSubscriptionPayload>({
     mutationFn: createSubscription,
-    onSuccess: () => {
-      // Invalidate subscriptions list — wymusi refetch przy następnym renderze
+    onSuccess: (data) => {
+      // Invalidate queries
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
-      // Invalidate dashboard summary — monthlyTotal, activeCount itd. się zmienią
       queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
+      
+      // Schedule notification
+      scheduleSubscriptionReminder(
+        data.id,
+        data.name,
+        data.amount,
+        data.currency,
+        data.nextPaymentDate,
+        data.reminderDaysBefore
+      );
     },
   });
 }
