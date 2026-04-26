@@ -1,6 +1,7 @@
 import { prisma } from "../lib/prisma";
 import {
     BillingCycle,
+    Prisma,
     SubscriptionCategory,
     SubscriptionStatus,
 } from "@prisma/client";
@@ -9,13 +10,56 @@ import {
     UpdateSubscriptionInput,
 } from "../validators/subscription";
 
+type SubscriptionListFilters = {
+    category?: string;
+    status?: string;
+    search?: string;
+    sortBy?: string;
+    sortOrder?: string;
+};
+
+function getSubscriptionOrderBy(
+    sortBy?: string,
+    sortOrder?: string
+): Prisma.SubscriptionOrderByWithRelationInput {
+    const direction: Prisma.SortOrder = sortOrder === "desc" ? "desc" : "asc";
+
+    switch (sortBy) {
+        case "name":
+            return { name: direction };
+        case "createdAt":
+            return { createdAt: direction };
+        case "amount":
+            return { amount: direction };
+        case "nextPaymentDate":
+        default:
+            return { nextPaymentDate: direction };
+    }
+}
+
+export async function syncOverdueSubscriptionsForUser(userId: string) {
+    const now = new Date();
+
+    await prisma.subscription.updateMany({
+        where: {
+            userId,
+            status: SubscriptionStatus.pending,
+            nextPaymentDate: {
+                lt: now,
+            },
+        },
+        data: {
+            status: SubscriptionStatus.overdue,
+        },
+    });
+}
+
 export async function getSubscriptionsForUser(
     userId: string,
-    filters?: {
-        category?: string;
-        status?: string;
-    }
+    filters?: SubscriptionListFilters
 ) {
+    await syncOverdueSubscriptionsForUser(userId);
+
     return prisma.subscription.findMany({
         where: {
             userId,
@@ -25,14 +69,38 @@ export async function getSubscriptionsForUser(
             ...(filters?.status
                 ? { status: filters.status as SubscriptionStatus }
                 : {}),
+            ...(filters?.search
+                ? {
+                    OR: [
+                        {
+                            name: {
+                                contains: filters.search,
+                                mode: "insensitive",
+                            },
+                        },
+                        {
+                            provider: {
+                                contains: filters.search,
+                                mode: "insensitive",
+                            },
+                        },
+                        {
+                            planName: {
+                                contains: filters.search,
+                                mode: "insensitive",
+                            },
+                        },
+                    ],
+                }
+                : {}),
         },
-        orderBy: {
-            nextPaymentDate: "asc",
-        },
+        orderBy: getSubscriptionOrderBy(filters?.sortBy, filters?.sortOrder),
     });
 }
 
 export async function getSubscriptionByIdForUser(id: string, userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
     return prisma.subscription.findFirst({
         where: {
             id,

@@ -1,5 +1,10 @@
 import { prisma } from "../lib/prisma";
-import { BillingCycle, SubscriptionStatus } from "@prisma/client";
+import {
+    BillingCycle,
+    SubscriptionCategory,
+    SubscriptionStatus,
+} from "@prisma/client";
+import { syncOverdueSubscriptionsForUser } from "./subscription.service";
 
 function toNumber(value: unknown): number {
     if (typeof value === "number") {
@@ -69,7 +74,18 @@ function getDaysLeft(targetDate: Date, now: Date): number {
     return Math.ceil((targetDate.getTime() - now.getTime()) / msInDay);
 }
 
+function calculateRemindAt(
+    nextPaymentDate: Date,
+    reminderDaysBefore: number
+): Date {
+    const remindAt = new Date(nextPaymentDate);
+    remindAt.setDate(remindAt.getDate() - reminderDaysBefore);
+    return remindAt;
+}
+
 export async function getDashboardSummaryForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
     const subscriptions = await prisma.subscription.findMany({
         where: {
             userId,
@@ -126,6 +142,8 @@ export async function getUpcomingPaymentsForUser(
     userId: string,
     days: number = 7
 ) {
+    await syncOverdueSubscriptionsForUser(userId);
+
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(now.getDate() + days);
@@ -165,6 +183,8 @@ export async function getUpcomingPaymentsForUser(
 }
 
 export async function getTrialsForUser(userId: string, days: number = 30) {
+    await syncOverdueSubscriptionsForUser(userId);
+
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(now.getDate() + days);
@@ -209,4 +229,126 @@ export async function getTrialsForUser(userId: string, days: number = 30) {
             daysLeft: getDaysLeft(trialEndDate, now),
         };
     });
+}
+
+export async function getCategoryBreakdownForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const subscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+        },
+    });
+
+    const categoryMap = new Map<
+        SubscriptionCategory,
+        {
+            category: SubscriptionCategory;
+            monthlyAmount: number;
+            subscriptionCount: number;
+        }
+    >();
+
+    for (const subscription of subscriptions) {
+        const monthlyAmount = calculateMonthlyEquivalent(
+            toNumber(subscription.amount),
+            subscription.billingCycle
+        );
+
+        if (monthlyAmount <= 0) {
+            continue;
+        }
+
+        const existing = categoryMap.get(subscription.category);
+
+        if (existing) {
+            existing.monthlyAmount += monthlyAmount;
+            existing.subscriptionCount += 1;
+        } else {
+            categoryMap.set(subscription.category, {
+                category: subscription.category,
+                monthlyAmount,
+                subscriptionCount: 1,
+            });
+        }
+    }
+
+    const items = Array.from(categoryMap.values())
+        .map((item) => ({
+            ...item,
+            monthlyAmount: Number(item.monthlyAmount.toFixed(2)),
+        }))
+        .sort((a, b) => b.monthlyAmount - a.monthlyAmount);
+
+    const totalMonthly = Number(
+        items.reduce((sum, item) => sum + item.monthlyAmount, 0).toFixed(2)
+    );
+
+    const itemsWithPercentage = items.map((item) => ({
+        ...item,
+        percentage:
+            totalMonthly > 0
+                ? Number(((item.monthlyAmount / totalMonthly) * 100).toFixed(2))
+                : 0,
+    }));
+
+    return {
+        totalMonthly,
+        items: itemsWithPercentage,
+    };
+}
+
+export async function getRemindersForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const now = new Date();
+
+    const subscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+            nextPaymentDate: {
+                gte: now,
+            },
+        },
+        orderBy: {
+            nextPaymentDate: "asc",
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            nextPaymentDate: true,
+            reminderDaysBefore: true,
+            status: true,
+        },
+    });
+
+    const items = subscriptions.map((subscription) => {
+        const reminderDaysBefore = subscription.reminderDaysBefore ?? 1;
+        const remindAt = calculateRemindAt(
+            subscription.nextPaymentDate,
+            reminderDaysBefore
+        );
+
+        return {
+            id: subscription.id,
+            name: subscription.name,
+            provider: subscription.provider,
+            nextPaymentDate: subscription.nextPaymentDate,
+            reminderDaysBefore,
+            remindAt,
+            status: subscription.status,
+        };
+    });
+
+    return {
+        count: items.length,
+        items,
+    };
 }
