@@ -1,7 +1,9 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.middleware";
 import {
+    getCategoryBreakdownHandler,
     getDashboardSummaryHandler,
+    getRemindersHandler,
     getTrialsHandler,
     getUpcomingPaymentsHandler,
     getCategoryBreakdownHandler,

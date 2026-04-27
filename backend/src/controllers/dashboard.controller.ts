@@ -1,7 +1,9 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
+    getCategoryBreakdownForUser,
     getDashboardSummaryForUser,
+    getRemindersForUser,
     getTrialsForUser,
     getUpcomingPaymentsForUser,
     getCategoryBreakdownForUser,
@@ -14,7 +16,10 @@ export async function getDashboardSummaryHandler(
 ) {
     try {
         if (!req.appUser) {
-            return res.status(401).json({ message: "Unauthorized" });
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
         }
 
         const summary = await getDashboardSummaryForUser(req.appUser.id);
@@ -22,7 +27,10 @@ export async function getDashboardSummaryHandler(
         return res.json(summary);
     } catch (error) {
         console.error("Error fetching dashboard summary:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
     }
 }
 
@@ -32,7 +40,10 @@ export async function getUpcomingPaymentsHandler(
 ) {
     try {
         if (!req.appUser) {
-            return res.status(401).json({ message: "Unauthorized" });
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
         }
 
         const daysParam = req.query.days ? Number(req.query.days) : 7;
@@ -53,7 +64,10 @@ export async function getUpcomingPaymentsHandler(
         });
     } catch (error) {
         console.error("Error fetching upcoming payments:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
     }
 }
 
@@ -63,7 +77,10 @@ export async function getTrialsHandler(
 ) {
     try {
         if (!req.appUser) {
-            return res.status(401).json({ message: "Unauthorized" });
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
         }
 
         const daysParam = req.query.days ? Number(req.query.days) : 30;
@@ -81,7 +98,58 @@ export async function getTrialsHandler(
         });
     } catch (error) {
         console.error("Error fetching trials:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function getCategoryBreakdownHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const breakdown = await getCategoryBreakdownForUser(req.appUser.id);
+
+        return res.json(breakdown);
+    } catch (error) {
+        console.error("Error fetching category breakdown:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function getRemindersHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const reminders = await getRemindersForUser(req.appUser.id);
+
+        return res.json(reminders);
+    } catch (error) {
+        console.error("Error fetching reminders:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
     }
 }
 
