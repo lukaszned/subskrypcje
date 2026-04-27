@@ -41,6 +41,6 @@ app.use("/users", usersRouter);
 app.use("/subscriptions", subscriptionsRouter);
 app.use("/dashboard", dashboardRouter);
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+app.listen(Number(PORT), "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT} (accessible from network)`);
 });

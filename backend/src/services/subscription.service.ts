@@ -9,26 +9,60 @@ import {
     UpdateSubscriptionInput,
 } from "../validators/subscription";
 
+/**
+ * Automatyczna logika overdue:
+ * Jeśli data płatności minęła, a status to wciąż 'pending' -> ustaw 'overdue'.
+ */
+export async function ensureOverdueStatusUpdated(userId: string) {
+    const now = new Date();
+    
+    return prisma.subscription.updateMany({
+        where: {
+            userId,
+            status: SubscriptionStatus.pending,
+            nextPaymentDate: {
+                lt: now
+            }
+        },
+        data: {
+            status: SubscriptionStatus.overdue
+        }
+    });
+}
+
 export async function getSubscriptionsForUser(
     userId: string,
     filters?: {
         category?: string;
         status?: string;
+        search?: string;
+        sortBy?: string;
+        sortOrder?: "asc" | "desc";
     }
 ) {
+    // Najpierw upewniamy się, że statusy są aktualne
+    await ensureOverdueStatusUpdated(userId);
+
+    const { category, status, search, sortBy, sortOrder = "asc" } = filters || {};
+
     return prisma.subscription.findMany({
         where: {
             userId,
-            ...(filters?.category
-                ? { category: filters.category as SubscriptionCategory }
-                : {}),
-            ...(filters?.status
-                ? { status: filters.status as SubscriptionStatus }
+            ...(category ? { category: category as SubscriptionCategory } : {}),
+            ...(status ? { status: status as SubscriptionStatus } : {}),
+            ...(search
+                ? {
+                    OR: [
+                        { name: { contains: search, mode: "insensitive" } },
+                        { provider: { contains: search, mode: "insensitive" } },
+                        { notes: { contains: search, mode: "insensitive" } },
+                    ],
+                }
                 : {}),
         },
-        orderBy: {
-            nextPaymentDate: "asc",
-        },
+        orderBy: sortBy
+            ? { [sortBy]: sortOrder }
+            : { nextPaymentDate: "asc" },
     });
 }
 
@@ -163,14 +197,45 @@ export async function markSubscriptionAsPaidForUser(
     id: string,
     userId: string
 ) {
+    const subscription = await prisma.subscription.findFirst({
+        where: { id, userId }
+    });
+
+    if (!subscription) return null;
+
+    const nextDate = new Date(subscription.nextPaymentDate);
+    
+    // Obliczamy kolejny termin
+    switch (subscription.billingCycle) {
+        case BillingCycle.monthly:
+            nextDate.setMonth(nextDate.getMonth() + 1);
+            break;
+        case BillingCycle.yearly:
+            nextDate.setFullYear(nextDate.getFullYear() + 1);
+            break;
+        case BillingCycle.weekly:
+            nextDate.setDate(nextDate.getDate() + 7);
+            break;
+        case BillingCycle.one_time:
+            // Dla jednorazowych ustawiamy status paid i nie przesuwamy daty
+            return prisma.subscription.updateMany({
+                where: { id, userId },
+                data: {
+                    status: SubscriptionStatus.paid,
+                    lastPaymentDate: new Date(),
+                },
+            });
+    }
+
     return prisma.subscription.updateMany({
         where: {
             id,
             userId,
         },
         data: {
-            status: SubscriptionStatus.paid,
+            status: SubscriptionStatus.pending, // Wraca do oczekujących
             lastPaymentDate: new Date(),
+            nextPaymentDate: nextDate,
         },
     });
 }

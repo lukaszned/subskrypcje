@@ -25,11 +25,14 @@ export async function getSubscriptionsHandler(
             return res.status(401).json({ message: "Unauthorized" });
         }
 
-        const { category, status } = req.query;
+        const { category, status, search, sortBy, sortOrder } = req.query;
 
         const subscriptions = await getSubscriptionsForUser(req.appUser.id, {
             category: category ? String(category) : undefined,
             status: status ? String(status) : undefined,
+            search: search ? String(search) : undefined,
+            sortBy: sortBy ? String(sortBy) : undefined,
+            sortOrder: (sortOrder === "asc" || sortOrder === "desc") ? sortOrder : undefined,
         });
 
         res.json(subscriptions);
