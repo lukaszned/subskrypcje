@@ -2,19 +2,9 @@
 // src/screens/DashboardScreen.tsx
 //
 // Główny ekran aplikacji — zasilony live data z backendu.
-//
-// DANE:
-//   - useDashboardSummary() -> monthlyTotal, yearlyTotal, overdueCount
-//   - useUpcomingPayments(7) -> nadchodzące w ciągu 7 dni
-//   - useSubscriptions() -> lista subskrypcji
-//
-// ARCHITEKTURA:
-//   - Każda sekcja obsługuje własne stany loading/error
-//   - Skeleton loader zachowany z oryginalnego projektu
-//   - MOCK dane zastąpione hookami
 // =============================================================
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -22,38 +12,33 @@ import {
   FlatList,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   Animated,
   Platform,
   RefreshControl,
 } from 'react-native';
-import { Plus, TrendingUp, ArrowRight, Activity, AlertCircle, LogOut } from 'lucide-react-native';
-import { Sun, Moon } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Plus, ArrowRight, Activity, AlertCircle, LogOut, Sun, Moon } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppStackParamList } from '../../App';
-import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 
-// Hooki
+// App imports
+import { AppStackParamList } from '../../App';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useUpcomingPayments } from '../hooks/useUpcomingPayments';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
-
-// Auth
+import { useReminders } from '../hooks/useReminders';
+import { useTrials } from '../hooks/useTrials';
+import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
-
-// Typy i helpery
 import { Subscription, UpcomingPaymentItem, CATEGORY_LABELS } from '../types/api';
 
 // ─────────────────────────────────────────────────────────────
 // SKELETON
 // ─────────────────────────────────────────────────────────────
-
 const Skeleton = ({ width, height, style, borderRadius = 8 }: any) => {
   const pulseAnim = React.useRef(new Animated.Value(0.3)).current;
-
   useEffect(() => {
     Animated.loop(
       Animated.sequence([
@@ -71,9 +56,8 @@ const Skeleton = ({ width, height, style, borderRadius = 8 }: any) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// EKRAN
+// COMPONENT
 // ─────────────────────────────────────────────────────────────
-
 export const DashboardScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { signOut } = useAuth();
@@ -81,16 +65,24 @@ export const DashboardScreen = () => {
   const [isDark, setIsDark] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ── Live data ────────────────────────────────────────────────
+  // Data
   const summary = useDashboardSummary();
   const upcoming = useUpcomingPayments(7);
   const subscriptions = useSubscriptions();
   const breakdown = useCategoryBreakdown();
+  const reminders = useReminders();
+  const trials = useTrials(30);
 
   const isInitialLoading =
-    summary.isLoading && upcoming.isLoading && subscriptions.isLoading && breakdown.isLoading;
+    summary.isLoading || upcoming.isLoading || subscriptions.isLoading || breakdown.isLoading || trials.isLoading;
 
-  // ── Pull-to-refresh ─────────────────────────────────────────
+  // Sync Notifications
+  useEffect(() => {
+    if (reminders.data && Array.isArray(reminders.data)) {
+      syncReminders(reminders.data);
+    }
+  }, [reminders.data]);
+
   const handleRefresh = async () => {
     setIsRefreshing(true);
     await Promise.all([
@@ -98,21 +90,20 @@ export const DashboardScreen = () => {
       upcoming.refetch(),
       subscriptions.refetch(),
       breakdown.refetch(),
+      reminders.refetch(),
     ]);
     setIsRefreshing(false);
   };
 
-  // ── Wylogowanie ─────────────────────────────────────────────
   const handleSignOut = async () => {
     try {
-      queryClient.clear(); // Wyczyść cache przed wylogowaniem
+      queryClient.clear();
       await signOut();
     } catch (e) {
       console.error('Błąd wylogowania:', e);
     }
   };
 
-  // ── Temat ───────────────────────────────────────────────────
   const theme = {
     bg: isDark ? '#0F172A' : '#F8FAFC',
     card: isDark ? '#1E293B' : '#FFFFFF',
@@ -130,9 +121,172 @@ export const DashboardScreen = () => {
 
   const dynamicStyles = getStyles(theme);
 
-  // ─────────────────────────────────────────────────────────────
-  // SKELETON LOADER
-  // ─────────────────────────────────────────────────────────────
+  // HELPER RENDERS
+  const renderHeader = () => {
+    const monthlyTotal = summary.data?.monthlyTotal ?? 0;
+    const yearlyTotal = summary.data?.yearlyTotal ?? 0;
+    const overdueCount = summary.data?.overdueCount ?? 0;
+
+    return (
+      <View style={[dynamicStyles.headerCard, dynamicStyles.shadow]}>
+        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Text style={dynamicStyles.headerSubtitle}>Twoje wydatki</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <TouchableOpacity onPress={() => setIsDark(!isDark)}>
+              {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleSignOut}>
+              <LogOut size={20} color={theme.textDim} />
+            </TouchableOpacity>
+          </View>
+        </View>
+        
+        <View style={dynamicStyles.headerGrid}>
+          <View style={dynamicStyles.headerGridItem}>
+            <Text style={dynamicStyles.headerGridLabel}>Miesięcznie</Text>
+            <View style={dynamicStyles.headerAmountRow}>
+              <Text style={dynamicStyles.headerAmount}>{monthlyTotal.toFixed(2)}</Text>
+              <Text style={dynamicStyles.headerCurrency}>PLN</Text>
+            </View>
+          </View>
+          <View style={[dynamicStyles.headerGridItem, { borderLeftWidth: 1, borderLeftColor: theme.border, paddingLeft: 20 }]}>
+            <Text style={dynamicStyles.headerGridLabel}>Rocznie</Text>
+            <View style={dynamicStyles.headerAmountRow}>
+              <Text style={[dynamicStyles.headerAmount, { fontSize: 24 }]}>{yearlyTotal.toFixed(0)}</Text>
+              <Text style={[dynamicStyles.headerCurrency, { fontSize: 14 }]}>PLN</Text>
+            </View>
+          </View>
+        </View>
+
+        {overdueCount > 0 && (
+          <View style={dynamicStyles.headerChangeContainer}>
+            <View style={dynamicStyles.overdueBanner}>
+              <AlertCircle size={16} color="#FFF" style={{ marginRight: 8 }} />
+              <Text style={dynamicStyles.overdueBannerText}>
+                Masz {overdueCount} {overdueCount === 1 ? 'zaległą płatność' : 'zaległe płatności'}!
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  const renderUpcomingPayment = ({ item }: { item: UpcomingPaymentItem }) => {
+    const now = new Date();
+    const next = new Date(item.nextPaymentDate);
+    const diffMs = next.getTime() - now.getTime();
+    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const isTomorrow = daysLeft <= 1;
+
+    const dateLabel = daysLeft === 0 ? 'Dzisiaj' : daysLeft === 1 ? 'Jutro' : `Za ${daysLeft} dni`;
+
+    return (
+      <TouchableOpacity 
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
+      >
+        <View style={[dynamicStyles.upcomingCard, isTomorrow && dynamicStyles.upcomingCardWarning, dynamicStyles.shadowSm]}>
+          <View style={dynamicStyles.upcomingTop}>
+            <View style={[dynamicStyles.upcomingIconPlaceholder, isTomorrow && dynamicStyles.upcomingIconPlaceholderWarning]}>
+              <Text style={[dynamicStyles.upcomingIconText, isTomorrow && dynamicStyles.upcomingIconTextWarning]}>
+                {item.name.charAt(0)}
+              </Text>
+            </View>
+            <Text style={[dynamicStyles.upcomingDate, isTomorrow && dynamicStyles.upcomingDateWarning]} numberOfLines={1}>
+              {dateLabel}
+            </Text>
+          </View>
+          <Text style={dynamicStyles.upcomingName} numberOfLines={1}>{item.name}</Text>
+          <Text style={dynamicStyles.upcomingAmount}>{item.amount.toFixed(2)} {item.currency}</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderTrialItem = ({ item }: { item: any }) => {
+    const daysLeft = item.daysLeft;
+    const isEndingSoon = daysLeft <= 3;
+
+    return (
+      <TouchableOpacity 
+        activeOpacity={0.8}
+        onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
+      >
+        <View style={[
+          dynamicStyles.upcomingCard, 
+          isEndingSoon && { borderColor: '#FCA5A5', backgroundColor: '#FFF1F2' },
+          dynamicStyles.shadowSm
+        ]}>
+          <View style={dynamicStyles.upcomingTop}>
+            <View style={[dynamicStyles.upcomingIconPlaceholder, { backgroundColor: '#FEE2E2' }]}>
+              <Text style={[dynamicStyles.upcomingIconText, { color: '#EF4444' }]}>T</Text>
+            </View>
+            <Text style={[dynamicStyles.upcomingDate, isEndingSoon && { color: '#EF4444' }]} numberOfLines={1}>
+              {daysLeft === 0 ? 'Koniec dziś' : `Koniec za ${daysLeft} dni`}
+            </Text>
+          </View>
+          <Text style={dynamicStyles.upcomingName} numberOfLines={1}>{item.name}</Text>
+          <Text style={[dynamicStyles.upcomingAmount, { color: '#EF4444' }]}>TRIAL</Text>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderCategoryBreakdown = () => {
+    // Backend zwraca tablicę bezpośrednio, nie obiekt z polem items
+    const data = (breakdown.data || []) as CategoryBreakdownItem[];
+    if (data.length === 0) return null;
+
+    return (
+      <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
+        <View style={dynamicStyles.analyticsHeader}>
+          <Text style={dynamicStyles.sectionTitle}>Wydatki wg kategorii</Text>
+          <Activity size={20} color="#64748B" />
+        </View>
+        <Text style={dynamicStyles.analyticsSubtitle}>Miesięczne zestawienie kosztów</Text>
+        
+        {data.sort((a, b) => b.monthlyAmount - a.monthlyAmount).slice(0, 4).map((item) => (
+          <View key={item.category} style={dynamicStyles.categoryRow}>
+            <View style={dynamicStyles.categoryInfoRow}>
+              <Text style={dynamicStyles.categoryLabel}>{CATEGORY_LABELS[item.category] || item.category}</Text>
+              <Text style={dynamicStyles.categoryValue}>{item.monthlyAmount.toFixed(2)} PLN</Text>
+            </View>
+            <View style={dynamicStyles.progressBg}>
+              <View style={[dynamicStyles.progressFill, { width: `${item.percentage}%` as any }]} />
+            </View>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const renderSubscriptionRow = (item: Subscription) => {
+    const categoryLabel = CATEGORY_LABELS[item.category] ?? item.category;
+
+    return (
+      <TouchableOpacity 
+        key={item.id}
+        activeOpacity={0.7}
+        onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
+      >
+        <View style={dynamicStyles.subscriptionRow}>
+          <View style={dynamicStyles.subscriptionLogo}>
+            <Text style={dynamicStyles.subscriptionInitial}>{item.name.charAt(0)}</Text>
+          </View>
+          <View style={dynamicStyles.subscriptionInfo}>
+            <Text style={dynamicStyles.subscriptionName} numberOfLines={1}>{item.name}</Text>
+            <View style={dynamicStyles.categoryTag}>
+              <Text style={dynamicStyles.categoryTagText}>{categoryLabel}</Text>
+            </View>
+          </View>
+          <View style={dynamicStyles.subscriptionPriceContainer}>
+            <Text style={dynamicStyles.subscriptionPrice}>{item.amount.toFixed(2)} {item.currency}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (isInitialLoading) {
     return (
@@ -143,191 +297,11 @@ export const DashboardScreen = () => {
           <View style={{ flexDirection: 'row', marginBottom: 32 }}>
             <Skeleton width={140} height={110} borderRadius={16} style={{ marginRight: 16 }} />
             <Skeleton width={140} height={110} borderRadius={16} style={{ marginRight: 16 }} />
-            <Skeleton width={140} height={110} borderRadius={16} />
           </View>
-          <Skeleton width={150} height={24} style={{ marginBottom: 16 }} />
-          {[1, 2, 3, 4].map((i) => (
-            <View key={i} style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20 }}>
-              <Skeleton width={48} height={48} borderRadius={24} style={{ marginRight: 16 }} />
-              <View style={{ flex: 1 }}>
-                <Skeleton width={120} height={16} style={{ marginBottom: 8 }} />
-                <Skeleton width={80} height={12} />
-              </View>
-              <Skeleton width={70} height={20} />
-            </View>
-          ))}
         </ScrollView>
       </SafeAreaView>
     );
   }
-
-  // ─────────────────────────────────────────────────────────────
-  // HEADER — dane z summary
-  // ─────────────────────────────────────────────────────────────
-
-  const renderHeader = () => {
-    const monthlyTotal = summary.data?.monthlyTotal ?? 0;
-    const overdueCount = summary.data?.overdueCount ?? 0;
-
-    return (
-      <View style={[dynamicStyles.headerCard, dynamicStyles.shadow]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={dynamicStyles.headerSubtitle}>Całkowity koszt miesięczny</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <TouchableOpacity onPress={() => setIsDark(!isDark)}>
-              {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={handleSignOut}>
-              <LogOut size={20} color={theme.textDim} />
-            </TouchableOpacity>
-          </View>
-        </View>
-        <View style={dynamicStyles.headerAmountRow}>
-          <Text style={dynamicStyles.headerAmount}>
-            {monthlyTotal.toFixed(2)}
-          </Text>
-          <Text style={dynamicStyles.headerCurrency}>PLN</Text>
-        </View>
-        {overdueCount > 0 && (
-          <View style={dynamicStyles.headerChangeContainer}>
-            <View style={dynamicStyles.changeBadgeRed}>
-              <AlertCircle size={14} color="#EF4444" style={{ marginRight: 4 }} />
-              <Text style={dynamicStyles.changeTextRed}>
-                {overdueCount} zaległa {overdueCount === 1 ? 'płatność' : 'płatności'}
-              </Text>
-            </View>
-          </View>
-        )}
-      </View>
-    );
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // NADCHODZĄCE PŁATNOŚCI — live data
-  // ─────────────────────────────────────────────────────────────
-
-  const renderUpcomingPayment = ({ item }: { item: UpcomingPaymentItem }) => {
-    // Oblicz daysLeft z nextPaymentDate
-    const now = new Date();
-    const next = new Date(item.nextPaymentDate);
-    const diffMs = next.getTime() - now.getTime();
-    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-    const isTomorrow = daysLeft <= 1;
-
-    const dateLabel = daysLeft === 0
-      ? 'Dzisiaj'
-      : daysLeft === 1
-        ? 'Jutro'
-        : `Za ${daysLeft} dni`;
-
-    return (
-      <View style={[dynamicStyles.upcomingCard, isTomorrow && dynamicStyles.upcomingCardWarning, dynamicStyles.shadowSm]}>
-        <View style={dynamicStyles.upcomingTop}>
-          <View style={[dynamicStyles.upcomingIconPlaceholder, isTomorrow && dynamicStyles.upcomingIconPlaceholderWarning]}>
-            <Text style={[dynamicStyles.upcomingIconText, isTomorrow && dynamicStyles.upcomingIconTextWarning]}>
-              {item.name.charAt(0)}
-            </Text>
-          </View>
-          <Text style={[dynamicStyles.upcomingDate, isTomorrow && dynamicStyles.upcomingDateWarning]} numberOfLines={1}>
-            {dateLabel}
-          </Text>
-        </View>
-        <Text style={dynamicStyles.upcomingName} numberOfLines={1}>{item.name}</Text>
-        <Text style={dynamicStyles.upcomingAmount}>{item.amount.toFixed(2)} {item.currency}</Text>
-      </View>
-    );
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // ANALITYKA (Rozbicie na kategorie)
-  // ─────────────────────────────────────────────────────────────
-  
-  const renderCategoryBreakdown = () => {
-    const data = breakdown.data ?? [];
-    if (data.length === 0) return null;
-
-    // Znajdź max total dla skali pasków
-    const maxTotal = Math.max(...data.map(d => d.total));
-
-    return (
-      <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
-        <View style={dynamicStyles.analyticsHeader}>
-          <Text style={dynamicStyles.sectionTitle}>Wydatki wg kategorii</Text>
-          <Activity size={20} color="#64748B" />
-        </View>
-        <Text style={dynamicStyles.analyticsSubtitle}>Miesięczne zestawienie kosztów</Text>
-        
-        {data.sort((a, b) => b.total - a.total).slice(0, 4).map((item) => {
-          const percentage = (item.total / maxTotal) * 100;
-          return (
-            <View key={item.category} style={dynamicStyles.categoryRow}>
-              <View style={dynamicStyles.categoryInfoRow}>
-                <Text style={dynamicStyles.categoryLabel}>{CATEGORY_LABELS[item.category] || item.category}</Text>
-                <Text style={dynamicStyles.categoryValue}>{item.total.toFixed(2)} {item.currency}</Text>
-              </View>
-              <View style={dynamicStyles.progressBg}>
-                <View style={[dynamicStyles.progressFill, { width: `${percentage}%` as any }]} />
-              </View>
-            </View>
-          );
-        })}
-      </View>
-    );
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // LISTA SUBSKRYPCJI — live data
-  // ─────────────────────────────────────────────────────────────
-
-  const renderSubscriptionRow = ({ item }: { item: Subscription }) => {
-    const categoryLabel = CATEGORY_LABELS[item.category] ?? item.category;
-
-    return (
-      <View style={dynamicStyles.subscriptionRow}>
-        <View style={dynamicStyles.subscriptionLogo}>
-          <Text style={dynamicStyles.subscriptionInitial}>{item.name.charAt(0)}</Text>
-        </View>
-        <View style={dynamicStyles.subscriptionInfo}>
-          <Text style={dynamicStyles.subscriptionName} numberOfLines={1}>{item.name}</Text>
-          <View style={dynamicStyles.categoryTag}>
-            <Text style={dynamicStyles.categoryTagText}>{categoryLabel}</Text>
-          </View>
-        </View>
-        <View style={dynamicStyles.subscriptionPriceContainer}>
-          <Text style={dynamicStyles.subscriptionPrice}>{item.amount.toFixed(2)} {item.currency}</Text>
-        </View>
-      </View>
-    );
-  };
-
-  // ─────────────────────────────────────────────────────────────
-  // ANALITYKA (placeholder — dane bez chart library)
-  // ─────────────────────────────────────────────────────────────
-
-  const renderAnalyticsPlaceholder = () => (
-    <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
-      <View style={dynamicStyles.analyticsHeader}>
-        <Text style={dynamicStyles.sectionTitle}>Analityka</Text>
-        <Activity size={20} color="#64748B" />
-      </View>
-      <Text style={dynamicStyles.analyticsSubtitle}>
-        {summary.data
-          ? `Aktywne: ${summary.data.activeSubscriptionsCount} | Triale: ${summary.data.trialsCount} | Rocznie: ${summary.data.yearlyTotal.toFixed(2)} PLN`
-          : 'Ładowanie...'}
-      </Text>
-      <View style={dynamicStyles.chartContainer}>
-        {[40, 60, 50, 80, 70, 95].map((height, index) => (
-          <View key={index} style={dynamicStyles.chartBarWrapper}>
-            <View style={[dynamicStyles.chartBar, { height: `${height}%` as any }, height === 95 && dynamicStyles.chartBarActive]} />
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-
-  // ─────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────
 
   const upcomingItems = upcoming.data?.items ?? [];
   const subscriptionItems = (subscriptions.data ?? []).filter(s => s.status !== 'canceled');
@@ -347,10 +321,8 @@ export const DashboardScreen = () => {
           />
         }
       >
-        {/* Header Hero Section */}
         {renderHeader()}
 
-        {/* Nadchodzące Płatności */}
         {upcomingItems.length > 0 && (
           <View style={dynamicStyles.sectionContainer}>
             <View style={dynamicStyles.sectionHeader}>
@@ -371,17 +343,31 @@ export const DashboardScreen = () => {
               renderItem={renderUpcomingPayment}
               contentContainerStyle={dynamicStyles.horizontalListPadding}
               ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-              scrollEnabled={upcomingItems.length > 2}
             />
           </View>
         )}
 
-        {/* Analityka Kategorii */}
+        {trials.data && trials.data.items.length > 0 && (
+          <View style={dynamicStyles.sectionContainer}>
+            <View style={dynamicStyles.sectionHeader}>
+              <Text style={dynamicStyles.sectionTitle}>Kończące się okresy próbne</Text>
+            </View>
+            <FlatList
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              data={trials.data.items}
+              keyExtractor={(item) => item.id}
+              renderItem={renderTrialItem}
+              contentContainerStyle={dynamicStyles.horizontalListPadding}
+              ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
+            />
+          </View>
+        )}
+
         <View style={dynamicStyles.sectionContainer}>
           {renderCategoryBreakdown()}
         </View>
 
-        {/* Lista Subskrypcji */}
         <View style={[dynamicStyles.sectionContainer, dynamicStyles.lastSection]}>
           <View style={dynamicStyles.sectionHeader}>
             <Text style={dynamicStyles.sectionTitle}>Twoje Subskrypcje</Text>
@@ -398,16 +384,11 @@ export const DashboardScreen = () => {
               Brak subskrypcji. Dodaj pierwszą!
             </Text>
           ) : (
-            subscriptionItems.slice(0, 5).map((item) => (
-              <React.Fragment key={item.id}>
-                {renderSubscriptionRow({ item })}
-              </React.Fragment>
-            ))
+            subscriptionItems.slice(0, 5).map(renderSubscriptionRow)
           )}
         </View>
       </ScrollView>
 
-      {/* FAB */}
       <TouchableOpacity
         style={[dynamicStyles.fab, dynamicStyles.shadowLg]}
         activeOpacity={0.8}
@@ -418,10 +399,6 @@ export const DashboardScreen = () => {
     </SafeAreaView>
   );
 };
-
-// ─────────────────────────────────────────────────────────────
-// STYLE (zachowane z oryginału)
-// ─────────────────────────────────────────────────────────────
 
 const getStyles = (theme: any) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.bg },
@@ -451,12 +428,6 @@ const getStyles = (theme: any) => StyleSheet.create({
   headerAmount: { fontSize: 40, fontWeight: '800', color: theme.text, letterSpacing: -1 },
   headerCurrency: { fontSize: 20, fontWeight: '600', color: theme.textDim, marginLeft: 8 },
   headerChangeContainer: { flexDirection: 'row' },
-  changeBadgeRed: {
-    flexDirection: 'row', alignItems: 'center',
-    backgroundColor: theme.redBg, paddingHorizontal: 10,
-    paddingVertical: 6, borderRadius: 20,
-  },
-  changeTextRed: { color: theme.redText, fontSize: 12, fontWeight: '600' },
   sectionContainer: { marginBottom: 32 },
   lastSection: { marginBottom: 20 },
   sectionHeader: {
@@ -496,13 +467,6 @@ const getStyles = (theme: any) => StyleSheet.create({
     alignItems: 'center', marginBottom: 4,
   },
   analyticsSubtitle: { fontSize: 13, color: theme.textDim, marginBottom: 20 },
-  chartContainer: {
-    height: 100, flexDirection: 'row', alignItems: 'flex-end',
-    justifyContent: 'space-between', paddingTop: 10,
-  },
-  chartBarWrapper: { width: 30, height: '100%', justifyContent: 'flex-end', alignItems: 'center' },
-  chartBar: { width: 12, backgroundColor: theme.border, borderRadius: 6 },
-  chartBarActive: { backgroundColor: '#6366F1' },
   subscriptionRow: {
     flexDirection: 'row', alignItems: 'center',
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F8FAFC',
@@ -533,6 +497,20 @@ const getStyles = (theme: any) => StyleSheet.create({
   categoryValue: { fontSize: 14, color: theme.textDim, fontWeight: '700' },
   progressBg: { height: 8, backgroundColor: theme.border, borderRadius: 4, overflow: 'hidden' },
   progressFill: { height: '100%', backgroundColor: '#6366F1', borderRadius: 4 },
+  headerGrid: { flexDirection: 'row', marginTop: 8 },
+  headerGridItem: { flex: 1 },
+  headerGridLabel: { fontSize: 12, color: theme.textDim, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase' },
+  overdueBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 14,
+    marginTop: 8,
+    width: '100%',
+  },
+  overdueBannerText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
 });
 
 export default DashboardScreen;

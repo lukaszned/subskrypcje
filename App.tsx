@@ -1,26 +1,15 @@
 // =============================================================
 // App.tsx — główny entry point aplikacji
-//
-// ARCHITEKTURA NAWIGACJI:
-//   - AuthProvider nasłuchuje sesji Supabase
-//   - QueryClientProvider daje dostęp do TanStack Query
-//   - Stack.Navigator renderuje różne ekrany w zależności od sesji:
-//       session == null  -> Auth Stack (Onboarding, Login, Register)
-//       session != null  -> App Stack (Dashboard, SubscriptionList, AddSubscription)
-//
-// KLUCZOWA ZASADA:
-//   - Po zalogowaniu NIE wywołujemy navigation.navigate('Dashboard')
-//   - Session zmienia się w AuthContext -> nawigacja przełącza się automatycznie
-//   - To eliminuje race conditions i jest React-way
 // =============================================================
 
-import 'react-native-gesture-handler'; // Musi być na samej górze
+import 'react-native-gesture-handler'; 
 import { StatusBar } from 'expo-status-bar';
 import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Context
 import { AuthProvider, useAuth } from './src/context/AuthContext';
@@ -34,6 +23,7 @@ import RegisterScreen from './src/screens/RegisterScreen';
 import DashboardScreen from './src/screens/DashboardScreen';
 import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
 import ManualAddScreen from './src/screens/ManualAddScreen';
+import SubscriptionDetailScreen from './src/screens/SubscriptionDetailScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -48,10 +38,10 @@ export type AuthStackParamList = {
 export type AppStackParamList = {
   Dashboard: undefined;
   SubscriptionList: undefined;
-  AddSubscription: undefined;
+  AddSubscription: { subscriptionId?: string } | undefined;
+  SubscriptionDetail: { id: string };
 };
 
-// Zachowane dla kompatybilności wstecznej z istniejącymi ekranami
 export type RootStackParamList = AuthStackParamList & AppStackParamList;
 
 // ─────────────────────────────────────────────────────────────
@@ -61,16 +51,13 @@ export type RootStackParamList = AuthStackParamList & AppStackParamList;
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      // Dane "świeże" przez 1 minutę — potem refetch w tle
       staleTime: 60 * 1000,
-      // Retry 2 razy przy błędach (nie przy 401/403)
       retry: (failureCount, error: any) => {
         if (error?.status === 401 || error?.status === 403) return false;
         return failureCount < 2;
       },
     },
     mutations: {
-      // Nie retry przy mutacjach — ryzyko duplikatów
       retry: false,
     },
   },
@@ -106,6 +93,7 @@ function AppNavigator() {
         options={{ gestureEnabled: false }}
       />
       <AppStack.Screen name="SubscriptionList" component={SubscriptionListScreen} />
+      <AppStack.Screen name="SubscriptionDetail" component={SubscriptionDetailScreen} />
       <AppStack.Screen
         name="AddSubscription"
         component={ManualAddScreen}
@@ -115,14 +103,9 @@ function AppNavigator() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────
-// Root Navigator — reaguje na session
-// ─────────────────────────────────────────────────────────────
-
 function RootNavigator() {
   const { session, isLoading } = useAuth();
 
-  // Spinner podczas pierwszego sprawdzania sesji (np. AsyncStorage read)
   if (isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B1120' }}>
@@ -148,10 +131,12 @@ export default function App() {
   }, []);
 
   return (
-    <AuthProvider>
-      <QueryClientProvider client={queryClient}>
-        <RootNavigator />
-      </QueryClientProvider>
-    </AuthProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <AuthProvider>
+        <QueryClientProvider client={queryClient}>
+          <RootNavigator />
+        </QueryClientProvider>
+      </AuthProvider>
+    </GestureHandlerRootView>
   );
 }

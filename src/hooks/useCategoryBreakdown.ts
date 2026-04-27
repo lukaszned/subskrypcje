@@ -3,23 +3,17 @@
 // =============================================================
 
 import { useQuery } from '@tanstack/react-query';
-import { apiGet } from '../lib/apiClient';
+import { getCategoryBreakdown } from '../api/dashboard';
+import { CategoryBreakdownResponse } from '../types/api';
 
 export const CATEGORY_BREAKDOWN_KEY = ['dashboard', 'category-breakdown'];
-
-export interface CategoryBreakdownItem {
-  category: string;
-  total: number;
-  count: number;
-  currency: string;
-}
 
 /**
  * Pobiera rozbicie wydatków na kategorie dla dashboardu.
  */
 export function useCategoryBreakdown() {
-  return useQuery<CategoryBreakdownItem[]>({
+  return useQuery<CategoryBreakdownResponse>({
     queryKey: CATEGORY_BREAKDOWN_KEY,
-    queryFn: () => apiGet<CategoryBreakdownItem[]>('/dashboard/category-breakdown'),
+    queryFn: getCategoryBreakdown,
   });
 }

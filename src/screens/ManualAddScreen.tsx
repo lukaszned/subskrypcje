@@ -1,14 +1,7 @@
 // =============================================================
 // src/screens/ManualAddScreen.tsx
 //
-// Formularz dodawania nowej subskrypcji.
-//
-// ZMIANY vs MOCK:
-//   - handleSave wywołuje useCreateSubscription (POST /subscriptions)
-//   - kategorie zmapowane na backend enums (SubscriptionCategory)
-//   - cykle zmapowane na backend enums (BillingCycle)
-//   - obsługa 409 conflict (duplikat) z informacją dla usera
-//   - po sukcesie: navigation.goBack() (cache auto-invalidated przez hook)
+// Formularz dodawania/edycji subskrypcji.
 // =============================================================
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -16,7 +9,6 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TextInput,
   TouchableOpacity,
   KeyboardAvoidingView,
@@ -27,41 +19,39 @@ import {
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { X, Edit2, Calendar, LayoutGrid, RotateCw } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { 
+  X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, 
+  Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
+  PiggyBank, Truck, Globe 
+} from 'lucide-react-native';
+import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { AppStackParamList } from '../../App';
 
-// Hook
+// Hooks
 import { useCreateSubscription } from '../hooks/useCreateSubscription';
-
-// Typy
-import {
-  SubscriptionCategory,
-  BillingCycle,
-  CreateSubscriptionPayload,
-} from '../types/api';
-
-// Błędy API
+import { useUpdateSubscription } from '../hooks/useUpdateSubscription';
+import { useSubscription } from '../hooks/useSubscription';
+import { SubscriptionCategory, BillingCycle } from '../types/api';
 import { ApiError } from '../lib/apiClient';
-
-// ─────────────────────────────────────────────────────────────
-// STAŁE — zmapowane na backend enums
-// ─────────────────────────────────────────────────────────────
 
 const CATEGORIES: Array<{
   id: SubscriptionCategory;
   label: string;
   color: string;
   textColor: string;
+  icon: any;
 }> = [
-  { id: 'entertainment', label: 'Rozrywka',      color: '#E0E7FF', textColor: '#4F46E5' },
-  { id: 'utilities',     label: 'Narzędzia',     color: '#DBEAFE', textColor: '#2563EB' },
-  { id: 'health',        label: 'Zdrowie',        color: '#DCFCE7', textColor: '#16A34A' },
-  { id: 'education',     label: 'Edukacja',       color: '#FEF9C3', textColor: '#CA8A04' },
-  { id: 'productivity',  label: 'Produktywność',  color: '#FCE7F3', textColor: '#BE185D' },
-  { id: 'shopping',      label: 'Zakupy',         color: '#FEF3C7', textColor: '#D97706' },
-  { id: 'finance',       label: 'Finanse',        color: '#ECFDF5', textColor: '#059669' },
-  { id: 'transport',     label: 'Transport',      color: '#F0F9FF', textColor: '#0284C7' },
-  { id: 'other',         label: 'Inne',           color: '#F1F5F9', textColor: '#64748B' },
+  { id: 'entertainment', label: 'Rozrywka',      color: '#E0E7FF', textColor: '#4F46E5', icon: Film },
+  { id: 'utilities',     label: 'Narzędzia',     color: '#DBEAFE', textColor: '#2563EB', icon: Wifi },
+  { id: 'health',        label: 'Zdrowie',        color: '#DCFCE7', textColor: '#16A34A', icon: Heart },
+  { id: 'education',     label: 'Edukacja',       color: '#FEF9C3', textColor: '#CA8A04', icon: GraduationCap },
+  { id: 'productivity',  label: 'Produktywność',  color: '#FCE7F3', textColor: '#BE185D', icon: Briefcase },
+  { id: 'shopping',      label: 'Zakupy',         color: '#FEF3C7', textColor: '#D97706', icon: ShoppingBag },
+  { id: 'finance',       label: 'Finanse',        color: '#ECFDF5', textColor: '#059669', icon: PiggyBank },
+  { id: 'transport',     label: 'Transport',      color: '#F0F9FF', textColor: '#0284C7', icon: Truck },
+  { id: 'other',         label: 'Inne',           color: '#F1F5F9', textColor: '#64748B', icon: Globe },
 ];
 
 const CYCLES: Array<{ id: BillingCycle; label: string }> = [
@@ -69,143 +59,133 @@ const CYCLES: Array<{ id: BillingCycle; label: string }> = [
   { id: 'yearly',   label: 'Co rok'     },
   { id: 'weekly',   label: 'Co tydzień' },
   { id: 'one_time', label: 'Jednorazowo'},
-  { id: 'custom',   label: 'Inny'       },
 ];
-
-// ─────────────────────────────────────────────────────────────
-// EKRAN
-// ─────────────────────────────────────────────────────────────
 
 export const ManualAddScreen = () => {
   const navigation = useNavigation();
-  const amountInputRef = useRef<TextInput>(null);
-  const createSubscription = useCreateSubscription();
+  const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
+  const subscriptionId = route.params?.subscriptionId;
 
-  // ── Stan formularza ──────────────────────────────────────────
+  const amountInputRef = useRef<TextInput>(null);
+  const createMutation = useCreateSubscription();
+  const updateMutation = useUpdateSubscription();
+  const { data: existingSub, isLoading: isLoadingSub } = useSubscription(subscriptionId || '');
+
+  // Form State
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('');
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [category, setCategory] = useState<SubscriptionCategory>('entertainment');
-  const [nextPaymentDate, setNextPaymentDate] = useState('');
+  const [date, setDate] = useState(new Date());
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [currency, setCurrency] = useState('PLN');
+  const [isTrial, setIsTrial] = useState(false);
+  const [trialEndDate, setTrialEndDate] = useState(new Date());
+  const [showTrialPicker, setShowTrialPicker] = useState(false);
+  const [notes, setNotes] = useState('');
+  const [cancelUrl, setCancelUrl] = useState('');
 
-  // Walidacja
   const parsedAmount = parseFloat(amount.replace(',', '.'));
   const isValid = name.trim().length > 0 && !isNaN(parsedAmount) && parsedAmount > 0;
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      amountInputRef.current?.focus();
-    }, 400);
-    return () => clearTimeout(timer);
-  }, []);
+    if (existingSub) {
+      setAmount(existingSub.amount.toString());
+      setName(existingSub.name);
+      setProvider(existingSub.provider || '');
+      setCycle(existingSub.billingCycle);
+      setCategory(existingSub.category);
+      setCurrency(existingSub.currency || 'PLN');
+      setIsTrial(existingSub.isTrial);
+      setNotes(existingSub.notes || '');
+      setCancelUrl(existingSub.cancelUrl || '');
+      if (existingSub.nextPaymentDate) {
+        setDate(new Date(existingSub.nextPaymentDate));
+      }
+      if (existingSub.trialEndDate) {
+        setTrialEndDate(new Date(existingSub.trialEndDate));
+      }
+    }
+  }, [existingSub]);
 
-  // ── Formatowanie daty ────────────────────────────────────────
-  const today = new Date();
-  const todayISO = today.toISOString().split('T')[0]; // "2026-04-24"
-  const formattedDate = today.toLocaleDateString('pl-PL', {
-    day: 'numeric', month: 'long', year: 'numeric'
-  });
-
-  // ── Zapis ────────────────────────────────────────────────────
-  const handleSave = async () => {
-    if (!isValid || createSubscription.isPending) return;
-
-    const payload: CreateSubscriptionPayload = {
-      name: name.trim(),
-      amount: parsedAmount,
-      currency: 'PLN',
-      category,
-      billingCycle: cycle,
-      ...(provider.trim() && { provider: provider.trim() }),
-      // Używamy podanej daty lub dzisiaj
-      nextPaymentDate: nextPaymentDate || todayISO,
-    };
-
-    createSubscription.mutate(payload, {
-      onSuccess: () => {
-        navigation.goBack(); // Cache jest już invalidowany przez hook
-      },
-      onError: (error) => {
-        if (error instanceof ApiError) {
-          if (error.status === 409) {
-            // Duplikat
-            const body = error.body as any;
-            Alert.alert(
-              'Podobna subskrypcja istnieje',
-              `"${body?.duplicate?.name ?? name}" jest już na Twojej liście (status: ${body?.duplicate?.status}).`,
-              [
-                { text: 'Zapisz mimo to', onPress: () => navigation.goBack() },
-                { text: 'Wróć', style: 'cancel' },
-              ]
-            );
-          } else if (error.status === 400) {
-            // Błąd walidacji
-            const body = error.body as any;
-            const firstError = body?.errors?.[0];
-            Alert.alert(
-              'Błąd walidacji',
-              firstError
-                ? `${firstError.field}: ${firstError.message}`
-                : error.message
-            );
-          } else {
-            Alert.alert('Błąd', error.message || 'Spróbuj ponownie.');
-          }
-        } else {
-          Alert.alert('Błąd', 'Sprawdź połączenie z internetem.');
-        }
-      },
-    });
+  const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowDatePicker(false);
+    if (selectedDate) setDate(selectedDate);
   };
 
-  // ─────────────────────────────────────────────────────────────
-  // RENDER
-  // ─────────────────────────────────────────────────────────────
+  const onTrialDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowTrialPicker(false);
+    if (selectedDate) setTrialEndDate(selectedDate);
+  };
+
+  const handleSave = async () => {
+    if (!isValid || createMutation.isPending || updateMutation.isPending) return;
+
+    const payload = {
+      name: name.trim(),
+      amount: parsedAmount,
+      currency,
+      category,
+      billingCycle: cycle,
+      provider: provider.trim() || undefined,
+      nextPaymentDate: date.toISOString().split('T')[0],
+      isTrial,
+      trialEndDate: isTrial ? trialEndDate.toISOString().split('T')[0] : undefined,
+      notes: notes.trim() || undefined,
+      cancelUrl: cancelUrl.trim() || undefined,
+      reminderDaysBefore: 1,
+    };
+
+    if (subscriptionId) {
+      updateMutation.mutate({ id: subscriptionId, payload }, {
+        onSuccess: () => navigation.goBack(),
+        onError: handleApiError,
+      });
+    } else {
+      createMutation.mutate(payload as any, {
+        onSuccess: () => navigation.goBack(),
+        onError: handleApiError,
+      });
+    }
+  };
+
+  const handleApiError = (error: any) => {
+    console.error('Błąd zapisu:', error);
+    
+    if (error instanceof ApiError) {
+      if (error.status === 409) {
+        Alert.alert('Duplikat', 'Subskrypcja o tej nazwie już istnieje.');
+      } else if (error.status === 400 && error.body) {
+        const body = error.body as any;
+        const details = body.errors?.map((e: any) => `- ${e.message}`).join('\n') || error.message;
+        Alert.alert('Błąd walidacji', details);
+      } else {
+        Alert.alert('Błąd', error.message || 'Nie udało się zapisać subskrypcji.');
+      }
+    } else {
+      Alert.alert('Błąd połączenia', 'Upewnij się, że serwer działa i telefon jest w tej samej sieci Wi-Fi.');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
           <View style={styles.inner}>
-
-            {/* HEADER */}
             <View style={styles.header}>
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={() => navigation.goBack()}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                <X size={24} color="#64748B" />
-              </TouchableOpacity>
-
-              <Text style={styles.headerTitle}>Nowa Subskrypcja</Text>
-
-              <TouchableOpacity
-                style={styles.headerButton}
-                onPress={handleSave}
-                disabled={!isValid || createSubscription.isPending}
-                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              >
-                {createSubscription.isPending ? (
+              <TouchableOpacity onPress={() => navigation.goBack()}><X size={24} color="#64748B" /></TouchableOpacity>
+              <Text style={styles.headerTitle}>{subscriptionId ? 'Edytuj' : 'Nowa'}</Text>
+              <TouchableOpacity onPress={handleSave} disabled={!isValid}>
+                {createMutation.isPending || updateMutation.isPending ? (
                   <ActivityIndicator size="small" color="#6366F1" />
                 ) : (
-                  <Text style={[styles.saveButtonText, !isValid && styles.saveButtonDisabled]}>
-                    Zapisz
-                  </Text>
+                  <Text style={[styles.saveButtonText, !isValid && styles.saveButtonDisabled]}>Zapisz</Text>
                 )}
               </TouchableOpacity>
             </View>
 
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
-              {/* HERO INPUT — kwota */}
+            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
               <View style={styles.heroSection}>
                 <View style={styles.amountInputContainer}>
                   <TextInput
@@ -215,120 +195,127 @@ export const ManualAddScreen = () => {
                     placeholder="0.00"
                     placeholderTextColor="#CBD5E1"
                     value={amount}
-                    onChangeText={(text) => {
-                      const formatted = text.replace(/[^0-9.,]/g, '');
-                      setAmount(formatted);
-                    }}
-                    maxLength={8}
+                    onChangeText={setAmount}
                   />
-                  <Text style={styles.currencyText}>PLN</Text>
+                  <Text style={styles.currencyText}>{currency}</Text>
+                </View>
+                <View style={styles.currencyPills}>
+                  {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
+                    <TouchableOpacity 
+                      key={c} 
+                      style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
+                      onPress={() => setCurrency(c)}
+                    >
+                      <Text style={[styles.currencyPillText, currency === c && styles.currencyPillTextActive]}>{c}</Text>
+                    </TouchableOpacity>
+                  ))}
                 </View>
               </View>
 
-              {/* FORM */}
               <View style={styles.formSection}>
-
-                {/* NAZWA */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Nazwa usługi *</Text>
-                  <View style={styles.textInputWrapper}>
-                    <Edit2 size={20} color="#94A3B8" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="np. Netflix, Karnet na siłownię"
-                      placeholderTextColor="#94A3B8"
-                      value={name}
-                      onChangeText={setName}
-                    />
-                  </View>
+                  <Text style={styles.label}>Nazwa</Text>
+                  <TextInput style={styles.textInput} value={name} onChangeText={setName} placeholder="np. Netflix" />
                 </View>
 
-                {/* PROVIDER (opcjonalne) */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Dostawca (opcjonalnie)</Text>
-                  <View style={styles.textInputWrapper}>
-                    <Edit2 size={20} color="#94A3B8" style={styles.inputIcon} />
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="np. Netflix, Spotify, Google"
-                      placeholderTextColor="#94A3B8"
-                      value={provider}
-                      onChangeText={setProvider}
-                    />
-                  </View>
-                </View>
-
-                {/* CYKL ROZLICZENIOWY */}
-                <View style={styles.inputGroup}>
-                  <View style={styles.labelRow}>
-                    <RotateCw size={16} color="#64748B" />
-                    <Text style={[styles.label, { marginBottom: 0, marginLeft: 6 }]}>Cykl rozliczeniowy</Text>
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoryScroll}
-                  >
-                    {CYCLES.map(c => {
-                      const isActive = cycle === c.id;
-                      return (
-                        <TouchableOpacity
-                          key={c.id}
-                          activeOpacity={0.8}
-                          onPress={() => setCycle(c.id)}
-                          style={[styles.pill, isActive && styles.pillActive]}
-                        >
-                          <Text style={[styles.pillText, isActive && styles.pillTextActive]}>
-                            {c.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                  <Text style={styles.label}>Cykl</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {CYCLES.map(c => (
+                      <TouchableOpacity 
+                        key={c.id} 
+                        style={[styles.pill, cycle === c.id && styles.pillActive]}
+                        onPress={() => setCycle(c.id)}
+                      >
+                        <Text style={[styles.pillText, cycle === c.id && styles.pillTextActive]}>{c.label}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </ScrollView>
                 </View>
 
-                {/* DATA NASTĘPNEJ PŁATNOŚCI */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Następna płatność</Text>
-                  <TouchableOpacity style={styles.dateMockButton} activeOpacity={0.7}>
-                    <Calendar size={20} color="#6366F1" style={styles.inputIcon} />
-                    <Text style={styles.dateMockText}>{formattedDate}</Text>
+                  <Text style={styles.label}>Data płatności</Text>
+                  <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
+                    <Calendar size={20} color="#6366F1" style={{ marginRight: 8 }} />
+                    <Text style={styles.dateText}>{date.toLocaleDateString('pl-PL')}</Text>
                   </TouchableOpacity>
+                  {showDatePicker && (
+                    <DateTimePicker
+                      value={date}
+                      mode="date"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={onDateChange}
+                    />
+                  )}
                 </View>
 
-                {/* KATEGORIA */}
-                <View style={[styles.inputGroup, { borderBottomWidth: 0 }]}>
-                  <View style={styles.labelRow}>
-                    <LayoutGrid size={16} color="#64748B" />
-                    <Text style={[styles.label, { marginBottom: 0, marginLeft: 6 }]}>Kategoria</Text>
-                  </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={styles.categoryScroll}
-                  >
-                    {CATEGORIES.map(cat => {
-                      const isActive = category === cat.id;
-                      return (
-                        <TouchableOpacity
-                          key={cat.id}
-                          activeOpacity={0.8}
-                          onPress={() => setCategory(cat.id)}
-                          style={[
-                            styles.categoryPill,
-                            { backgroundColor: cat.color },
-                            isActive && { borderWidth: 2, borderColor: cat.textColor },
-                          ]}
-                        >
-                          <Text style={[styles.categoryText, { color: cat.textColor }]}>
-                            {cat.label}
-                          </Text>
-                        </TouchableOpacity>
-                      );
-                    })}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Kategoria</Text>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    {CATEGORIES.map(cat => (
+                      <TouchableOpacity 
+                        key={cat.id} 
+                        style={[styles.catPill, category === cat.id && { borderColor: cat.textColor, borderWidth: 2 }]}
+                        onPress={() => setCategory(cat.id)}
+                      >
+                        <cat.icon size={16} color={cat.textColor} />
+                        <Text style={[styles.catText, { color: cat.textColor }]}>{cat.label}</Text>
+                      </TouchableOpacity>
+                    ))}
                   </ScrollView>
                 </View>
 
+                <View style={styles.inputGroup}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.label}>To jest okres próbny (Trial)</Text>
+                    <TouchableOpacity 
+                      onPress={() => setIsTrial(!isTrial)}
+                      style={[styles.toggle, isTrial && styles.toggleActive]}
+                    >
+                      <View style={[styles.toggleDot, isTrial && styles.toggleDotActive]} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {isTrial && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Koniec okresu próbnego</Text>
+                    <TouchableOpacity style={styles.dateButton} onPress={() => setShowTrialPicker(true)}>
+                      <Calendar size={20} color="#F59E0B" style={{ marginRight: 8 }} />
+                      <Text style={[styles.dateText, { color: '#F59E0B' }]}>{trialEndDate.toLocaleDateString('pl-PL')}</Text>
+                    </TouchableOpacity>
+                    {showTrialPicker && (
+                      <DateTimePicker
+                        value={trialEndDate}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={onTrialDateChange}
+                      />
+                    )}
+                  </View>
+                )}
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Link do rezygnacji</Text>
+                  <TextInput 
+                    style={styles.textInput} 
+                    value={cancelUrl} 
+                    onChangeText={setCancelUrl} 
+                    placeholder="https://..." 
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Notatki</Text>
+                  <TextInput 
+                    style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]} 
+                    value={notes} 
+                    onChangeText={setNotes} 
+                    placeholder="Wpisz dodatkowe informacje..." 
+                    multiline
+                  />
+                </View>
               </View>
             </ScrollView>
           </View>
@@ -342,58 +329,37 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
   container: { flex: 1 },
   inner: { flex: 1 },
-  header: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: 20, paddingVertical: 16, backgroundColor: '#F8FAFC',
-  },
-  headerButton: { minWidth: 60, justifyContent: 'center' },
-  headerTitle: { fontSize: 17, fontWeight: '600', color: '#0F172A' },
-  saveButtonText: { color: '#6366F1', fontSize: 16, fontWeight: '700', textAlign: 'right' },
-  saveButtonDisabled: { color: '#94A3B8', fontWeight: '500' },
+  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700' },
+  saveButtonText: { color: '#6366F1', fontWeight: '700', fontSize: 16 },
+  saveButtonDisabled: { color: '#CBD5E1' },
   scrollContent: { paddingBottom: 40 },
-  heroSection: { alignItems: 'center', justifyContent: 'center', paddingVertical: 40 },
-  amountInputContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
-  amountInput: {
-    fontSize: 56, fontWeight: '800', color: '#0F172A',
-    textAlign: 'center', minWidth: 120,
-  },
-  currencyText: { fontSize: 24, fontWeight: '600', color: '#64748B', marginLeft: 8, marginTop: 16 },
-  formSection: {
-    backgroundColor: '#FFFFFF', borderRadius: 24, marginHorizontal: 16,
-    paddingHorizontal: 20, paddingVertical: 8,
-    shadowColor: '#64748B', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05, shadowRadius: 16, elevation: 4,
-  },
-  inputGroup: { paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  label: {
-    fontSize: 13, fontWeight: '600', color: '#64748B',
-    textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 12,
-  },
-  labelRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  textInputWrapper: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC',
-    borderRadius: 12, paddingHorizontal: 16, height: 52, borderWidth: 1, borderColor: '#E2E8F0',
-  },
-  inputIcon: { marginRight: 12 },
-  textInput: { flex: 1, fontSize: 16, color: '#0F172A', fontWeight: '500' },
-  categoryScroll: { gap: 8, paddingVertical: 4 },
-  pill: {
-    paddingVertical: 10, paddingHorizontal: 16, backgroundColor: '#F8FAFC',
-    borderRadius: 20, borderWidth: 1, borderColor: '#E2E8F0',
-  },
+  heroSection: { alignItems: 'center', paddingVertical: 30 },
+  amountInputContainer: { flexDirection: 'row', alignItems: 'center' },
+  amountInput: { fontSize: 48, fontWeight: '800', textAlign: 'center', minWidth: 150 },
+  currencyText: { fontSize: 20, fontWeight: '600', color: '#64748B', marginLeft: 10 },
+  currencyPills: { flexDirection: 'row', gap: 8, marginTop: 20 },
+  currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: '#F1F5F9' },
+  currencyPillActive: { backgroundColor: '#6366F1' },
+  currencyPillText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
+  currencyPillTextActive: { color: '#FFFFFF' },
+  formSection: { backgroundColor: '#FFFFFF', margin: 16, borderRadius: 24, padding: 20 },
+  inputGroup: { marginBottom: 24 },
+  label: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 12 },
+  textInput: { fontSize: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingVertical: 8 },
+  pill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F8FAFC', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   pillActive: { backgroundColor: '#6366F1', borderColor: '#6366F1' },
-  pillText: { fontSize: 14, fontWeight: '500', color: '#64748B' },
-  pillTextActive: { color: '#FFFFFF', fontWeight: '600' },
-  dateMockButton: {
-    flexDirection: 'row', alignItems: 'center', backgroundColor: '#EEF2FF',
-    borderRadius: 12, paddingHorizontal: 16, height: 52, borderWidth: 1, borderColor: '#E0E7FF',
-  },
-  dateMockText: { fontSize: 16, color: '#4F46E5', fontWeight: '600' },
-  categoryPill: {
-    paddingVertical: 10, paddingHorizontal: 16, borderRadius: 20,
-    borderWidth: 2, borderColor: 'transparent',
-  },
-  categoryText: { fontSize: 14, fontWeight: '600' },
+  pillText: { color: '#64748B', fontWeight: '600' },
+  pillTextActive: { color: '#FFFFFF' },
+  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12 },
+  dateText: { fontSize: 16, fontWeight: '600', color: '#4F46E5' },
+  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: '#F8FAFC' },
+  catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  toggle: { width: 44, height: 24, borderRadius: 12, backgroundColor: '#E2E8F0', padding: 2 },
+  toggleActive: { backgroundColor: '#10B981' },
+  toggleDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF' },
+  toggleDotActive: { transform: [{ translateX: 20 }] },
 });
 
 export default ManualAddScreen;

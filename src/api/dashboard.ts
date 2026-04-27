@@ -56,3 +56,18 @@ export async function getTrials(
     })),
   };
 }
+
+/**
+ * GET /dashboard/category-breakdown
+ */
+export async function getCategoryBreakdown() {
+  const data = await apiGet<any>('/dashboard/category-breakdown');
+  return data;
+}
+
+/**
+ * GET /dashboard/reminders
+ */
+export async function getReminders() {
+  return apiGet<any[]>('/dashboard/reminders');
+}

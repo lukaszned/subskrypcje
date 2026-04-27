@@ -2,16 +2,7 @@
 // src/types/api.ts
 //
 // Typy TypeScript odzwierciedlające kontrakt backendu.
-// Źródło prawdy: backend/prisma/schema.prisma
-//
-// REGUŁA: Jeśli backend zmienia model -> ten plik musi być
-// zaktualizowany w tym samym PR (przez frontend lub przez
-// aktualizację API_CONTRACT.md + zgłoszenie).
 // =============================================================
-
-// ─────────────────────────────────────────────────────────────
-// ENUMS — 1:1 z Prisma schema
-// ─────────────────────────────────────────────────────────────
 
 export type SubscriptionCategory =
   | 'entertainment'
@@ -37,24 +28,19 @@ export type SubscriptionStatus =
   | 'overdue'
   | 'canceled';
 
-// ─────────────────────────────────────────────────────────────
-// MODELE — 1:1 z Prisma schema
-// ─────────────────────────────────────────────────────────────
-
 export interface AppUser {
-  id: string;        // CUID z własnej bazy
+  id: string;
   email: string;
   name: string | null;
-  createdAt: string; // ISO 8601
+  createdAt: string;
   updatedAt: string;
 }
 
 export interface AuthUser {
-  id: string;        // UUID z Supabase Auth
+  id: string;
   email: string;
 }
 
-/** GET /users/me */
 export interface MeResponse {
   authUser: AuthUser;
   appUser: AppUser;
@@ -66,10 +52,10 @@ export interface Subscription {
   provider: string | null;
   planName: string | null;
   amount: number;
-  currency: string;           // np. "PLN"
+  currency: string;
   category: SubscriptionCategory;
   billingCycle: BillingCycle;
-  nextPaymentDate: string | null;  // ISO 8601
+  nextPaymentDate: string | null;
   lastPaymentDate: string | null;
   trialEndDate: string | null;
   isTrial: boolean;
@@ -84,21 +70,15 @@ export interface Subscription {
   userId: string;
 }
 
-// ─────────────────────────────────────────────────────────────
-// REQUEST PAYLOADS
-// ─────────────────────────────────────────────────────────────
-
-/** POST /subscriptions — pola wymagane i opcjonalne */
 export interface CreateSubscriptionPayload {
   name: string;
   amount: number;
-  currency?: string;            // domyślnie "PLN" po stronie backendu
+  currency?: string;
   category: SubscriptionCategory;
   billingCycle: BillingCycle;
-  // Opcjonalne:
   provider?: string;
   planName?: string;
-  nextPaymentDate?: string;     // ISO 8601 np. "2026-05-01"
+  nextPaymentDate?: string;
   trialEndDate?: string;
   isTrial?: boolean;
   isRecurringBill?: boolean;
@@ -108,14 +88,8 @@ export interface CreateSubscriptionPayload {
   notes?: string;
 }
 
-/** PATCH /subscriptions/:id */
 export type UpdateSubscriptionPayload = Partial<CreateSubscriptionPayload>;
 
-// ─────────────────────────────────────────────────────────────
-// DASHBOARD RESPONSES
-// ─────────────────────────────────────────────────────────────
-
-/** GET /dashboard/summary */
 export interface DashboardSummary {
   monthlyTotal: number;
   yearlyTotal: number;
@@ -125,7 +99,6 @@ export interface DashboardSummary {
   overdueCount: number;
 }
 
-/** Element listy nadchodzących płatności */
 export interface UpcomingPaymentItem {
   id: string;
   name: string;
@@ -133,20 +106,18 @@ export interface UpcomingPaymentItem {
   planName: string | null;
   amount: number;
   currency: string;
-  nextPaymentDate: string;  // ISO 8601
+  nextPaymentDate: string;
   status: SubscriptionStatus;
   isTrial: boolean;
   reminderDaysBefore: number;
 }
 
-/** GET /dashboard/upcoming */
 export interface UpcomingPaymentsResponse {
   days: number;
   count: number;
   items: UpcomingPaymentItem[];
 }
 
-/** Element listy triali */
 export interface TrialItem {
   id: string;
   name: string;
@@ -154,7 +125,7 @@ export interface TrialItem {
   planName: string | null;
   amount: number;
   currency: string;
-  trialEndDate: string;     // ISO 8601
+  trialEndDate: string;
   nextPaymentDate: string | null;
   status: SubscriptionStatus;
   cancelUrl: string | null;
@@ -162,29 +133,42 @@ export interface TrialItem {
   daysLeft: number;
 }
 
-/** GET /dashboard/trials */
 export interface TrialsResponse {
   days: number;
   count: number;
   items: TrialItem[];
 }
 
-// ─────────────────────────────────────────────────────────────
-// ERROR RESPONSES
-// ─────────────────────────────────────────────────────────────
+export interface CategoryBreakdownItem {
+  category: SubscriptionCategory;
+  monthlyAmount: number;
+  subscriptionCount: number;
+  percentage: number;
+}
+
+// Backend zwraca bezpośrednio tablicę
+export type CategoryBreakdownResponse = CategoryBreakdownItem[];
+
+export interface ReminderItem {
+  id: string;
+  name: string;
+  provider: string | null;
+  nextPaymentDate: string;
+  reminderDaysBefore: number;
+  remindAt: string;
+  status: SubscriptionStatus;
+}
 
 export interface ValidationError {
   field: string;
   message: string;
 }
 
-/** 400 Validation Error */
 export interface ValidationErrorResponse {
   message: 'Validation error';
   errors: ValidationError[];
 }
 
-/** 409 Duplicate */
 export interface DuplicateErrorResponse {
   message: string;
   duplicate: {
@@ -196,11 +180,6 @@ export interface DuplicateErrorResponse {
   };
 }
 
-// ─────────────────────────────────────────────────────────────
-// HELPERS — MAPOWANIA (Frontend <-> Backend)
-// ─────────────────────────────────────────────────────────────
-
-/** Polskie etykiety dla kategorii */
 export const CATEGORY_LABELS: Record<SubscriptionCategory, string> = {
   entertainment: 'Rozrywka',
   utilities:     'Narzędzia',
@@ -213,7 +192,6 @@ export const CATEGORY_LABELS: Record<SubscriptionCategory, string> = {
   other:         'Inne',
 };
 
-/** Polskie etykiety dla cykli rozliczeniowych */
 export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
   monthly:  'Co miesiąc',
   yearly:   'Co rok',
@@ -222,7 +200,6 @@ export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
   custom:   'Niestandardowy',
 };
 
-/** Polskie etykiety dla statusów */
 export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   pending:  'Oczekująca',
   paid:     'Opłacona',

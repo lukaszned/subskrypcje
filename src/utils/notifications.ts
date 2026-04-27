@@ -88,6 +88,8 @@ export async function scheduleSubscriptionReminder(
     }
   }
 
+  if (Platform.OS === 'web') return null;
+
   const notificationId = await Notifications.scheduleNotificationAsync({
     content: {
       title: 'Nadchodząca płatność! 💸',
@@ -106,6 +108,7 @@ export async function scheduleSubscriptionReminder(
  * Anuluje powiadomienie dla danej subskrypcji.
  */
 export async function cancelSubscriptionReminder(id: string) {
+  if (Platform.OS === 'web') return;
   await Notifications.cancelScheduledNotificationAsync(id);
 }
 
@@ -113,5 +116,41 @@ export async function cancelSubscriptionReminder(id: string) {
  * Anuluje wszystkie powiadomienia.
  */
 export async function cancelAllReminders() {
+  if (Platform.OS === 'web') return;
   await Notifications.cancelAllScheduledNotificationsAsync();
+}
+
+/**
+ * Planuje pojedyncze przypomnienie na podstawie obiektu ReminderItem.
+ */
+export async function scheduleReminderItem(item: any) {
+  if (Platform.OS === 'web') return null;
+  const triggerDate = new Date(item.remindAt);
+  const now = new Date();
+
+  if (triggerDate <= now) return null;
+
+  return Notifications.scheduleNotificationAsync({
+    content: {
+      title: 'Nadchodząca płatność! 💸',
+      body: `Pamiętaj o subskrypcji ${item.name}. Płatność: ${new Date(item.nextPaymentDate).toLocaleDateString('pl-PL')}`,
+      data: { subscriptionId: item.id },
+      sound: true,
+    },
+    trigger: triggerDate,
+    identifier: item.id,
+  });
+}
+
+/**
+ * Czyści wszystkie zaplanowane powiadomienia i planuje je na nowo na podstawie listy z backendu.
+ */
+export async function syncReminders(reminders: any[]) {
+  if (Platform.OS === 'web') return;
+  // Czyścimy wszystko przed synchronizacją, żeby nie dublować
+  await cancelAllReminders(); 
+  
+  for (const reminder of reminders) {
+    await scheduleReminderItem(reminder);
+  }
 }

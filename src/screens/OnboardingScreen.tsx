@@ -3,145 +3,102 @@ import {
   StyleSheet,
   Text,
   View,
-  SafeAreaView,
   TouchableOpacity,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../App';
 
 const { width } = Dimensions.get('window');
 
+type Nav = NativeStackNavigationProp<AuthStackParamList, 'Onboarding'>;
+
 export default function OnboardingScreen() {
-  const navigation = useNavigation<NativeStackNavigationProp<AuthStackParamList>>();
-
-  const handleStart = () => {
-    navigation.navigate('Login');
-  };
-
-  const handleHelp = () => {
-    console.log('Pomoc kliknięta');
-  };
+  const navigation = useNavigation<Nav>();
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
-
-        {/* Główna sekcja (Środek ekranu) */}
-        <View style={styles.mainContent}>
-          {/* Miejsce na logo/grafikę w przyszłości */}
-          <View style={styles.logoPlaceholder} />
-
-          <Text style={styles.title}>Sub-Sentry</Text>
-          <Text style={styles.tagline}>
-            Twoje subskrypcje, Twoje zasady. Odzyskaj kontrolę nad wydatkami.
-          </Text>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.content}>
+        <View style={styles.iconContainer}>
+          <Text style={styles.icon}>💰</Text>
         </View>
+        <Text style={styles.title}>Sub-Sentry</Text>
+        <Text style={styles.subtitle}>
+          Zapanuj nad swoimi subskrypcjami i oszczędzaj pieniądze każdego miesiąca.
+        </Text>
+      </View>
 
-        {/* Sekcja akcji (Dół ekranu) */}
-        <View style={styles.footer}>
-          <TouchableOpacity
-            style={styles.primaryButton}
-            activeOpacity={0.8}
-            onPress={handleStart}
-          >
-            <Text style={styles.primaryButtonText}>Rozpocznij</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.helpButton}
-            activeOpacity={0.6}
-            onPress={handleHelp}
-          >
-            <Text style={styles.helpButtonText}>
-              Potrzebujesz pomocy? Skontaktuj się z nami
-            </Text>
-          </TouchableOpacity>
-        </View>
-
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => navigation.navigate('Login')}
+          activeOpacity={0.8}
+        >
+          <Text style={styles.buttonText}>Rozpocznij</Text>
+        </TouchableOpacity>
       </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: '#0B1120', // Bardzo ciemny granat (nowoczesny, elegancki)
-  },
   container: {
     flex: 1,
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingBottom: 20,
+    backgroundColor: '#0B1120',
   },
-  mainContent: {
+  content: {
     flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    width: '100%',
+    justifyContent: 'center',
+    paddingHorizontal: 40,
   },
-  logoPlaceholder: {
-    width: 150,
-    height: 150,
-    marginBottom: 40,
-    // Subtelny zarys dla podglądu podczas dewelopmentu
-    backgroundColor: 'rgba(255, 255, 255, 0.02)',
-    borderRadius: 75,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.05)',
+  iconContainer: {
+    width: 100,
+    height: 100,
+    borderRadius: 30,
+    backgroundColor: 'rgba(99, 102, 241, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 32,
+  },
+  icon: {
+    fontSize: 48,
   },
   title: {
-    fontSize: 42,
+    fontSize: 32,
     fontWeight: '800',
     color: '#FFFFFF',
     marginBottom: 16,
-    letterSpacing: -1,
   },
-  tagline: {
+  subtitle: {
     fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.7)',
+    color: 'rgba(255, 255, 255, 0.6)',
     textAlign: 'center',
     lineHeight: 24,
-    paddingHorizontal: 20,
   },
   footer: {
-    width: '100%',
-    alignItems: 'center',
-    paddingBottom: 20,
+    paddingHorizontal: 24,
+    paddingBottom: 40,
   },
-  primaryButton: {
-    width: width * 0.88, // ~88% szerokości ekranu
-    backgroundColor: '#6366F1', // Nowoczesny odcień indygo jako kolor akcentujący
-    paddingVertical: 18,
+  button: {
+    backgroundColor: '#6366F1',
     borderRadius: 30,
+    paddingVertical: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
     shadowColor: '#6366F1',
     shadowOffset: {
       width: 0,
-      height: 4,
+      height: 10,
     },
     shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowRadius: 20,
+    elevation: 10,
   },
-  primaryButtonText: {
+  buttonText: {
     color: '#FFFFFF',
     fontSize: 18,
     fontWeight: '700',
-    letterSpacing: 0.5,
-  },
-  helpButton: {
-    paddingVertical: 10,
-    paddingHorizontal: 20,
-  },
-  helpButtonText: {
-    color: 'rgba(255, 255, 255, 0.5)',
-    fontSize: 13,
-    fontWeight: '500',
   },
 });
