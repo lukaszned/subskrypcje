@@ -78,8 +78,8 @@ export const DashboardScreen = () => {
 
   // Sync Notifications
   useEffect(() => {
-    if (reminders.data && Array.isArray(reminders.data)) {
-      syncReminders(reminders.data);
+    if (reminders.data?.items) {
+      syncReminders(reminders.data.items);
     }
   }, [reminders.data]);
 
@@ -234,26 +234,32 @@ export const DashboardScreen = () => {
   };
 
   const renderCategoryBreakdown = () => {
-    // Backend zwraca tablicę bezpośrednio, nie obiekt z polem items
-    const data = (breakdown.data || []) as CategoryBreakdownItem[];
+    // Backend zwraca obiekt z polem items
+    const data = (breakdown.data?.items || []) as CategoryBreakdownItem[];
+    const totalMonthly = breakdown.data?.totalMonthly || 0;
+    
     if (data.length === 0) return null;
 
     return (
       <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
         <View style={dynamicStyles.analyticsHeader}>
           <Text style={dynamicStyles.sectionTitle}>Wydatki wg kategorii</Text>
-          <Activity size={20} color="#64748B" />
+          <View style={dynamicStyles.totalBadge}>
+            <Text style={dynamicStyles.totalBadgeText}>
+              {totalMonthly.toFixed(2)} PLN / mc
+            </Text>
+          </View>
         </View>
         <Text style={dynamicStyles.analyticsSubtitle}>Miesięczne zestawienie kosztów</Text>
         
-        {data.sort((a, b) => b.monthlyAmount - a.monthlyAmount).slice(0, 4).map((item) => (
+        {data.slice(0, 4).map((item) => (
           <View key={item.category} style={dynamicStyles.categoryRow}>
             <View style={dynamicStyles.categoryInfoRow}>
               <Text style={dynamicStyles.categoryLabel}>{CATEGORY_LABELS[item.category] || item.category}</Text>
               <Text style={dynamicStyles.categoryValue}>{item.monthlyAmount.toFixed(2)} PLN</Text>
             </View>
             <View style={dynamicStyles.progressBg}>
-              <View style={[dynamicStyles.progressFill, { width: `${item.percentage}%` as any }]} />
+              <View style={[dynamicStyles.progressFill, { width: `${item.percentage}%` }]} />
             </View>
           </View>
         ))}
