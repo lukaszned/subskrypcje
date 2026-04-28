@@ -4,10 +4,9 @@ import {
     getCategoryBreakdownHandler,
     getDashboardSummaryHandler,
     getRemindersHandler,
+    getSavingsHandler,
     getTrialsHandler,
     getUpcomingPaymentsHandler,
-    getCategoryBreakdownHandler,
-    getRemindersHandler,
 } from "../controllers/dashboard.controller";
 
 const router = Router();
@@ -17,5 +16,6 @@ router.get("/upcoming", requireAuth, getUpcomingPaymentsHandler);
 router.get("/trials", requireAuth, getTrialsHandler);
 router.get("/category-breakdown", requireAuth, getCategoryBreakdownHandler);
 router.get("/reminders", requireAuth, getRemindersHandler);
+router.get("/savings", requireAuth, getSavingsHandler);
 
 export default router;

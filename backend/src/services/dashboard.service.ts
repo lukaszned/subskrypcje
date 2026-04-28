@@ -388,3 +388,69 @@ export async function getRemindersForUser(userId: string) {
         items,
     };
 }
+
+export async function getSavingsForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const canceledSubscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: SubscriptionStatus.canceled,
+        },
+        orderBy: {
+            updatedAt: "desc",
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            amount: true,
+            currency: true,
+            billingCycle: true,
+            updatedAt: true,
+        },
+    });
+
+    const items = canceledSubscriptions.map((subscription) => {
+        const rawAmount = toNumber(subscription.amount);
+
+        const monthlyAmount = calculateMonthlyEquivalentInPLN(
+            rawAmount,
+            subscription.currency,
+            subscription.billingCycle
+        );
+
+        const yearlyAmount = calculateYearlyEquivalentInPLN(
+            rawAmount,
+            subscription.currency,
+            subscription.billingCycle
+        );
+
+        return {
+            id: subscription.id,
+            name: subscription.name,
+            provider: subscription.provider,
+            originalAmount: Number(rawAmount.toFixed(2)),
+            originalCurrency: subscription.currency,
+            monthlyAmount: Number(monthlyAmount.toFixed(2)),
+            yearlyAmount: Number(yearlyAmount.toFixed(2)),
+            canceledAt: subscription.updatedAt,
+        };
+    });
+
+    const monthlySavings = Number(
+        items.reduce((sum, item) => sum + item.monthlyAmount, 0).toFixed(2)
+    );
+
+    const yearlySavings = Number(
+        items.reduce((sum, item) => sum + item.yearlyAmount, 0).toFixed(2)
+    );
+
+    return {
+        baseCurrency: BASE_CURRENCY,
+        canceledSubscriptionsCount: items.length,
+        monthlySavings,
+        yearlySavings,
+        items,
+    };
+}

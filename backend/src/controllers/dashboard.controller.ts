@@ -4,10 +4,9 @@ import {
     getCategoryBreakdownForUser,
     getDashboardSummaryForUser,
     getRemindersForUser,
+    getSavingsForUser,
     getTrialsForUser,
     getUpcomingPaymentsForUser,
-    getCategoryBreakdownForUser,
-    getRemindersForUser,
 } from "../services/dashboard.service";
 
 export async function getDashboardSummaryHandler(
@@ -153,38 +152,26 @@ export async function getRemindersHandler(
     }
 }
 
-export async function getCategoryBreakdownHandler(
+export async function getSavingsHandler(
     req: AuthenticatedRequest,
     res: Response
 ) {
     try {
         if (!req.appUser) {
-            return res.status(401).json({ message: "Unauthorized" });
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
         }
 
-        const breakdown = await getCategoryBreakdownForUser(req.appUser.id);
+        const savings = await getSavingsForUser(req.appUser.id);
 
-        return res.json(breakdown);
+        return res.json(savings);
     } catch (error) {
-        console.error("Error fetching category breakdown:", error);
-        return res.status(500).json({ message: "Internal server error" });
-    }
-}
-
-export async function getRemindersHandler(
-    req: AuthenticatedRequest,
-    res: Response
-) {
-    try {
-        if (!req.appUser) {
-            return res.status(401).json({ message: "Unauthorized" });
-        }
-
-        const reminders = await getRemindersForUser(req.appUser.id);
-
-        return res.json(reminders);
-    } catch (error) {
-        console.error("Error fetching reminders:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        console.error("Error fetching savings:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
     }
 }
