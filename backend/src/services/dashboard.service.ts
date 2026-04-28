@@ -5,6 +5,7 @@ import {
     SubscriptionStatus,
 } from "@prisma/client";
 import { syncOverdueSubscriptionsForUser } from "./subscription.service";
+import { BASE_CURRENCY, convertToPLN } from "../config/currency";
 
 function toNumber(value: unknown): number {
     if (typeof value === "number") {
@@ -27,18 +28,6 @@ function toNumber(value: unknown): number {
     }
 
     return 0;
-}
-
-const EXCHANGE_RATES: Record<string, number> = {
-    PLN: 1.0,
-    USD: 4.0,
-    EUR: 4.3,
-    GBP: 5.1,
-};
-
-function convertToPLN(amount: number, currency: string): number {
-    const rate = EXCHANGE_RATES[currency.toUpperCase()] || 1.0;
-    return amount * rate;
 }
 
 function calculateMonthlyEquivalent(
@@ -81,6 +70,24 @@ function calculateYearlyEquivalent(
     }
 }
 
+function calculateMonthlyEquivalentInPLN(
+    amount: number,
+    currency: string,
+    billingCycle: BillingCycle
+): number {
+    const monthlyEquivalent = calculateMonthlyEquivalent(amount, billingCycle);
+    return convertToPLN(monthlyEquivalent, currency);
+}
+
+function calculateYearlyEquivalentInPLN(
+    amount: number,
+    currency: string,
+    billingCycle: BillingCycle
+): number {
+    const yearlyEquivalent = calculateYearlyEquivalent(amount, billingCycle);
+    return convertToPLN(yearlyEquivalent, currency);
+}
+
 function getDaysLeft(targetDate: Date, now: Date): number {
     const msInDay = 1000 * 60 * 60 * 24;
     return Math.ceil((targetDate.getTime() - now.getTime()) / msInDay);
@@ -117,14 +124,26 @@ export async function getDashboardSummaryForUser(userId: string) {
 
     const monthlyTotal = activeSubscriptions.reduce((sum, subscription) => {
         const amount = toNumber(subscription.amount);
-        const amountInPLN = convertToPLN(amount, subscription.currency);
-        return sum + calculateMonthlyEquivalent(amountInPLN, subscription.billingCycle);
+        return (
+            sum +
+            calculateMonthlyEquivalentInPLN(
+                amount,
+                subscription.currency,
+                subscription.billingCycle
+            )
+        );
     }, 0);
 
     const yearlyTotal = activeSubscriptions.reduce((sum, subscription) => {
         const amount = toNumber(subscription.amount);
-        const amountInPLN = convertToPLN(amount, subscription.currency);
-        return sum + calculateYearlyEquivalent(amountInPLN, subscription.billingCycle);
+        return (
+            sum +
+            calculateYearlyEquivalentInPLN(
+                amount,
+                subscription.currency,
+                subscription.billingCycle
+            )
+        );
     }, 0);
 
     const trialsCount = activeSubscriptions.filter(
@@ -143,6 +162,7 @@ export async function getDashboardSummaryForUser(userId: string) {
     ).length;
 
     return {
+        baseCurrency: BASE_CURRENCY,
         monthlyTotal: Number(monthlyTotal.toFixed(2)),
         yearlyTotal: Number(yearlyTotal.toFixed(2)),
         activeSubscriptionsCount: activeSubscriptions.length,
@@ -171,7 +191,7 @@ export async function getUpcomingPaymentsForUser(
             nextPaymentDate: {
                 gte: now,
                 lte: futureDate,
-              },
+            },
         },
         orderBy: {
             nextPaymentDate: "asc",
@@ -267,10 +287,9 @@ export async function getCategoryBreakdownForUser(userId: string) {
     >();
 
     for (const subscription of subscriptions) {
-        const amount = toNumber(subscription.amount);
-        const amountInPLN = convertToPLN(amount, subscription.currency);
-        const monthlyAmount = calculateMonthlyEquivalent(
-            amountInPLN,
+        const monthlyAmount = calculateMonthlyEquivalentInPLN(
+            toNumber(subscription.amount),
+            subscription.currency,
             subscription.billingCycle
         );
 
@@ -312,6 +331,7 @@ export async function getCategoryBreakdownForUser(userId: string) {
     }));
 
     return {
+        baseCurrency: BASE_CURRENCY,
         totalMonthly,
         items: itemsWithPercentage,
     };
