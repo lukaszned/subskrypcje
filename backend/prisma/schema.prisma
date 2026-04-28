@@ -5,7 +5,6 @@ generator client {
 datasource db {
   provider = "postgresql"
 }
-
 enum SubscriptionCategory {
   entertainment
   utilities
@@ -33,13 +32,20 @@ enum SubscriptionStatus {
   canceled
 }
 
+enum SubscriptionEventType {
+  created
+  updated
+  paid
+  canceled
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
   name          String?
+  subscriptions Subscription[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
-  subscriptions Subscription[]
 }
 
 model Subscription {
@@ -48,7 +54,7 @@ model Subscription {
   provider           String?
   planName           String?
   amount             Decimal              @db.Decimal(10, 2)
-  currency           String               @default("PLN")
+  currency           String
   category           SubscriptionCategory
   billingCycle       BillingCycle
   nextPaymentDate    DateTime
@@ -61,13 +67,24 @@ model Subscription {
   cancelUrl          String?
   notes              String?
   status             SubscriptionStatus   @default(pending)
+  userId             String
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events             SubscriptionEvent[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
-  userId             String
-  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-
   @@index([userId])
-  @@index([nextPaymentDate])
-  @@index([provider])
+}
+
+model SubscriptionEvent {
+  id             String                @id @default(cuid())
+  subscriptionId String
+  userId         String
+  type           SubscriptionEventType
+  payload        Json?
+  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime              @default(now())
+
+  @@index([subscriptionId, createdAt])
+  @@index([userId, createdAt])
 }

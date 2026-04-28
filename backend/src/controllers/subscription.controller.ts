@@ -14,6 +14,10 @@ import {
     markSubscriptionAsPaidForUser,
     updateSubscriptionForUser,
 } from "../services/subscription.service";
+import {
+    createSubscriptionEvent,
+    getSubscriptionHistoryForUser,
+} from "../services/subscription-event.service";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
 export async function getSubscriptionsHandler(
@@ -81,6 +85,44 @@ export async function getSubscriptionByIdHandler(
     }
 }
 
+export async function getSubscriptionHistoryHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const { id } = req.params;
+
+        const subscription = await getSubscriptionByIdForUser(id, req.appUser.id);
+
+        if (!subscription) {
+            return res.status(404).json({
+                message: "Subscription not found",
+                code: "SUBSCRIPTION_NOT_FOUND",
+            });
+        }
+
+        const history = await getSubscriptionHistoryForUser(id, req.appUser.id);
+
+        return res.json({
+            count: history.length,
+            items: history,
+        });
+    } catch (error) {
+        console.error("Error fetching subscription history:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
 export async function createSubscriptionHandler(
     req: AuthenticatedRequest,
     res: Response
@@ -115,6 +157,23 @@ export async function createSubscriptionHandler(
         }
 
         const newSubscription = await createSubscription(req.appUser.id, parsedData);
+
+        await createSubscriptionEvent({
+            subscriptionId: newSubscription.id,
+            userId: req.appUser.id,
+            type: "created",
+            payload: {
+                name: newSubscription.name,
+                provider: newSubscription.provider,
+                planName: newSubscription.planName,
+                amount: newSubscription.amount.toString(),
+                currency: newSubscription.currency,
+                category: newSubscription.category,
+                billingCycle: newSubscription.billingCycle,
+                nextPaymentDate: newSubscription.nextPaymentDate.toISOString(),
+                status: newSubscription.status,
+            },
+        });
 
         res.status(201).json(newSubscription);
     } catch (error) {
@@ -172,6 +231,13 @@ export async function updateSubscriptionHandler(
             req.appUser.id
         );
 
+        await createSubscriptionEvent({
+            subscriptionId: id,
+            userId: req.appUser.id,
+            type: "updated",
+            payload: parsedData,
+        });
+
         res.json(updatedSubscription);
     } catch (error) {
         console.error("Error updating subscription:", error);
@@ -220,12 +286,38 @@ export async function markSubscriptionAsPaidHandler(
             });
         }
 
+        const previousStatus = existingSubscription.status;
+        const previousNextPaymentDate = existingSubscription.nextPaymentDate;
+        const previousLastPaymentDate = existingSubscription.lastPaymentDate;
+
         await markSubscriptionAsPaidForUser(id, req.appUser.id);
 
         const updatedSubscription = await getSubscriptionByIdForUser(
             id,
             req.appUser.id
         );
+
+        await createSubscriptionEvent({
+            subscriptionId: id,
+            userId: req.appUser.id,
+            type: "paid",
+            payload: {
+                action: "payment_recorded",
+                previousStatus,
+                resultingStatus: updatedSubscription?.status ?? null,
+                previousNextPaymentDate: previousNextPaymentDate.toISOString(),
+                newNextPaymentDate: updatedSubscription?.nextPaymentDate
+                    ? updatedSubscription.nextPaymentDate.toISOString()
+                    : null,
+                previousLastPaymentDate: previousLastPaymentDate
+                    ? previousLastPaymentDate.toISOString()
+                    : null,
+                newLastPaymentDate: updatedSubscription?.lastPaymentDate
+                    ? updatedSubscription.lastPaymentDate.toISOString()
+                    : null,
+                paidAt: new Date().toISOString(),
+            },
+        });
 
         res.json(updatedSubscription);
     } catch (error) {
@@ -263,12 +355,25 @@ export async function cancelSubscriptionHandler(
             });
         }
 
+        const previousStatus = existingSubscription.status;
+
         await cancelSubscriptionForUser(id, req.appUser.id);
 
         const canceledSubscription = await getSubscriptionByIdForUser(
             id,
             req.appUser.id
         );
+
+        await createSubscriptionEvent({
+            subscriptionId: id,
+            userId: req.appUser.id,
+            type: "canceled",
+            payload: {
+                previousStatus,
+                resultingStatus: canceledSubscription?.status ?? "canceled",
+                canceledAt: new Date().toISOString(),
+            },
+        });
 
         res.json(canceledSubscription);
     } catch (error) {
