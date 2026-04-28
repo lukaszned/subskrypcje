@@ -19,27 +19,32 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   ArrowLeft, Edit, Trash2, Calendar, CreditCard, 
-  Tag, Clock, ExternalLink, CheckCircle, XCircle 
+  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AppStackParamList } from '../../App';
 
 // Hooks
 import { useSubscription } from '../hooks/useSubscription';
+import { useSubscriptionHistory } from '../hooks/useSubscriptionHistory';
 import { useDeleteSubscription } from '../hooks/useDeleteSubscription';
 import { usePaySubscription } from '../hooks/usePaySubscription';
 import { useCancelSubscription } from '../hooks/useCancelSubscription';
-import { CATEGORY_LABELS } from '../types/api';
+import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<AppStackParamList, 'SubscriptionDetail'>>();
   const { id } = route.params;
 
-  const { data: sub, isLoading } = useSubscription(id);
+  const { data: sub, isLoading: isSubLoading } = useSubscription(id);
+  const { data: historyData, isLoading: isHistoryLoading } = useSubscriptionHistory(id);
+
   const deleteMutation = useDeleteSubscription();
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
+
+  const isLoading = isSubLoading || isHistoryLoading;
 
   if (isLoading || !sub) {
     return (
@@ -191,36 +196,43 @@ export const SubscriptionDetailScreen = () => {
 
         <View style={styles.infoCard}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.infoLabel}>Historia płatności</Text>
+            <Text style={styles.infoLabel}>Historia aktywności</Text>
             <View style={styles.historyBadge}>
-              <Text style={styles.historyBadgeText}>Ostatnie 3</Text>
+              <Text style={styles.historyBadgeText}>{historyData?.count || 0} zdarzeń</Text>
             </View>
           </View>
           
-          {sub.lastPaymentDate ? (
+          {historyData?.items && historyData.items.length > 0 ? (
             <View style={styles.historyList}>
-              <View style={styles.historyItem}>
-                <View style={[styles.historyDot, { backgroundColor: '#10B981' }]} />
-                <View style={styles.historyMain}>
-                  <Text style={styles.historyTitle}>Opłacono</Text>
-                  <Text style={styles.historyDate}>{new Date(sub.lastPaymentDate).toLocaleDateString('pl-PL')}</Text>
+              {historyData.items.map((event: SubscriptionEvent, index: number) => (
+                <View key={event.id} style={styles.historyItem}>
+                  <View style={[
+                    styles.historyDot, 
+                    { backgroundColor: event.type === 'paid' ? '#10B981' : event.type === 'canceled' ? '#EF4444' : '#6366F1' }
+                  ]} />
+                  {index < historyData.items.length - 1 && <View style={styles.historyLine} />}
+                  <View style={styles.historyMain}>
+                    <Text style={styles.historyTitle}>
+                      {event.type === 'created' ? 'Utworzono subskrypcję' : 
+                       event.type === 'paid' ? 'Odnotowano płatność' : 
+                       event.type === 'canceled' ? 'Anulowano subskrypcję' : 'Zaktualizowano dane'}
+                    </Text>
+                    <Text style={styles.historyDate}>
+                      {new Date(event.createdAt).toLocaleString('pl-PL', { 
+                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
+                      })}
+                    </Text>
+                    {event.type === 'paid' && event.payload?.newNextPaymentDate && (
+                      <Text style={styles.historyPayload}>
+                        Następna: {new Date(event.payload.newNextPaymentDate).toLocaleDateString('pl-PL')}
+                      </Text>
+                    )}
+                  </View>
                 </View>
-                <Text style={styles.historyAmount}>-{sub.amount.toFixed(2)} {sub.currency}</Text>
-              </View>
-              
-              {/* Tutaj można by mapować prawdziwą listę transakcji z API, jeśli backend by ją dostarczał */}
-              {/* Na razie pokazujemy ostatnią potwierdzoną płatność w ładnej formie */}
-              <View style={[styles.historyItem, { opacity: 0.5 }]}>
-                <View style={[styles.historyDot, { backgroundColor: '#CBD5E1' }]} />
-                <View style={styles.historyMain}>
-                  <Text style={styles.historyTitle}>Poprzedni cykl</Text>
-                  <Text style={styles.historyDate}>-</Text>
-                </View>
-                <Text style={[styles.historyAmount, { color: '#64748B' }]}>...</Text>
-              </View>
+              ))}
             </View>
           ) : (
-            <Text style={{ color: '#94A3B8', fontSize: 14, marginTop: 8 }}>Brak zarejestrowanych płatności.</Text>
+            <Text style={{ color: '#64748B', fontSize: 14, marginTop: 8 }}>Brak historii zdarzeń.</Text>
           )}
         </View>
 
@@ -265,11 +277,13 @@ const styles = StyleSheet.create({
   historyBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   historyBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B', textTransform: 'uppercase' },
   historyList: { gap: 16 },
-  historyItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  historyDot: { width: 8, height: 8, borderRadius: 4 },
-  historyMain: { flex: 1 },
+  historyItem: { flexDirection: 'row', gap: 12, minHeight: 60 },
+  historyDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6, zIndex: 2 },
+  historyLine: { position: 'absolute', left: 4.5, top: 16, bottom: -16, width: 1, backgroundColor: '#E2E8F0' },
+  historyMain: { flex: 1, paddingBottom: 20 },
   historyTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  historyDate: { fontSize: 12, color: '#94A3B8' },
+  historyDate: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  historyPayload: { fontSize: 11, color: '#6366F1', fontWeight: '600', marginTop: 4 },
   historyAmount: { fontSize: 15, fontWeight: '700', color: '#EF4444' },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 20 },
   deleteBtnText: { color: '#EF4444', fontWeight: '600', fontSize: 14 },

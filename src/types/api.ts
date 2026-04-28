@@ -187,6 +187,20 @@ export interface SavingsResponse {
   items: SavingsItem[];
 }
 
+export interface SubscriptionEvent {
+  id: string;
+  subscriptionId: string;
+  userId: string;
+  type: 'created' | 'updated' | 'paid' | 'canceled';
+  payload: any;
+  createdAt: string;
+}
+
+export interface SubscriptionHistoryResponse {
+  count: number;
+  items: SubscriptionEvent[];
+}
+
 export interface ValidationError {
   field: string;
   message: string;

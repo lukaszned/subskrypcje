@@ -16,6 +16,6 @@ export function useTrials(days: number = 30) {
   return useQuery<TrialsResponse, Error>({
     queryKey: TRIALS_KEY(days),
     queryFn: () => getTrials(days),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 30000,
   });
 }

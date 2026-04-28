@@ -12,7 +12,6 @@ export function useDashboardSummary() {
   return useQuery<DashboardSummary, Error>({
     queryKey: DASHBOARD_SUMMARY_KEY,
     queryFn: getDashboardSummary,
-    // Odświeżaj co 2 minuty — dane finansowe nie muszą być real-time
-    staleTime: 2 * 60 * 1000,
+    staleTime: 30000,
   });
 }

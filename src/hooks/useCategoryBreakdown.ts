@@ -15,5 +15,6 @@ export function useCategoryBreakdown() {
   return useQuery<CategoryBreakdownResponse>({
     queryKey: CATEGORY_BREAKDOWN_KEY,
     queryFn: getCategoryBreakdown,
+    staleTime: 30000,
   });
 }

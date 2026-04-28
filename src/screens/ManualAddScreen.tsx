@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, 
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
-  PiggyBank, Truck, Globe, AlertCircle 
+  PiggyBank, Truck, Globe, AlertCircle, ArrowRight 
 } from 'lucide-react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -87,6 +87,8 @@ export const ManualAddScreen = () => {
   const [cancelUrl, setCancelUrl] = useState('');
 
   const parsedAmount = parseFloat(amount.replace(',', '.'));
+  const [isSubmitted, setIsSubmitted] = useState(false);
+
   const isValid = name.trim().length > 0 && !isNaN(parsedAmount) && parsedAmount > 0;
 
   useEffect(() => {
@@ -120,6 +122,7 @@ export const ManualAddScreen = () => {
   };
 
   const handleSave = async () => {
+    setIsSubmitted(true);
     if (!isValid || createMutation.isPending || updateMutation.isPending) return;
 
     const payload = {
@@ -174,6 +177,8 @@ export const ManualAddScreen = () => {
     }
   };
 
+  const isLoading = createMutation.isPending || updateMutation.isPending;
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
@@ -182,28 +187,26 @@ export const ManualAddScreen = () => {
             <View style={styles.header}>
               <TouchableOpacity onPress={() => navigation.goBack()}><X size={24} color="#64748B" /></TouchableOpacity>
               <Text style={styles.headerTitle}>{subscriptionId ? 'Edytuj' : 'Nowa'}</Text>
-              <TouchableOpacity onPress={handleSave} disabled={!isValid}>
-                {createMutation.isPending || updateMutation.isPending ? (
-                  <ActivityIndicator size="small" color="#6366F1" />
-                ) : (
-                  <Text style={[styles.saveButtonText, !isValid && styles.saveButtonDisabled]}>Zapisz</Text>
-                )}
-              </TouchableOpacity>
+              <View style={{ width: 24 }} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-              <View style={styles.heroSection}>
-                <View style={styles.amountInputContainer}>
+            <ScrollView 
+              showsVerticalScrollIndicator={false} 
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.amountHeader}>
+                <Text style={styles.amountLabel}>Miesięczny koszt</Text>
+                <View style={styles.amountRow}>
                   <TextInput
-                    ref={amountInputRef}
-                    style={styles.amountInput}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    placeholderTextColor="#CBD5E1"
+                    style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: '#FECACA' }]}
                     value={amount}
                     onChangeText={setAmount}
+                    keyboardType="decimal-pad"
+                    placeholder="0.00"
+                    placeholderTextColor="rgba(255,255,255,0.4)"
                   />
-                  <Text style={styles.currencyText}>{currency}</Text>
+                  <Text style={styles.currencyLabel}>{currency}</Text>
                 </View>
                 <View style={styles.currencyPills}>
                   {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
@@ -228,7 +231,24 @@ export const ManualAddScreen = () => {
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Nazwa</Text>
-                  <TextInput style={styles.textInput} value={name} onChangeText={setName} placeholder="np. Netflix" />
+                  <TextInput 
+                    style={[styles.textInput, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: '#EF4444' }]} 
+                    value={name} 
+                    onChangeText={setName} 
+                    placeholder="np. Netflix" 
+                    placeholderTextColor="#94A3B8"
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Dostawca (opcjonalnie)</Text>
+                  <TextInput 
+                    style={styles.textInput} 
+                    value={provider} 
+                    onChangeText={setProvider} 
+                    placeholder="np. Google, Apple" 
+                    placeholderTextColor="#94A3B8"
+                  />
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -329,6 +349,22 @@ export const ManualAddScreen = () => {
                     multiline
                   />
                 </View>
+
+                <TouchableOpacity
+                  style={[styles.saveButton, isLoading && styles.saveButtonLoading]}
+                  onPress={handleSave}
+                  disabled={isLoading || !isValid}
+                  activeOpacity={0.8}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Text style={styles.saveButtonText}>Zapisz subskrypcję</Text>
+                      <ArrowRight size={20} color="#FFFFFF" />
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
             </ScrollView>
           </View>
@@ -344,18 +380,46 @@ const styles = StyleSheet.create({
   inner: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '700' },
-  saveButtonText: { color: '#6366F1', fontWeight: '700', fontSize: 16 },
-  saveButtonDisabled: { color: '#CBD5E1' },
-  scrollContent: { paddingBottom: 40 },
-  heroSection: { alignItems: 'center', paddingVertical: 30 },
-  amountInputContainer: { flexDirection: 'row', alignItems: 'center' },
-  amountInput: { fontSize: 48, fontWeight: '800', textAlign: 'center', minWidth: 150 },
-  currencyText: { fontSize: 20, fontWeight: '600', color: '#64748B', marginLeft: 10 },
+  scrollContent: { paddingBottom: 40, flexGrow: 1 },
+  amountHeader: {
+    backgroundColor: '#6366F1',
+    paddingTop: 20,
+    paddingBottom: 24,
+    alignItems: 'center',
+    borderBottomLeftRadius: 32,
+    borderBottomRightRadius: 32,
+  },
+  amountLabel: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 8,
+  },
+  amountRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  amountInput: {
+    color: '#FFFFFF',
+    fontSize: 48,
+    fontWeight: '800',
+    textAlign: 'right',
+    minWidth: 100,
+  },
+  currencyLabel: {
+    color: '#FFFFFF',
+    fontSize: 24,
+    fontWeight: '700',
+    marginLeft: 8,
+    opacity: 0.8,
+  },
   currencyPills: { flexDirection: 'row', gap: 8, marginTop: 20 },
-  currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: '#F1F5F9' },
-  currencyPillActive: { backgroundColor: '#6366F1' },
-  currencyPillText: { fontSize: 12, fontWeight: '700', color: '#64748B' },
-  currencyPillTextActive: { color: '#FFFFFF' },
+  currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
+  currencyPillActive: { backgroundColor: '#FFFFFF' },
+  currencyPillText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
+  currencyPillTextActive: { color: '#6366F1' },
   formSection: { backgroundColor: '#FFFFFF', margin: 16, borderRadius: 24, padding: 20 },
   inputGroup: { marginBottom: 24 },
   label: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 12 },
@@ -386,6 +450,29 @@ const styles = StyleSheet.create({
     color: '#4F46E5',
     fontWeight: '500',
     lineHeight: 16,
+  },
+  saveButton: {
+    backgroundColor: '#0F172A',
+    borderRadius: 18,
+    paddingVertical: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 12,
+    marginTop: 20,
+    shadowColor: '#0F172A',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  saveButtonLoading: {
+    opacity: 0.7,
+  },
+  saveButtonText: {
+    color: '#FFFFFF',
+    fontSize: 17,
+    fontWeight: '800',
   },
 });
 

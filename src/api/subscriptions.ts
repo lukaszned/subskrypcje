@@ -60,6 +60,10 @@ export async function getSubscriptionById(id: string): Promise<Subscription> {
   return normalizeSubscription(data);
 }
 
+export async function getSubscriptionHistory(id: string): Promise<SubscriptionHistoryResponse> {
+  return apiGet<SubscriptionHistoryResponse>(`/subscriptions/${id}/history`);
+}
+
 // ─────────────────────────────────────────────────────────────
 // MUTATIONS (zapis)
 // ─────────────────────────────────────────────────────────────

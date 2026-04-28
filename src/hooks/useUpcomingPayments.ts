@@ -16,6 +16,6 @@ export function useUpcomingPayments(days: number = 7) {
   return useQuery<UpcomingPaymentsResponse, Error>({
     queryKey: UPCOMING_PAYMENTS_KEY(days),
     queryFn: () => getUpcomingPayments(days),
-    staleTime: 2 * 60 * 1000,
+    staleTime: 30000,
   });
 }

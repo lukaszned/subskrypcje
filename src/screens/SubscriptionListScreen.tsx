@@ -16,6 +16,7 @@ import {
   Platform,
   Alert,
   RefreshControl,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, ArrowUpDown, Frown, ArrowLeft } from 'lucide-react-native';
@@ -153,6 +154,7 @@ export const SubscriptionListScreen = () => {
           nextPaymentDate: item.nextPaymentDate ? new Date(item.nextPaymentDate).toLocaleDateString('pl-PL') : '-',
           cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle,
           status: item.status,
+          isTrial: item.isTrial,
         }}
         onDelete={(id) => handleCancel(id, item.name)}
         onPause={(id) => handlePay(id, item.name)}
@@ -208,7 +210,7 @@ export const SubscriptionListScreen = () => {
         <FlatList
           data={allSubscriptions}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={filteredData.length === 0 && !isLoading ? styles.listEmptyContent : styles.listContent}
+          contentContainerStyle={allSubscriptions.length === 0 && !isLoading ? styles.listEmptyContent : styles.listContent}
           renderItem={renderItem}
           ListEmptyComponent={!isLoading ? renderEmptyState : null}
           refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor="#6366F1" />}

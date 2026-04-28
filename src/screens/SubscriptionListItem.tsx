@@ -29,7 +29,8 @@ export interface SubscriptionItem {
   currency: string;
   nextPaymentDate: string;
   cycle: string;
-  status: 'active' | 'cancelled';
+  status: 'pending' | 'paid' | 'overdue' | 'canceled';
+  isTrial?: boolean;
 }
 
 interface Props {
@@ -60,7 +61,19 @@ function getCategoryStyle(category: string) {
 
 const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
   const catStyle = getCategoryStyle(item.category);
-  const isCancelled = item.status === 'cancelled';
+  const isCancelled = item.status === 'canceled';
+
+  const getStatusInfo = (status: string, isTrial?: boolean) => {
+    if (isTrial) return { label: 'Trial', color: '#F59E0B', bg: '#FFFBEB' };
+    switch (status) {
+      case 'paid': return { label: 'Opłacona', color: '#10B981', bg: '#DCFCE7' };
+      case 'overdue': return { label: 'Zaległa', color: '#EF4444', bg: '#FEE2E2' };
+      case 'canceled': return { label: 'Anulowana', color: '#64748B', bg: '#F1F5F9' };
+      default: return { label: 'Aktywna', color: '#6366F1', bg: '#EEF2FF' };
+    }
+  };
+
+  const statusInfo = getStatusInfo(item.status, item.isTrial);
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -130,12 +143,19 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
 
         {/* Środek — nazwa + data */}
         <View style={styles.middleContent}>
-          <Text
-            style={[styles.name, isCancelled && styles.textCancelled]}
-            numberOfLines={1}
-          >
-            {item.name}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <Text
+              style={[styles.name, isCancelled && styles.textCancelled]}
+              numberOfLines={1}
+            >
+              {item.name}
+            </Text>
+            <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
+                {statusInfo.label}
+              </Text>
+            </View>
+          </View>
           <Text style={styles.dateText}>
             {isCancelled ? 'Anulowana' : `Następna: ${item.nextPaymentDate}`}
           </Text>
@@ -247,6 +267,16 @@ const styles = StyleSheet.create({
     marginTop: 4,
     textTransform: 'uppercase',
     letterSpacing: 0.3,
+  },
+  statusBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  statusBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    textTransform: 'uppercase',
   },
 });
 
