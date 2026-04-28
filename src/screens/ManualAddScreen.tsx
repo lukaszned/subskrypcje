@@ -23,7 +23,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, 
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
-  PiggyBank, Truck, Globe 
+  PiggyBank, Truck, Globe, AlertCircle 
 } from 'lucide-react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -139,12 +139,18 @@ export const ManualAddScreen = () => {
 
     if (subscriptionId) {
       updateMutation.mutate({ id: subscriptionId, payload }, {
-        onSuccess: () => navigation.goBack(),
+        onSuccess: () => {
+          Alert.alert('Sukces', 'Subskrypcja została zaktualizowana.');
+          navigation.goBack();
+        },
         onError: handleApiError,
       });
     } else {
       createMutation.mutate(payload as any, {
-        onSuccess: () => navigation.goBack(),
+        onSuccess: () => {
+          Alert.alert('Sukces', 'Dodano nową subskrypcję!');
+          navigation.goBack();
+        },
         onError: handleApiError,
       });
     }
@@ -213,6 +219,13 @@ export const ManualAddScreen = () => {
               </View>
 
               <View style={styles.formSection}>
+                <View style={[styles.infoBox, { marginBottom: 20 }]}>
+                  <AlertCircle size={16} color="#6366F1" style={{ marginRight: 8 }} />
+                  <Text style={styles.infoBoxText}>
+                    Wszystkie koszty zostaną automatycznie przeliczone na {currency === 'PLN' ? 'Twoją walutę' : 'PLN'} w analityce Dashboardu.
+                  </Text>
+                </View>
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Nazwa</Text>
                   <TextInput style={styles.textInput} value={name} onChangeText={setName} placeholder="np. Netflix" />
@@ -360,6 +373,20 @@ const styles = StyleSheet.create({
   toggleActive: { backgroundColor: '#10B981' },
   toggleDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF' },
   toggleDotActive: { transform: [{ translateX: 20 }] },
+  infoBox: {
+    flexDirection: 'row',
+    backgroundColor: '#EEF2FF',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  infoBoxText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#4F46E5',
+    fontWeight: '500',
+    lineHeight: 16,
+  },
 });
 
 export default ManualAddScreen;

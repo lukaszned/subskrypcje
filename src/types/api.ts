@@ -97,6 +97,7 @@ export interface DashboardSummary {
   trialsCount: number;
   upcomingPaymentsCount: number;
   overdueCount: number;
+  baseCurrency: string;
 }
 
 export interface UpcomingPaymentItem {
@@ -146,8 +147,11 @@ export interface CategoryBreakdownItem {
   percentage: number;
 }
 
-// Backend zwraca bezpośrednio tablicę
-export type CategoryBreakdownResponse = CategoryBreakdownItem[];
+export interface CategoryBreakdownResponse {
+  totalMonthly: number;
+  baseCurrency: string;
+  items: CategoryBreakdownItem[];
+}
 
 export interface ReminderItem {
   id: string;
@@ -157,6 +161,30 @@ export interface ReminderItem {
   reminderDaysBefore: number;
   remindAt: string;
   status: SubscriptionStatus;
+}
+
+export interface RemindersResponse {
+  count: number;
+  items: ReminderItem[];
+}
+
+export interface SavingsItem {
+  id: string;
+  name: string;
+  provider: string | null;
+  originalAmount: number;
+  originalCurrency: string;
+  monthlyAmount: number;
+  yearlyAmount: number;
+  canceledAt: string;
+}
+
+export interface SavingsResponse {
+  baseCurrency: string;
+  canceledSubscriptionsCount: number;
+  monthlySavings: number;
+  yearlySavings: number;
+  items: SavingsItem[];
 }
 
 export interface ValidationError {

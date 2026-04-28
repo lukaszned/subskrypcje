@@ -30,9 +30,12 @@ import { useSubscriptions } from '../hooks/useSubscriptions';
 import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
 import { useReminders } from '../hooks/useReminders';
 import { useTrials } from '../hooks/useTrials';
+import { useDashboardSavings } from '../hooks/useDashboardSavings';
 import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
-import { Subscription, UpcomingPaymentItem, CATEGORY_LABELS } from '../types/api';
+import { Subscription, UpcomingPaymentItem, CATEGORY_LABELS, CategoryBreakdownItem } from '../types/api';
+import { ErrorState } from '../components/ErrorState';
+import { EmptyState } from '../components/EmptyState';
 
 // ─────────────────────────────────────────────────────────────
 // SKELETON
@@ -67,14 +70,15 @@ export const DashboardScreen = () => {
 
   // Data
   const summary = useDashboardSummary();
-  const upcoming = useUpcomingPayments(7);
+  const upcoming = useUpcomingPayments(30);
   const subscriptions = useSubscriptions();
   const breakdown = useCategoryBreakdown();
   const reminders = useReminders();
   const trials = useTrials(30);
+  const savings = useDashboardSavings();
 
   const isInitialLoading =
-    summary.isLoading || upcoming.isLoading || subscriptions.isLoading || breakdown.isLoading || trials.isLoading;
+    summary.isLoading || upcoming.isLoading || subscriptions.isLoading || breakdown.isLoading || trials.isLoading || savings.isLoading;
 
   // Sync Notifications
   useEffect(() => {
@@ -91,6 +95,7 @@ export const DashboardScreen = () => {
       subscriptions.refetch(),
       breakdown.refetch(),
       reminders.refetch(),
+      savings.refetch(),
     ]);
     setIsRefreshing(false);
   };
@@ -126,11 +131,12 @@ export const DashboardScreen = () => {
     const monthlyTotal = summary.data?.monthlyTotal ?? 0;
     const yearlyTotal = summary.data?.yearlyTotal ?? 0;
     const overdueCount = summary.data?.overdueCount ?? 0;
+    const baseCurrency = summary.data?.baseCurrency ?? 'PLN';
 
     return (
       <View style={[dynamicStyles.headerCard, dynamicStyles.shadow]}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={dynamicStyles.headerSubtitle}>Twoje wydatki</Text>
+          <Text style={dynamicStyles.headerSubtitle}>Podsumowanie ({baseCurrency})</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <TouchableOpacity onPress={() => setIsDark(!isDark)}>
               {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
@@ -146,15 +152,34 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.headerGridLabel}>Miesięcznie</Text>
             <View style={dynamicStyles.headerAmountRow}>
               <Text style={dynamicStyles.headerAmount}>{monthlyTotal.toFixed(2)}</Text>
-              <Text style={dynamicStyles.headerCurrency}>PLN</Text>
+              <Text style={dynamicStyles.headerCurrency}>{baseCurrency}</Text>
             </View>
           </View>
           <View style={[dynamicStyles.headerGridItem, { borderLeftWidth: 1, borderLeftColor: theme.border, paddingLeft: 20 }]}>
             <Text style={dynamicStyles.headerGridLabel}>Rocznie</Text>
             <View style={dynamicStyles.headerAmountRow}>
               <Text style={[dynamicStyles.headerAmount, { fontSize: 24 }]}>{yearlyTotal.toFixed(0)}</Text>
-              <Text style={[dynamicStyles.headerCurrency, { fontSize: 14 }]}>PLN</Text>
+              <Text style={[dynamicStyles.headerCurrency, { fontSize: 14 }]}>{baseCurrency}</Text>
             </View>
+          </View>
+        </View>
+
+        <View style={dynamicStyles.statsRow}>
+          <View style={dynamicStyles.statBox}>
+            <Text style={dynamicStyles.statValue}>{summary.data?.activeSubscriptionsCount ?? 0}</Text>
+            <Text style={dynamicStyles.statLabel}>Aktywne</Text>
+          </View>
+          <View style={dynamicStyles.statBox}>
+            <Text style={[dynamicStyles.statValue, { color: '#F59E0B' }]}>{summary.data?.trialsCount ?? 0}</Text>
+            <Text style={dynamicStyles.statLabel}>Triale</Text>
+          </View>
+          <View style={dynamicStyles.statBox}>
+            <Text style={[dynamicStyles.statValue, { color: '#EF4444' }]}>{summary.data?.overdueCount ?? 0}</Text>
+            <Text style={dynamicStyles.statLabel}>Zaległe</Text>
+          </View>
+          <View style={dynamicStyles.statBox}>
+            <Text style={[dynamicStyles.statValue, { color: '#6366F1' }]}>{summary.data?.upcomingPaymentsCount ?? 0}</Text>
+            <Text style={dynamicStyles.statLabel}>Wkrótce</Text>
           </View>
         </View>
 
@@ -168,6 +193,32 @@ export const DashboardScreen = () => {
             </View>
           </View>
         )}
+      </View>
+    );
+  };
+
+  const renderSavingsCard = () => {
+    const data = savings.data;
+    if (!data || data.canceledSubscriptionsCount === 0) return null;
+
+    return (
+      <View style={[dynamicStyles.savingsCard, dynamicStyles.shadowSm]}>
+        <View style={dynamicStyles.savingsHeader}>
+          <View style={dynamicStyles.savingsIconContainer}>
+            <Activity size={20} color="#10B981" />
+          </View>
+          <View>
+            <Text style={dynamicStyles.savingsTitle}>Zaoszczędziłeś już</Text>
+            <Text style={dynamicStyles.savingsAmount}>
+              {data.monthlySavings.toFixed(2)} {data.baseCurrency} <Text style={{ fontSize: 12, fontWeight: '500' }}>/ mc</Text>
+            </Text>
+          </View>
+        </View>
+        <View style={dynamicStyles.savingsFooter}>
+          <Text style={dynamicStyles.savingsFooterText}>
+            To {data.yearlySavings.toFixed(0)} {data.baseCurrency} oszczędności w skali roku dzięki {data.canceledSubscriptionsCount} anulowanym subskrypcjom! 🚀
+          </Text>
+        </View>
       </View>
     );
   };
@@ -234,32 +285,54 @@ export const DashboardScreen = () => {
   };
 
   const renderCategoryBreakdown = () => {
-    // Backend zwraca obiekt z polem items
     const data = (breakdown.data?.items || []) as CategoryBreakdownItem[];
     const totalMonthly = breakdown.data?.totalMonthly || 0;
+    const baseCurrency = breakdown.data?.baseCurrency || 'PLN';
     
     if (data.length === 0) return null;
+
+    const CATEGORY_COLORS: Record<string, string> = {
+      entertainment: '#6366F1',
+      utilities: '#F59E0B',
+      health: '#10B981',
+      education: '#8B5CF6',
+      finance: '#06B6D4',
+      shopping: '#EC4899',
+      other: '#94A3B8',
+    };
 
     return (
       <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
         <View style={dynamicStyles.analyticsHeader}>
-          <Text style={dynamicStyles.sectionTitle}>Wydatki wg kategorii</Text>
+          <Text style={dynamicStyles.sectionTitle}>Analityka wydatków</Text>
           <View style={dynamicStyles.totalBadge}>
             <Text style={dynamicStyles.totalBadgeText}>
-              {totalMonthly.toFixed(2)} PLN / mc
+              {totalMonthly.toFixed(2)} {baseCurrency}
             </Text>
           </View>
         </View>
-        <Text style={dynamicStyles.analyticsSubtitle}>Miesięczne zestawienie kosztów</Text>
+        <Text style={dynamicStyles.analyticsSubtitle}>Miesięczne zestawienie (przeliczone na {baseCurrency})</Text>
         
-        {data.slice(0, 4).map((item) => (
+        {data.slice(0, 5).map((item) => (
           <View key={item.category} style={dynamicStyles.categoryRow}>
             <View style={dynamicStyles.categoryInfoRow}>
-              <Text style={dynamicStyles.categoryLabel}>{CATEGORY_LABELS[item.category] || item.category}</Text>
-              <Text style={dynamicStyles.categoryValue}>{item.monthlyAmount.toFixed(2)} PLN</Text>
+              <Text style={dynamicStyles.categoryLabel}>
+                {CATEGORY_LABELS[item.category] || item.category}
+              </Text>
+              <Text style={dynamicStyles.categoryValue}>
+                {item.monthlyAmount.toFixed(2)} {baseCurrency}
+              </Text>
             </View>
             <View style={dynamicStyles.progressBg}>
-              <View style={[dynamicStyles.progressFill, { width: `${item.percentage}%` }]} />
+              <View 
+                style={[
+                  dynamicStyles.progressFill, 
+                  { 
+                    width: `${item.percentage}%`,
+                    backgroundColor: CATEGORY_COLORS[item.category] || '#6366F1'
+                  }
+                ]} 
+              />
             </View>
           </View>
         ))}
@@ -293,6 +366,18 @@ export const DashboardScreen = () => {
       </TouchableOpacity>
     );
   };
+
+  if (summary.isError) {
+    return (
+      <SafeAreaView style={dynamicStyles.safeArea}>
+        <ErrorState 
+          isDark={isDark} 
+          message="Nie udało się pobrać danych z serwera. Sprawdź połączenie." 
+          onRetry={handleRefresh} 
+        />
+      </SafeAreaView>
+    );
+  }
 
   if (isInitialLoading) {
     return (
@@ -328,6 +413,7 @@ export const DashboardScreen = () => {
         }
       >
         {renderHeader()}
+        {renderSavingsCard()}
 
         {upcomingItems.length > 0 && (
           <View style={dynamicStyles.sectionContainer}>
@@ -386,9 +472,13 @@ export const DashboardScreen = () => {
             </TouchableOpacity>
           </View>
           {subscriptionItems.length === 0 ? (
-            <Text style={{ color: theme.textDim, textAlign: 'center', paddingVertical: 24 }}>
-              Brak subskrypcji. Dodaj pierwszą!
-            </Text>
+            <EmptyState
+              title="Brak subskrypcji"
+              message="Dodaj swoją pierwszą subskrypcję, aby zacząć śledzić wydatki i otrzymywać powiadomienia."
+              isDark={isDark}
+              onAction={() => navigation.navigate('AddSubscription')}
+              actionLabel="Dodaj subskrypcję"
+            />
           ) : (
             subscriptionItems.slice(0, 5).map(renderSubscriptionRow)
           )}
@@ -506,6 +596,30 @@ const getStyles = (theme: any) => StyleSheet.create({
   headerGrid: { flexDirection: 'row', marginTop: 8 },
   headerGridItem: { flex: 1 },
   headerGridLabel: { fontSize: 12, color: theme.textDim, fontWeight: '600', marginBottom: 4, textTransform: 'uppercase' },
+  statsRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 24,
+    paddingTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: theme.border,
+  },
+  statBox: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: theme.text,
+    marginBottom: 4,
+  },
+  statLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: theme.textDim,
+    textTransform: 'uppercase',
+  },
   overdueBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -517,6 +631,51 @@ const getStyles = (theme: any) => StyleSheet.create({
     width: '100%',
   },
   overdueBannerText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+  savingsCard: {
+    backgroundColor: '#ECFDF5',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 32,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.1)',
+  },
+  savingsHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 16,
+    marginBottom: 12,
+  },
+  savingsIconContainer: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  savingsTitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#047857',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  savingsAmount: {
+    fontSize: 24,
+    fontWeight: '800',
+    color: '#065F46',
+  },
+  savingsFooter: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(16, 185, 129, 0.1)',
+    paddingTop: 12,
+  },
+  savingsFooterText: {
+    fontSize: 13,
+    color: '#065F46',
+    lineHeight: 18,
+    fontWeight: '500',
+  },
 });
 
 export default DashboardScreen;

@@ -1,84 +1,95 @@
-// =============================================================
-// src/components/EmptyState.tsx
-//
-// Komponent pustej listy z opcjonalnym CTA.
-// =============================================================
-
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Inbox } from 'lucide-react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { Plus, Search } from 'lucide-react-native';
 
 interface EmptyStateProps {
-  title?: string;
-  subtitle?: string;
-  actionLabel?: string;
+  title: string;
+  message: string;
   onAction?: () => void;
+  actionLabel?: string;
+  isDark?: boolean;
+  type?: 'search' | 'add';
 }
 
-export const EmptyState: React.FC<EmptyStateProps> = ({
-  title = 'Brak danych',
-  subtitle = 'Nic tu jeszcze nie ma.',
-  actionLabel,
-  onAction,
-}) => (
-  <View style={styles.container}>
-    <View style={styles.iconCircle}>
-      <Inbox size={40} color="#94A3B8" />
+export const EmptyState = ({ 
+  title, 
+  message, 
+  onAction, 
+  actionLabel, 
+  isDark,
+  type = 'add'
+}: EmptyStateProps) => {
+  const theme = {
+    bg: isDark ? '#0F172A' : '#F8FAFC',
+    text: isDark ? '#F8FAFC' : '#0F172A',
+    textDim: isDark ? '#94A3B8' : '#64748B',
+    card: isDark ? '#1E293B' : '#FFFFFF',
+    iconBg: isDark ? '#334155' : '#EEF2FF',
+  };
+
+  return (
+    <View style={styles.container}>
+      <View style={[styles.iconContainer, { backgroundColor: theme.iconBg }]}>
+        {type === 'search' ? (
+          <Search size={40} color="#6366F1" />
+        ) : (
+          <Plus size={40} color="#6366F1" />
+        )}
+      </View>
+      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
+      <Text style={[styles.message, { color: theme.textDim }]}>{message}</Text>
+      
+      {onAction && actionLabel && (
+        <TouchableOpacity style={styles.button} onPress={onAction} activeOpacity={0.8}>
+          <Text style={styles.buttonText}>{actionLabel}</Text>
+        </TouchableOpacity>
+      )}
     </View>
-    <Text style={styles.title}>{title}</Text>
-    <Text style={styles.subtitle}>{subtitle}</Text>
-    {actionLabel && onAction && (
-      <TouchableOpacity style={styles.actionButton} onPress={onAction} activeOpacity={0.8}>
-        <Text style={styles.actionText}>{actionLabel}</Text>
-      </TouchableOpacity>
-    )}
-  </View>
-);
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1,
+    padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-    paddingVertical: 60,
+    width: '100%',
   },
-  iconCircle: {
+  iconContainer: {
     width: 80,
     height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F1F5F9',
+    borderRadius: 30,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 24,
   },
   title: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#0F172A',
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 14,
-    color: '#64748B',
+    fontSize: 22,
+    fontWeight: '800',
+    marginBottom: 12,
     textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 28,
   },
-  actionButton: {
+  message: {
+    fontSize: 16,
+    textAlign: 'center',
+    lineHeight: 24,
+    marginBottom: 32,
+    paddingHorizontal: 20,
+  },
+  button: {
     backgroundColor: '#6366F1',
-    paddingVertical: 12,
-    paddingHorizontal: 28,
+    paddingVertical: 16,
+    paddingHorizontal: 32,
     borderRadius: 20,
     shadowColor: '#6366F1',
-    shadowOffset: { width: 0, height: 4 },
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowRadius: 16,
+    elevation: 6,
   },
-  actionText: {
+  buttonText: {
     color: '#FFFFFF',
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 16,
+    fontWeight: '700',
   },
 });

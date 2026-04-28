@@ -27,9 +27,7 @@ export function usePaySubscription() {
     mutationFn: (id: string) => paySubscription(id),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
-      queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
-      // Invaliduj upcoming dla wszystkich wartości 'days'
-      queryClient.invalidateQueries({ queryKey: ['dashboard', 'upcoming'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       
       // Reschedule notification
       scheduleSubscriptionReminder(

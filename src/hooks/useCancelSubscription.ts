@@ -24,7 +24,7 @@ export function useCancelSubscription() {
     mutationFn: (id: string) => cancelSubscription(id),
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
-      queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       
       // Cancel notification (używamy id z zmiennych wejściowych)
       cancelSubscriptionReminder(variables);

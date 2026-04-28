@@ -13,6 +13,8 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
+  Linking,
+  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -41,11 +43,29 @@ export const SubscriptionDetailScreen = () => {
 
   if (isLoading || !sub) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#6366F1" />
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color="#0F172A" /></TouchableOpacity>
+        </View>
+        <View style={{ padding: 20 }}>
+          <View style={{ alignItems: 'center', marginBottom: 30 }}>
+            <View style={[styles.logoContainer, { backgroundColor: '#E2E8F0' }]} />
+            <View style={{ width: 150, height: 24, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 8 }} />
+            <View style={{ width: 100, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+          </View>
+          <View style={{ height: 200, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20 }} />
+        </View>
+      </SafeAreaView>
     );
   }
+
+  const openCancelUrl = () => {
+    if (sub.cancelUrl) {
+      Linking.openURL(sub.cancelUrl).catch(() => {
+        Alert.alert('Błąd', 'Nie można otworzyć linku rezygnacji.');
+      });
+    }
+  };
 
   const handleDelete = () => {
     Alert.alert('Usuń subskrypcję', 'Czy na pewno chcesz trwale usunąć tę subskrypcję?', [
@@ -136,12 +156,17 @@ export const SubscriptionDetailScreen = () => {
             </View>
           </View>
 
-          {sub.isTrial && (
-            <View style={styles.infoRow}>
+          {sub.isTrial && sub.trialEndDate && (
+            <View style={[styles.infoRow, { backgroundColor: '#FFFBEB', padding: 12, borderRadius: 16, marginBottom: 12 }]}>
               <Clock size={20} color="#F59E0B" />
               <View style={styles.infoTextContainer}>
-                <Text style={styles.infoLabel}>Okres próbny do</Text>
-                <Text style={styles.infoValue}>{new Date(sub.trialEndDate!).toLocaleDateString('pl-PL')}</Text>
+                <Text style={[styles.infoLabel, { color: '#D97706' }]}>Okres próbny</Text>
+                <Text style={styles.infoValue}>
+                  Kończy się {new Date(sub.trialEndDate).toLocaleDateString('pl-PL')}
+                  {Math.ceil((new Date(sub.trialEndDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)) > 0 
+                    ? ` (za ${Math.ceil((new Date(sub.trialEndDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))} dni)` 
+                    : ' (dziś)'}
+                </Text>
               </View>
             </View>
           )}
@@ -149,10 +174,10 @@ export const SubscriptionDetailScreen = () => {
           {sub.cancelUrl && (
             <TouchableOpacity 
               style={styles.cancelUrlBtn} 
-              onPress={() => Alert.alert('Zewnętrzny link', `Otworzyć stronę rezygnacji: ${sub.cancelUrl}?`)}
+              onPress={openCancelUrl}
             >
               <ExternalLink size={20} color="#6366F1" />
-              <Text style={styles.cancelUrlBtnText}>Strona rezygnacji</Text>
+              <Text style={styles.cancelUrlBtnText}>Otwórz stronę rezygnacji</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -165,18 +190,37 @@ export const SubscriptionDetailScreen = () => {
         )}
 
         <View style={styles.infoCard}>
-          <Text style={[styles.infoLabel, { marginBottom: 16 }]}>Historia płatności</Text>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.infoLabel}>Historia płatności</Text>
+            <View style={styles.historyBadge}>
+              <Text style={styles.historyBadgeText}>Ostatnie 3</Text>
+            </View>
+          </View>
+          
           {sub.lastPaymentDate ? (
-            <View style={styles.historyRow}>
-              <View style={styles.historyDot} />
-              <View style={styles.historyContent}>
-                <Text style={styles.historyTitle}>Ostatnia płatność</Text>
-                <Text style={styles.historyDate}>{new Date(sub.lastPaymentDate).toLocaleDateString('pl-PL')}</Text>
+            <View style={styles.historyList}>
+              <View style={styles.historyItem}>
+                <View style={[styles.historyDot, { backgroundColor: '#10B981' }]} />
+                <View style={styles.historyMain}>
+                  <Text style={styles.historyTitle}>Opłacono</Text>
+                  <Text style={styles.historyDate}>{new Date(sub.lastPaymentDate).toLocaleDateString('pl-PL')}</Text>
+                </View>
+                <Text style={styles.historyAmount}>-{sub.amount.toFixed(2)} {sub.currency}</Text>
               </View>
-              <Text style={styles.historyAmount}>-{sub.amount.toFixed(2)} {sub.currency}</Text>
+              
+              {/* Tutaj można by mapować prawdziwą listę transakcji z API, jeśli backend by ją dostarczał */}
+              {/* Na razie pokazujemy ostatnią potwierdzoną płatność w ładnej formie */}
+              <View style={[styles.historyItem, { opacity: 0.5 }]}>
+                <View style={[styles.historyDot, { backgroundColor: '#CBD5E1' }]} />
+                <View style={styles.historyMain}>
+                  <Text style={styles.historyTitle}>Poprzedni cykl</Text>
+                  <Text style={styles.historyDate}>-</Text>
+                </View>
+                <Text style={[styles.historyAmount, { color: '#64748B' }]}>...</Text>
+              </View>
             </View>
           ) : (
-            <Text style={{ color: '#94A3B8', fontSize: 14 }}>Brak zarejestrowanych płatności.</Text>
+            <Text style={{ color: '#94A3B8', fontSize: 14, marginTop: 8 }}>Brak zarejestrowanych płatności.</Text>
           )}
         </View>
 
@@ -217,9 +261,13 @@ const styles = StyleSheet.create({
   cancelUrlBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   cancelUrlBtnText: { color: '#6366F1', fontWeight: '600' },
   notesText: { fontSize: 15, color: '#475569', marginTop: 8, lineHeight: 22 },
-  historyRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  historyDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#10B981' },
-  historyContent: { flex: 1 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  historyBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  historyBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B', textTransform: 'uppercase' },
+  historyList: { gap: 16 },
+  historyItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  historyDot: { width: 8, height: 8, borderRadius: 4 },
+  historyMain: { flex: 1 },
   historyTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
   historyDate: { fontSize: 12, color: '#94A3B8' },
   historyAmount: { fontSize: 15, fontWeight: '700', color: '#EF4444' },

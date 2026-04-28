@@ -38,13 +38,15 @@ export const SubscriptionListScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'active' | 'cancelled'>('active');
-  const [sortBy, setSortBy] = useState<'none' | 'price' | 'date'>('none');
+  const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all'>('all');
+  const [sortOption, setSortOption] = useState<{ field: string, order: 'asc' | 'desc' }>({ field: 'nextPaymentDate', order: 'asc' });
 
+  // Debounce search by doing it only on query key
   const { data: allSubscriptions = [], isLoading, isError, refetch } = useSubscriptions({
     search: searchQuery,
-    sortBy: sortBy === 'price' ? 'amount' : sortBy === 'date' ? 'nextPaymentDate' : undefined,
-    sortOrder: 'asc'
+    status: activeStatus === 'all' ? undefined : activeStatus,
+    sortBy: sortOption.field,
+    sortOrder: sortOption.order
   });
 
   const cancelMutation = useCancelSubscription();
@@ -89,19 +91,21 @@ export const SubscriptionListScreen = () => {
     );
   };
 
-  const filteredData = useMemo(() => {
-    return allSubscriptions.filter(item => {
-      const matchesTab = activeTab === 'active'
-        ? item.status !== 'canceled'
-        : item.status === 'canceled';
-      return matchesTab;
-    });
-  }, [allSubscriptions, activeTab]);
-
   const toggleSort = () => {
-    if (sortBy === 'none') setSortBy('price');
-    else if (sortBy === 'price') setSortBy('date');
-    else setSortBy('none');
+    if (sortOption.field === 'nextPaymentDate') {
+      setSortOption({ field: 'amount', order: 'desc' });
+    } else if (sortOption.field === 'amount') {
+      setSortOption({ field: 'name', order: 'asc' });
+    } else {
+      setSortOption({ field: 'nextPaymentDate', order: 'asc' });
+    }
+  };
+
+  const getSortLabel = () => {
+    if (sortOption.field === 'nextPaymentDate') return 'Data';
+    if (sortOption.field === 'amount') return 'Cena';
+    if (sortOption.field === 'name') return 'Nazwa';
+    return 'Sortuj';
   };
 
   const renderEmptyState = () => {
@@ -125,7 +129,7 @@ export const SubscriptionListScreen = () => {
         <Text style={styles.emptyTitle}>
           {searchQuery ? 'Nic nie znaleziono' : 'Brak subskrypcji'}
         </Text>
-        {!searchQuery && activeTab === 'active' && (
+        {!searchQuery && activeStatus === 'all' && (
           <TouchableOpacity
             style={styles.addButton}
             onPress={() => navigation.navigate('AddSubscription')}
@@ -148,7 +152,7 @@ export const SubscriptionListScreen = () => {
           currency: item.currency,
           nextPaymentDate: item.nextPaymentDate ? new Date(item.nextPaymentDate).toLocaleDateString('pl-PL') : '-',
           cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle,
-          status: item.status === 'canceled' ? 'cancelled' : 'active',
+          status: item.status,
         }}
         onDelete={(id) => handleCancel(id, item.name)}
         onPause={(id) => handlePay(id, item.name)}
@@ -171,30 +175,38 @@ export const SubscriptionListScreen = () => {
             />
           </View>
           <TouchableOpacity
-            style={[styles.sortButton, sortBy !== 'none' && { borderColor: '#6366F1' }]}
+            style={[styles.sortButton, { borderColor: '#6366F1', flexDirection: 'row', width: 'auto', paddingHorizontal: 12 }]}
             onPress={toggleSort}
           >
-            <ArrowUpDown size={20} color={sortBy !== 'none' ? '#6366F1' : '#475569'} />
+            <ArrowUpDown size={18} color="#6366F1" style={{ marginRight: 6 }} />
+            <Text style={{ color: '#6366F1', fontWeight: '700', fontSize: 12 }}>{getSortLabel()}</Text>
           </TouchableOpacity>
         </View>
 
-        <View style={styles.tabsContainer}>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'active' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('active')}
-          >
-            <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>Aktywne</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tabButton, activeTab === 'cancelled' && styles.tabButtonActive]}
-            onPress={() => setActiveTab('cancelled')}
-          >
-            <Text style={[styles.tabText, activeTab === 'cancelled' && styles.tabTextActive]}>Anulowane</Text>
-          </TouchableOpacity>
+        <View style={styles.filterSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusTabs}>
+            {[
+              { id: 'all', label: 'Wszystkie' },
+              { id: 'pending', label: 'Aktywne' },
+              { id: 'paid', label: 'Opłacone' },
+              { id: 'overdue', label: 'Zaległe' },
+              { id: 'canceled', label: 'Anulowane' },
+            ].map(tab => (
+              <TouchableOpacity
+                key={tab.id}
+                style={[styles.statusTab, activeStatus === tab.id && styles.statusTabActive]}
+                onPress={() => setActiveStatus(tab.id as any)}
+              >
+                <Text style={[styles.statusTabText, activeStatus === tab.id && styles.statusTabTextActive]}>
+                  {tab.label}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
 
         <FlatList
-          data={isLoading ? [] : filteredData}
+          data={allSubscriptions}
           keyExtractor={(item) => item.id}
           contentContainerStyle={filteredData.length === 0 && !isLoading ? styles.listEmptyContent : styles.listContent}
           renderItem={renderItem}
@@ -214,11 +226,12 @@ const styles = StyleSheet.create({
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, height: '100%', fontSize: 16 },
   sortButton: { width: 48, height: 48, backgroundColor: '#FFFFFF', borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' },
-  tabsContainer: { flexDirection: 'row', paddingHorizontal: 20, paddingBottom: 16, gap: 12 },
-  tabButton: { flex: 1, paddingVertical: 12, alignItems: 'center', borderRadius: 20, backgroundColor: '#F1F5F9' },
-  tabButtonActive: { backgroundColor: '#0F172A' },
-  tabText: { fontSize: 14, fontWeight: '600', color: '#64748B' },
-  tabTextActive: { color: '#FFFFFF' },
+  filterSection: { paddingBottom: 16 },
+  statusTabs: { paddingHorizontal: 20, gap: 10 },
+  statusTab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12, backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0' },
+  statusTabActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
+  statusTabText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
+  statusTabTextActive: { color: '#FFFFFF' },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   listEmptyContent: { flex: 1, justifyContent: 'center' },
   emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
