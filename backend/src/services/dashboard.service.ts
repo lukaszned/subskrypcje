@@ -11,6 +11,7 @@ import {
     convertCurrency,
     normalizeCurrency,
 } from "../config/currency";
+import { getOrCreateUserSettings } from "./user-settings.service";
 
 function toNumber(value: unknown): number {
     if (typeof value === "number") {
@@ -182,6 +183,21 @@ function isSubscriptionActiveInMonth(
     }
 
     return true;
+}
+
+function normalizeReminderDaysBefore(
+    reminderDaysBefore: number | null | undefined,
+    defaultReminderDaysBefore: number
+): number {
+    if (
+        typeof reminderDaysBefore === "number" &&
+        Number.isFinite(reminderDaysBefore) &&
+        reminderDaysBefore >= 0
+    ) {
+        return reminderDaysBefore;
+    }
+
+    return defaultReminderDaysBefore;
 }
 
 export async function getDashboardSummaryForUser(userId: string) {
@@ -431,6 +447,17 @@ export async function getCategoryBreakdownForUser(userId: string) {
 export async function getRemindersForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
 
+    const settings = await getOrCreateUserSettings(userId);
+
+    if (!settings.notificationsEnabled) {
+        return {
+            notificationsEnabled: false,
+            defaultReminderDaysBefore: settings.defaultReminderDaysBefore,
+            count: 0,
+            items: [],
+        };
+    }
+
     const now = new Date();
 
     const subscriptions = await prisma.subscription.findMany({
@@ -457,7 +484,11 @@ export async function getRemindersForUser(userId: string) {
     });
 
     const items = subscriptions.map((subscription) => {
-        const reminderDaysBefore = subscription.reminderDaysBefore ?? 1;
+        const reminderDaysBefore = normalizeReminderDaysBefore(
+            subscription.reminderDaysBefore,
+            settings.defaultReminderDaysBefore
+        );
+
         const remindAt = calculateRemindAt(
             subscription.nextPaymentDate,
             reminderDaysBefore
@@ -470,11 +501,14 @@ export async function getRemindersForUser(userId: string) {
             nextPaymentDate: subscription.nextPaymentDate,
             reminderDaysBefore,
             remindAt,
+            shouldNotifyNow: remindAt <= now,
             status: subscription.status,
         };
     });
 
     return {
+        notificationsEnabled: true,
+        defaultReminderDaysBefore: settings.defaultReminderDaysBefore,
         count: items.length,
         items,
     };

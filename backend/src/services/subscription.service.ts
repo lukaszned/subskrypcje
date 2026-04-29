@@ -9,6 +9,7 @@ import {
     CreateSubscriptionInput,
     UpdateSubscriptionInput,
 } from "../validators/subscription";
+import { getOrCreateUserSettings } from "./user-settings.service";
 
 type SubscriptionListFilters = {
     category?: string;
@@ -128,6 +129,8 @@ export async function createSubscription(
     userId: string,
     data: CreateSubscriptionInput
 ) {
+    const settings = await getOrCreateUserSettings(userId);
+
     return prisma.subscription.create({
         data: {
             userId,
@@ -145,7 +148,8 @@ export async function createSubscription(
             trialEndDate: data.trialEndDate ? new Date(data.trialEndDate) : null,
             isTrial: data.isTrial ?? false,
             isRecurringBill: data.isRecurringBill ?? true,
-            reminderDaysBefore: data.reminderDaysBefore ?? 1,
+            reminderDaysBefore:
+                data.reminderDaysBefore ?? settings.defaultReminderDaysBefore,
             paymentMethodLabel: data.paymentMethodLabel ?? null,
             cancelUrl: data.cancelUrl ?? null,
             notes: data.notes ?? null,
@@ -215,14 +219,13 @@ export async function markSubscriptionAsPaidForUser(
     userId: string
 ) {
     const subscription = await prisma.subscription.findFirst({
-        where: { id, userId }
+        where: { id, userId },
     });
 
     if (!subscription) return null;
 
     const nextDate = new Date(subscription.nextPaymentDate);
-    
-    // Obliczamy kolejny termin
+
     switch (subscription.billingCycle) {
         case BillingCycle.monthly:
             nextDate.setMonth(nextDate.getMonth() + 1);
@@ -234,7 +237,14 @@ export async function markSubscriptionAsPaidForUser(
             nextDate.setDate(nextDate.getDate() + 7);
             break;
         case BillingCycle.one_time:
-            // Dla jednorazowych ustawiamy status paid i nie przesuwamy daty
+            return prisma.subscription.updateMany({
+                where: { id, userId },
+                data: {
+                    status: SubscriptionStatus.paid,
+                    lastPaymentDate: new Date(),
+                },
+            });
+        case BillingCycle.custom:
             return prisma.subscription.updateMany({
                 where: { id, userId },
                 data: {
@@ -250,7 +260,7 @@ export async function markSubscriptionAsPaidForUser(
             userId,
         },
         data: {
-            status: SubscriptionStatus.pending, // Wraca do oczekujących
+            status: SubscriptionStatus.pending,
             lastPaymentDate: new Date(),
             nextPaymentDate: nextDate,
         },
