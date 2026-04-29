@@ -102,6 +102,112 @@ function calculateRemindAt(
     return remindAt;
 }
 
+function startOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function endOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function addMonths(date: Date, months: number): Date {
+    const result = new Date(date);
+    result.setMonth(result.getMonth() + months);
+    return result;
+}
+
+function addBillingCycle(date: Date, billingCycle: BillingCycle): Date | null {
+    const result = new Date(date);
+
+    switch (billingCycle) {
+        case BillingCycle.weekly:
+            result.setDate(result.getDate() + 7);
+            return result;
+        case BillingCycle.monthly:
+            result.setMonth(result.getMonth() + 1);
+            return result;
+        case BillingCycle.yearly:
+            result.setFullYear(result.getFullYear() + 1);
+            return result;
+        case BillingCycle.one_time:
+            return null;
+        case BillingCycle.custom:
+            return null;
+        default:
+            return null;
+    }
+}
+
+function getMonthKey(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0");
+    return `${year}-${month}`;
+}
+
+function getPolishMonthLabel(date: Date): string {
+    const labels = [
+        "Sty",
+        "Lut",
+        "Mar",
+        "Kwi",
+        "Maj",
+        "Cze",
+        "Lip",
+        "Sie",
+        "Wrz",
+        "Paź",
+        "Lis",
+        "Gru",
+    ];
+
+    return labels[date.getMonth()];
+}
+
+function calculatePlannedAmountForMonth(params: {
+    amount: number;
+    currency: string;
+    billingCycle: BillingCycle;
+    nextPaymentDate: Date;
+    monthStart: Date;
+    monthEnd: Date;
+}): number {
+    const amountInPLN = convertToPLN(params.amount, params.currency);
+
+    if (params.billingCycle === BillingCycle.custom) {
+        return 0;
+    }
+
+    let paymentDate = new Date(params.nextPaymentDate);
+
+    if (paymentDate < params.monthStart) {
+        while (paymentDate < params.monthStart) {
+            const nextDate = addBillingCycle(paymentDate, params.billingCycle);
+
+            if (!nextDate) {
+                break;
+            }
+
+            paymentDate = nextDate;
+        }
+    }
+
+    let total = 0;
+
+    while (paymentDate >= params.monthStart && paymentDate <= params.monthEnd) {
+        total += amountInPLN;
+
+        const nextDate = addBillingCycle(paymentDate, params.billingCycle);
+
+        if (!nextDate) {
+            break;
+        }
+
+        paymentDate = nextDate;
+    }
+
+    return total;
+}
+
 export async function getDashboardSummaryForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
 
@@ -451,6 +557,69 @@ export async function getSavingsForUser(userId: string) {
         canceledSubscriptionsCount: items.length,
         monthlySavings,
         yearlySavings,
+        items,
+    };
+}
+
+export async function getDashboardTrendsForUser(
+    userId: string,
+    months: number = 6
+) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const safeMonths = Number.isNaN(months) || months <= 0 || months > 12 ? 6 : months;
+
+    const subscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+        },
+        select: {
+            id: true,
+            name: true,
+            amount: true,
+            currency: true,
+            billingCycle: true,
+            nextPaymentDate: true,
+        },
+    });
+
+    const now = new Date();
+    const firstMonth = startOfMonth(now);
+
+    const items = Array.from({ length: safeMonths }).map((_, index) => {
+        const currentMonth = addMonths(firstMonth, index);
+        const monthStart = startOfMonth(currentMonth);
+        const monthEnd = endOfMonth(currentMonth);
+
+        const total = subscriptions.reduce((sum, subscription) => {
+            const amount = toNumber(subscription.amount);
+
+            const plannedAmount = calculatePlannedAmountForMonth({
+                amount,
+                currency: subscription.currency,
+                billingCycle: subscription.billingCycle,
+                nextPaymentDate: subscription.nextPaymentDate,
+                monthStart,
+                monthEnd,
+            });
+
+            return sum + plannedAmount;
+        }, 0);
+
+        return {
+            month: getMonthKey(currentMonth),
+            label: getPolishMonthLabel(currentMonth),
+            total: Number(total.toFixed(2)),
+        };
+    });
+
+    return {
+        baseCurrency: BASE_CURRENCY,
+        type: "planned",
+        months: safeMonths,
         items,
     };
 }
