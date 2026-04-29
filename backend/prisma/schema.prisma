@@ -45,6 +45,8 @@ model User {
   email         String         @unique
   name          String?
   subscriptions Subscription[]
+  payments      SubscriptionPayment[]
+
   settings      UserSettings?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -86,6 +88,7 @@ model Subscription {
   userId             String
   user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   events             SubscriptionEvent[]
+  payments           SubscriptionPayment[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
@@ -103,4 +106,21 @@ model SubscriptionEvent {
 
   @@index([subscriptionId, createdAt])
   @@index([userId, createdAt])
+}
+model SubscriptionPayment {
+  id                      String        @id @default(cuid())
+  subscriptionId          String
+  userId                  String
+  amount                  Decimal       @db.Decimal(10, 2)
+  currency                String
+  billingCycle            BillingCycle
+  paidAt                  DateTime      @default(now())
+  previousNextPaymentDate DateTime?
+  nextPaymentDateAfter    DateTime?
+  subscription            Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt               DateTime      @default(now())
+
+  @@index([subscriptionId, paidAt])
+  @@index([userId, paidAt])
 }

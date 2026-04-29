@@ -9,6 +9,7 @@ import {
     getSubscriptionsHandler,
     markSubscriptionAsPaidHandler,
     updateSubscriptionHandler,
+    getSubscriptionPaymentsHandler,
 } from "../controllers/subscription.controller";
 
 const router = Router();
@@ -21,5 +22,6 @@ router.patch("/:id", requireAuth, updateSubscriptionHandler);
 router.patch("/:id/pay", requireAuth, markSubscriptionAsPaidHandler);
 router.patch("/:id/cancel", requireAuth, cancelSubscriptionHandler);
 router.delete("/:id", requireAuth, deleteSubscriptionHandler);
+router.get("/:id/payments", requireAuth, getSubscriptionPaymentsHandler);
 
 export default router;

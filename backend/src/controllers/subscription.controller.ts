@@ -18,6 +18,10 @@ import {
     createSubscriptionEvent,
     getSubscriptionHistoryForUser,
 } from "../services/subscription-event.service";
+import {
+    createSubscriptionPayment,
+    getSubscriptionPaymentsForUser,
+} from "../services/subscription-payment.service";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 
 export async function getSubscriptionsHandler(
@@ -42,10 +46,11 @@ export async function getSubscriptionsHandler(
             sortOrder: sortOrder ? String(sortOrder) : undefined,
         });
 
-        res.json(subscriptions);
+        return res.json(subscriptions);
     } catch (error) {
         console.error("Error fetching subscriptions:", error);
-        res.status(500).json({
+
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
@@ -75,10 +80,11 @@ export async function getSubscriptionByIdHandler(
             });
         }
 
-        res.json(subscription);
+        return res.json(subscription);
     } catch (error) {
         console.error("Error fetching subscription:", error);
-        res.status(500).json({
+
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
@@ -116,6 +122,46 @@ export async function getSubscriptionHistoryHandler(
         });
     } catch (error) {
         console.error("Error fetching subscription history:", error);
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function getSubscriptionPaymentsHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const { id } = req.params;
+
+        const subscription = await getSubscriptionByIdForUser(id, req.appUser.id);
+
+        if (!subscription) {
+            return res.status(404).json({
+                message: "Subscription not found",
+                code: "SUBSCRIPTION_NOT_FOUND",
+            });
+        }
+
+        const payments = await getSubscriptionPaymentsForUser(id, req.appUser.id);
+
+        return res.json({
+            count: payments.length,
+            items: payments,
+        });
+    } catch (error) {
+        console.error("Error fetching subscription payments:", error);
+
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
@@ -175,7 +221,7 @@ export async function createSubscriptionHandler(
             },
         });
 
-        res.status(201).json(newSubscription);
+        return res.status(201).json(newSubscription);
     } catch (error) {
         console.error("Error creating subscription:", error);
 
@@ -190,7 +236,7 @@ export async function createSubscriptionHandler(
             });
         }
 
-        res.status(500).json({
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
@@ -238,7 +284,7 @@ export async function updateSubscriptionHandler(
             payload: parsedData,
         });
 
-        res.json(updatedSubscription);
+        return res.json(updatedSubscription);
     } catch (error) {
         console.error("Error updating subscription:", error);
 
@@ -253,7 +299,7 @@ export async function updateSubscriptionHandler(
             });
         }
 
-        res.status(500).json({
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
@@ -297,6 +343,24 @@ export async function markSubscriptionAsPaidHandler(
             req.appUser.id
         );
 
+        if (!updatedSubscription) {
+            return res.status(404).json({
+                message: "Subscription not found after update",
+                code: "SUBSCRIPTION_NOT_FOUND",
+            });
+        }
+
+        await createSubscriptionPayment({
+            subscriptionId: id,
+            userId: req.appUser.id,
+            amount: existingSubscription.amount,
+            currency: existingSubscription.currency,
+            billingCycle: existingSubscription.billingCycle,
+            paidAt: updatedSubscription.lastPaymentDate ?? new Date(),
+            previousNextPaymentDate,
+            nextPaymentDateAfter: updatedSubscription.nextPaymentDate,
+        });
+
         await createSubscriptionEvent({
             subscriptionId: id,
             userId: req.appUser.id,
@@ -304,25 +368,24 @@ export async function markSubscriptionAsPaidHandler(
             payload: {
                 action: "payment_recorded",
                 previousStatus,
-                resultingStatus: updatedSubscription?.status ?? null,
+                resultingStatus: updatedSubscription.status,
                 previousNextPaymentDate: previousNextPaymentDate.toISOString(),
-                newNextPaymentDate: updatedSubscription?.nextPaymentDate
-                    ? updatedSubscription.nextPaymentDate.toISOString()
-                    : null,
+                newNextPaymentDate: updatedSubscription.nextPaymentDate.toISOString(),
                 previousLastPaymentDate: previousLastPaymentDate
                     ? previousLastPaymentDate.toISOString()
                     : null,
-                newLastPaymentDate: updatedSubscription?.lastPaymentDate
+                newLastPaymentDate: updatedSubscription.lastPaymentDate
                     ? updatedSubscription.lastPaymentDate.toISOString()
                     : null,
                 paidAt: new Date().toISOString(),
             },
         });
 
-        res.json(updatedSubscription);
+        return res.json(updatedSubscription);
     } catch (error) {
         console.error("Error marking subscription as paid:", error);
-        res.status(500).json({
+
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
@@ -375,10 +438,11 @@ export async function cancelSubscriptionHandler(
             },
         });
 
-        res.json(canceledSubscription);
+        return res.json(canceledSubscription);
     } catch (error) {
         console.error("Error canceling subscription:", error);
-        res.status(500).json({
+
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
@@ -413,12 +477,13 @@ export async function deleteSubscriptionHandler(
 
         await deleteSubscriptionForUser(id, req.appUser.id);
 
-        res.json({
+        return res.json({
             message: "Subscription deleted successfully",
         });
     } catch (error) {
         console.error("Error deleting subscription:", error);
-        res.status(500).json({
+
+        return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
