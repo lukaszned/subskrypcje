@@ -27,6 +27,7 @@ import { AppStackParamList } from '../../App';
 // Hooks
 import { useSubscription } from '../hooks/useSubscription';
 import { useSubscriptionHistory } from '../hooks/useSubscriptionHistory';
+import { useSubscriptionPayments } from '../hooks/useSubscriptionPayments';
 import { useDeleteSubscription } from '../hooks/useDeleteSubscription';
 import { usePaySubscription } from '../hooks/usePaySubscription';
 import { useCancelSubscription } from '../hooks/useCancelSubscription';
@@ -39,12 +40,13 @@ export const SubscriptionDetailScreen = () => {
 
   const { data: sub, isLoading: isSubLoading } = useSubscription(id);
   const { data: historyData, isLoading: isHistoryLoading } = useSubscriptionHistory(id);
+  const { data: paymentsData, isLoading: isPaymentsLoading } = useSubscriptionPayments(id);
 
   const deleteMutation = useDeleteSubscription();
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
 
-  const isLoading = isSubLoading || isHistoryLoading;
+  const isLoading = isSubLoading || isHistoryLoading || isPaymentsLoading;
 
   if (isLoading || !sub) {
     return (
@@ -149,7 +151,9 @@ export const SubscriptionDetailScreen = () => {
             <Calendar size={20} color="#94A3B8" />
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Następna płatność</Text>
-              <Text style={styles.infoValue}>{nextDate.toLocaleDateString('pl-PL')} ({diffDays > 0 ? `za ${diffDays} dni` : 'dziś'})</Text>
+              <Text style={styles.infoValue}>
+                {`${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()}`} ({diffDays > 0 ? `za ${diffDays} dni` : 'dziś'})
+              </Text>
             </View>
           </View>
 
@@ -196,6 +200,44 @@ export const SubscriptionDetailScreen = () => {
 
         <View style={styles.infoCard}>
           <View style={styles.sectionHeader}>
+            <Text style={styles.infoLabel}>Historia płatności</Text>
+            <View style={styles.historyBadge}>
+              <Text style={styles.historyBadgeText}>{paymentsData?.count || 0} płatności</Text>
+            </View>
+          </View>
+          
+          {paymentsData?.items && paymentsData.items.length > 0 ? (
+            <View style={styles.historyList}>
+              {paymentsData.items.map((payment: any, index: number) => (
+                <View key={payment.id} style={styles.historyItem}>
+                  <View style={[styles.historyDot, { backgroundColor: '#10B981' }]} />
+                  {index < paymentsData.items.length - 1 && <View style={styles.historyLine} />}
+                  <View style={styles.historyMain}>
+                    <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <Text style={styles.historyTitle}>
+                        Płatność {payment.amount.toFixed(2)} {payment.currency}
+                      </Text>
+                      <Text style={[styles.historyTitle, { color: '#10B981' }]}>ZAKSIĘGOWANO</Text>
+                    </View>
+                    <Text style={styles.historyDate}>
+                      {new Date(payment.paidAt).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                    </Text>
+                    {payment.nextPaymentDateAfter && (
+                      <Text style={styles.historyPayload}>
+                        Następna: {new Date(payment.nextPaymentDateAfter).toLocaleDateString('pl-PL')}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={{ color: '#64748B', fontSize: 14, marginTop: 8 }}>Brak zarejestrowanych płatności.</Text>
+          )}
+        </View>
+
+        <View style={styles.infoCard}>
+          <View style={styles.sectionHeader}>
             <Text style={styles.infoLabel}>Historia aktywności</Text>
             <View style={styles.historyBadge}>
               <Text style={styles.historyBadgeText}>{historyData?.count || 0} zdarzeń</Text>
@@ -204,7 +246,7 @@ export const SubscriptionDetailScreen = () => {
           
           {historyData?.items && historyData.items.length > 0 ? (
             <View style={styles.historyList}>
-              {historyData.items.map((event: SubscriptionEvent, index: number) => (
+              {historyData.items.map((event: any, index: number) => (
                 <View key={event.id} style={styles.historyItem}>
                   <View style={[
                     styles.historyDot, 
@@ -218,15 +260,8 @@ export const SubscriptionDetailScreen = () => {
                        event.type === 'canceled' ? 'Anulowano subskrypcję' : 'Zaktualizowano dane'}
                     </Text>
                     <Text style={styles.historyDate}>
-                      {new Date(event.createdAt).toLocaleString('pl-PL', { 
-                        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' 
-                      })}
+                      {new Date(event.createdAt).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
                     </Text>
-                    {event.type === 'paid' && event.payload?.newNextPaymentDate && (
-                      <Text style={styles.historyPayload}>
-                        Następna: {new Date(event.payload.newNextPaymentDate).toLocaleDateString('pl-PL')}
-                      </Text>
-                    )}
                   </View>
                 </View>
               ))}

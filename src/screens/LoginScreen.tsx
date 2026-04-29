@@ -42,7 +42,7 @@ export default function LoginScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Text style={styles.title}>Zaloguj się</Text>
-        <Text style={styles.subtitle}>Sub-Sentry / FlowPay</Text>
+        <Text style={styles.subtitle}>Witaj w Sub-Sentry</Text>
 
         <TextInput
           style={styles.input}

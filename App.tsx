@@ -20,11 +20,11 @@ import LoginScreen from './src/screens/LoginScreen';
 import RegisterScreen from './src/screens/RegisterScreen';
 
 // Ekrany — App Stack
-import DashboardScreen from './src/screens/DashboardScreen';
-import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
-import ManualAddScreen from './src/screens/ManualAddScreen';
-import SubscriptionDetailScreen from './src/screens/SubscriptionDetailScreen';
-import SettingsScreen from './src/screens/SettingsScreen';
+import { DashboardScreen } from './src/screens/DashboardScreen';
+import { SubscriptionListScreen } from './src/screens/SubscriptionListScreen';
+import { ManualAddScreen } from './src/screens/ManualAddScreen';
+import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -130,7 +130,10 @@ import { requestNotificationPermissions } from './src/utils/notifications';
 
 export default function App() {
   React.useEffect(() => {
-    requestNotificationPermissions();
+    // Bezpieczne ładowanie uprawnień - nie blokujemy startu apki przy błędach Expo Go
+    requestNotificationPermissions().catch(err => {
+      console.warn('[App] Notification permissions error:', err);
+    });
   }, []);
 
   return (

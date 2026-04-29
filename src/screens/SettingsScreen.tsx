@@ -8,9 +8,10 @@ import {
   Switch,
   ActivityIndicator,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight } from 'lucide-react-native';
+import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
 
@@ -24,6 +25,8 @@ export const SettingsScreen = () => {
   const [reminderDays, setReminderDays] = useState(2);
   const [notifsEnabled, setNotifsEnabled] = useState(true);
   const [emailsEnabled, setEmailsEnabled] = useState(false);
+  const [income, setIncome] = useState('');
+  const [incomeCurrency, setIncomeCurrency] = useState('PLN');
 
   useEffect(() => {
     if (settings) {
@@ -31,6 +34,8 @@ export const SettingsScreen = () => {
       setReminderDays(settings.defaultReminderDaysBefore);
       setNotifsEnabled(settings.notificationsEnabled);
       setEmailsEnabled(settings.emailReportsEnabled);
+      setIncome(settings.monthlyIncome?.toString() || '');
+      setIncomeCurrency(settings.incomeCurrency || settings.baseCurrency);
     }
   }, [settings]);
 
@@ -40,6 +45,8 @@ export const SettingsScreen = () => {
       defaultReminderDaysBefore: reminderDays,
       notificationsEnabled: notifsEnabled,
       emailReportsEnabled: emailsEnabled,
+      monthlyIncome: income ? parseFloat(income) : null,
+      incomeCurrency: incomeCurrency,
     }, {
       onSuccess: () => {
         Alert.alert('Sukces', 'Ustawienia zostały zapisane.');
@@ -103,6 +110,39 @@ export const SettingsScreen = () => {
                   <Text style={[styles.currencyPillText, currency === c && styles.currencyPillTextActive]}>{c}</Text>
                 </TouchableOpacity>
               ))}
+            </View>
+          </View>
+
+          <View style={styles.settingItem}>
+            <View style={styles.settingInfo}>
+              <View style={[styles.iconContainer, { backgroundColor: '#F0F9FF' }]}>
+                <Wallet size={20} color="#0EA5E9" />
+              </View>
+              <View>
+                <Text style={styles.settingTitle}>Miesięczny dochód</Text>
+                <Text style={styles.settingDesc}>Dla analizy wpływu na budżet</Text>
+              </View>
+            </View>
+            <View style={styles.incomeInputRow}>
+              <TextInput
+                style={styles.incomeInput}
+                value={income}
+                onChangeText={setIncome}
+                placeholder="0.00"
+                keyboardType="numeric"
+                placeholderTextColor="#94A3B8"
+              />
+              <View style={styles.incomeCurrencyRow}>
+                {['PLN', 'EUR', 'USD'].map(c => (
+                  <TouchableOpacity 
+                    key={c}
+                    style={[styles.miniPill, incomeCurrency === c && styles.miniPillActive]}
+                    onPress={() => setIncomeCurrency(c)}
+                  >
+                    <Text style={[styles.miniPillText, incomeCurrency === c && styles.miniPillTextActive]}>{c}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
           </View>
         </View>
@@ -169,7 +209,7 @@ export const SettingsScreen = () => {
         </View>
 
         <View style={styles.footer}>
-          <Text style={styles.versionText}>FlowPay v1.0.0 (MVP)</Text>
+          <Text style={styles.versionText}>Sub-Sentry v1.0.0 (MVP)</Text>
           <Text style={styles.footerInfo}>Twoje dane są bezpieczne i szyfrowane.</Text>
         </View>
       </ScrollView>
@@ -255,6 +295,45 @@ const styles = StyleSheet.create({
   reminderPillActive: { backgroundColor: '#0F172A' },
   reminderPillText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
   reminderPillTextActive: { color: '#FFFFFF' },
+  incomeInputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  incomeInput: {
+    flex: 1,
+    height: 48,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0F172A',
+  },
+  incomeCurrencyRow: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  miniPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: '#F1F5F9',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  miniPillActive: {
+    backgroundColor: '#EEF2FF',
+    borderColor: '#6366F1',
+  },
+  miniPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#64748B',
+  },
+  miniPillTextActive: {
+    color: '#6366F1',
+  },
   footer: { marginTop: 20, alignItems: 'center' },
   versionText: { fontSize: 13, fontWeight: '600', color: '#94A3B8' },
   footerInfo: { fontSize: 12, color: '#CBD5E1', marginTop: 4 },

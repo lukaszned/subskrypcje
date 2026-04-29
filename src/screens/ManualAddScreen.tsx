@@ -4,7 +4,7 @@
 // Formularz dodawania/edycji subskrypcji.
 // =============================================================
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -18,6 +18,7 @@ import {
   Keyboard,
   Alert,
   ActivityIndicator,
+  LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -61,6 +62,27 @@ const CYCLES: Array<{ id: BillingCycle; label: string }> = [
   { id: 'one_time', label: 'Jednorazowo'},
 ];
 
+interface PopularSubscription {
+  name: string;
+  defaultPrice: string;
+  category: SubscriptionCategory;
+  color: string;
+  provider: string;
+}
+
+const POPULAR_SUBSCRIPTIONS: PopularSubscription[] = [
+  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix' },
+  { name: 'Spotify', defaultPrice: '24.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify' },
+  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google' },
+  { name: 'Disney+', defaultPrice: '37.99', category: 'entertainment', color: '#006E99', provider: 'Disney' },
+  { name: 'HBO Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros' },
+  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon' },
+  { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple' },
+  { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple' },
+  { name: 'ChatGPT Plus', defaultPrice: '20.00', category: 'productivity', color: '#10A37F', provider: 'OpenAI' },
+  { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony' },
+];
+
 export const ManualAddScreen = () => {
   const navigation = useNavigation();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
@@ -88,6 +110,26 @@ export const ManualAddScreen = () => {
 
   const parsedAmount = parseFloat(amount.replace(',', '.'));
   const [isSubmitted, setIsSubmitted] = useState(false);
+
+  // Suggestions logic
+  const filteredSuggestions = useMemo(() => {
+    if (!name.trim()) return POPULAR_SUBSCRIPTIONS;
+    return POPULAR_SUBSCRIPTIONS.filter(s => 
+      s.name.toLowerCase().includes(name.toLowerCase())
+    );
+  }, [name]);
+
+  const handleSelectPopular = (service: PopularSubscription) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setName(service.name);
+    setAmount(service.defaultPrice);
+    setCategory(service.category);
+    setProvider(service.provider);
+    if (service.name.includes('ChatGPT')) setCurrency('USD');
+    else setCurrency('PLN');
+    
+    Keyboard.dismiss();
+  };
 
   const isValid = name.trim().length > 0 && !isNaN(parsedAmount) && parsedAmount > 0;
 
@@ -119,6 +161,10 @@ export const ManualAddScreen = () => {
   const onTrialDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') setShowTrialPicker(false);
     if (selectedDate) setTrialEndDate(selectedDate);
+  };
+
+  const formatDate = (d: Date) => {
+    return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
   };
 
   const handleSave = async () => {
@@ -225,16 +271,47 @@ export const ManualAddScreen = () => {
                 <View style={[styles.infoBox, { marginBottom: 20 }]}>
                   <AlertCircle size={16} color="#6366F1" style={{ marginRight: 8 }} />
                   <Text style={styles.infoBoxText}>
-                    Wszystkie koszty zostaną automatycznie przeliczone na {currency === 'PLN' ? 'Twoją walutę' : 'PLN'} w analityce Dashboardu.
+                    Wszystkie koszty zostaną automatycznie przeliczone na Twoją walutę bazową (ustawioną w profilu) w analityce Dashboardu.
                   </Text>
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Nazwa</Text>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.label}>Nazwa</Text>
+                    {filteredSuggestions.length > 0 && (
+                      <Text style={[styles.label, { color: '#6366F1' }]}>Sugestie</Text>
+                    )}
+                  </View>
+                  
+                  {filteredSuggestions.length > 0 && (
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false} 
+                      style={styles.suggestionsScroll}
+                      contentContainerStyle={styles.suggestionsContent}
+                    >
+                      {filteredSuggestions.map((s) => (
+                        <TouchableOpacity 
+                          key={s.name} 
+                          style={styles.suggestionChip}
+                          onPress={() => handleSelectPopular(s)}
+                        >
+                          <View style={[styles.suggestionIcon, { backgroundColor: s.color }]}>
+                            <Text style={styles.suggestionIconText}>{s.name.charAt(0)}</Text>
+                          </View>
+                          <Text style={styles.suggestionText}>{s.name}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
+
                   <TextInput 
                     style={[styles.textInput, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: '#EF4444' }]} 
                     value={name} 
-                    onChangeText={setName} 
+                    onChangeText={(val) => {
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      setName(val);
+                    }} 
                     placeholder="np. Netflix" 
                     placeholderTextColor="#94A3B8"
                   />
@@ -270,7 +347,7 @@ export const ManualAddScreen = () => {
                   <Text style={styles.label}>Data płatności</Text>
                   <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
                     <Calendar size={20} color="#6366F1" style={{ marginRight: 8 }} />
-                    <Text style={styles.dateText}>{date.toLocaleDateString('pl-PL')}</Text>
+                    <Text style={styles.dateText}>{formatDate(date)}</Text>
                   </TouchableOpacity>
                   {showDatePicker && (
                     <DateTimePicker
@@ -315,7 +392,7 @@ export const ManualAddScreen = () => {
                     <Text style={styles.label}>Koniec okresu próbnego</Text>
                     <TouchableOpacity style={styles.dateButton} onPress={() => setShowTrialPicker(true)}>
                       <Calendar size={20} color="#F59E0B" style={{ marginRight: 8 }} />
-                      <Text style={[styles.dateText, { color: '#F59E0B' }]}>{trialEndDate.toLocaleDateString('pl-PL')}</Text>
+                      <Text style={[styles.dateText, { color: '#F59E0B' }]}>{formatDate(trialEndDate)}</Text>
                     </TouchableOpacity>
                     {showTrialPicker && (
                       <DateTimePicker
@@ -473,6 +550,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 17,
     fontWeight: '800',
+  },
+  suggestionsScroll: {
+    marginBottom: 12,
+    marginLeft: -4,
+  },
+  suggestionsContent: {
+    paddingRight: 20,
+  },
+  suggestionChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F1F5F9',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  suggestionIcon: {
+    width: 20,
+    height: 20,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  suggestionIconText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  suggestionText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#334155',
   },
 });
 

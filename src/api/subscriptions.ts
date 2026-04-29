@@ -13,6 +13,8 @@ import {
   SubscriptionStatus,
   CreateSubscriptionPayload,
   UpdateSubscriptionPayload,
+  SubscriptionHistoryResponse,
+  SubscriptionPaymentsResponse,
 } from '../types/api';
 
 // ─────────────────────────────────────────────────────────────
@@ -62,6 +64,17 @@ export async function getSubscriptionById(id: string): Promise<Subscription> {
 
 export async function getSubscriptionHistory(id: string): Promise<SubscriptionHistoryResponse> {
   return apiGet<SubscriptionHistoryResponse>(`/subscriptions/${id}/history`);
+}
+
+export async function getSubscriptionPayments(id: string): Promise<SubscriptionPaymentsResponse> {
+  const data = await apiGet<SubscriptionPaymentsResponse>(`/subscriptions/${id}/payments`);
+  return {
+    ...data,
+    items: data.items.map(p => ({
+      ...p,
+      amount: Number(p.amount)
+    }))
+  };
 }
 
 // ─────────────────────────────────────────────────────────────

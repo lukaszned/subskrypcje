@@ -164,7 +164,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
         {/* Prawa strona — kwota + cykl */}
         <View style={styles.rightContent}>
           <Text style={[styles.amount, isCancelled && styles.textCancelled]}>
-            {item.amount.toFixed(2)} {item.currency}
+            {(Number(item.amount) || 0).toFixed(2)} {item.currency}
           </Text>
           <View style={styles.cycleBadge}>
             <Text style={styles.cycleText}>{item.cycle}</Text>

@@ -251,8 +251,7 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
 
 export interface DashboardTrendsItem {
   month: string;
-  label: string;
-  total: number;
+  amount: number;
 }
 
 export interface DashboardTrendsResponse {
@@ -262,11 +261,77 @@ export interface DashboardTrendsResponse {
   items: DashboardTrendsItem[];
 }
 
+export interface DashboardOverviewResponse {
+  summary: DashboardSummary;
+  upcoming: UpcomingPaymentsResponse;
+  trials: TrialsResponse;
+  breakdown: CategoryBreakdownResponse;
+  savings: SavingsResponse;
+  trends: DashboardTrendsResponse;
+  reminders: RemindersResponse;
+  budgetImpact?: BudgetImpactResponse;
+  notificationPreview?: NotificationPreviewResponse;
+}
+
 export interface UserSettings {
   userId: string;
   baseCurrency: string;
   defaultReminderDaysBefore: number;
   notificationsEnabled: boolean;
   emailReportsEnabled: boolean;
+  monthlyIncome: number | null;
+  incomeCurrency: string | null;
+  theme: 'light' | 'dark' | 'system';
   updatedAt: string;
+}
+
+export interface PaymentHistoryItem {
+  id: string;
+  subscriptionId: string;
+  userId: string;
+  amount: number;
+  currency: string;
+  billingCycle: BillingCycle;
+  paidAt: string;
+  previousNextPaymentDate: string | null;
+  nextPaymentDateAfter: string | null;
+  createdAt: string;
+}
+
+export interface SubscriptionPaymentsResponse {
+  count: number;
+  items: PaymentHistoryItem[];
+}
+
+export interface BudgetImpactResponse {
+  baseCurrency: string;
+  hasIncome: boolean;
+  monthlyIncome: number;
+  incomeCurrency: string;
+  monthlySubscriptionsTotal: number;
+  freeAfterSubscriptions: number;
+  subscriptionsIncomePercentage: number;
+}
+
+export interface NotificationPreviewItem {
+  id: string;
+  name: string;
+  provider: string | null;
+  title: string;
+  body: string;
+  nextPaymentDate: string;
+  reminderDaysBefore: number;
+  remindAt: string;
+  daysUntilReminder: number;
+  daysUntilPayment: number;
+  shouldNotifyNow: boolean;
+  status: SubscriptionStatus;
+}
+
+export interface NotificationPreviewResponse {
+  notificationsEnabled: boolean;
+  defaultReminderDaysBefore: number;
+  count: number;
+  nextReminder: NotificationPreviewItem | null;
+  items: NotificationPreviewItem[];
 }

@@ -49,7 +49,7 @@ export default function RegisterScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
         <Text style={styles.title}>Utwórz konto</Text>
-        <Text style={styles.subtitle}>Sub-Sentry / FlowPay</Text>
+        <Text style={styles.subtitle}>Witaj w Sub-Sentry</Text>
 
         <TextInput
           style={styles.input}

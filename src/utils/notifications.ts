@@ -146,11 +146,20 @@ export async function scheduleReminderItem(item: any) {
  * Czyści wszystkie zaplanowane powiadomienia i planuje je na nowo na podstawie listy z backendu.
  */
 export async function syncReminders(reminders: any[]) {
-  if (Platform.OS === 'web') return;
-  // Czyścimy wszystko przed synchronizacją, żeby nie dublować
-  await cancelAllReminders(); 
+  if (Platform.OS === 'web' || !reminders || !Array.isArray(reminders)) return;
   
-  for (const reminder of reminders) {
-    await scheduleReminderItem(reminder);
+  try {
+    // Czyścimy wszystko przed synchronizacją, żeby nie dublować
+    await cancelAllReminders(); 
+    
+    for (const reminder of reminders) {
+      try {
+        await scheduleReminderItem(reminder);
+      } catch (err) {
+        console.warn('[Notifications] Błąd przy planowaniu pojedynczego przypomnienia:', err);
+      }
+    }
+  } catch (error) {
+    console.error('[Notifications] Błąd podczas synchronizacji przypomnień:', error);
   }
 }

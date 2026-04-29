@@ -6,14 +6,79 @@
 // Wywoływane przez hooki w src/hooks/.
 // =============================================================
 
-import { apiGet } from '../lib/apiClient';
+import { apiGet, apiPatch } from '../lib/apiClient';
 import {
   DashboardSummary,
   UpcomingPaymentsResponse,
   TrialsResponse,
   DashboardTrendsResponse,
   UserSettings,
+  DashboardOverviewResponse,
+  BudgetImpactResponse,
+  NotificationPreviewResponse,
+  RemindersResponse,
 } from '../types/api';
+
+/**
+ * GET /dashboard/overview
+ */
+export async function getDashboardOverview(): Promise<DashboardOverviewResponse> {
+  try {
+    const data = await apiGet<DashboardOverviewResponse>('/dashboard/overview');
+    
+    if (!data || !data.summary) {
+      throw new Error('Otrzymano niekompletne dane z serwera (brak sekcji summary).');
+    }
+
+    return {
+      ...data,
+      summary: {
+        ...data.summary,
+        monthlyTotal: Number(data.summary?.monthlyTotal || 0),
+        yearlyTotal: Number(data.summary?.yearlyTotal || 0),
+      },
+      upcoming: {
+        ...data.upcoming,
+        items: (data.upcoming?.items || []).map(i => ({
+          ...i,
+          amount: Number(i.amount || 0)
+        }))
+      },
+      savings: {
+        ...data.savings,
+        monthlySavings: Number(data.savings?.monthlySavings || 0),
+        yearlySavings: Number(data.savings?.yearlySavings || 0),
+      },
+      breakdown: {
+        ...data.breakdown,
+        items: (data.breakdown?.items || []).map(i => ({
+          ...i,
+          monthlyAmount: Number(i.monthlyAmount || 0)
+        }))
+      },
+      trends: {
+        ...data.trends,
+        items: (data.trends?.items || []).map(i => ({
+          ...i,
+          amount: Number(i.amount || 0)
+        }))
+      },
+      trials: {
+        ...data.trials,
+        items: (data.trials?.items || []).map(i => ({
+          ...i,
+          amount: Number(i.amount || 0)
+        }))
+      }
+    };
+  } catch (error: any) {
+    const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+    if (error.message?.includes('Network request failed')) {
+      throw new Error(`Błąd połączenia z serwerem. Upewnij się, że serwer działa pod adresem: ${baseUrl}`);
+    }
+    throw error;
+  }
+}
 
 /**
  * GET /dashboard/trends
@@ -33,8 +98,7 @@ export async function getUserSettings(): Promise<UserSettings> {
  * PATCH /users/settings
  */
 export async function updateUserSettings(payload: Partial<UserSettings>): Promise<UserSettings> {
-  const { data } = await apiClient.patch<UserSettings>('/users/settings', payload);
-  return data;
+  return apiPatch<UserSettings>('/users/settings', payload);
 }
 
 /**
@@ -92,6 +156,26 @@ export async function getCategoryBreakdown() {
 /**
  * GET /dashboard/reminders
  */
-export async function getReminders() {
-  return apiGet<any[]>('/dashboard/reminders');
+export async function getReminders(): Promise<RemindersResponse> {
+  return apiGet<RemindersResponse>('/dashboard/reminders');
+}
+
+/**
+ * GET /dashboard/budget-impact
+ */
+export async function getBudgetImpact(): Promise<BudgetImpactResponse> {
+  const data = await apiGet<BudgetImpactResponse>('/dashboard/budget-impact');
+  return {
+    ...data,
+    monthlyIncome: Number(data.monthlyIncome || 0),
+    monthlySubscriptionsTotal: Number(data.monthlySubscriptionsTotal || 0),
+    freeAfterSubscriptions: Number(data.freeAfterSubscriptions || 0),
+  };
+}
+
+/**
+ * GET /dashboard/notification-preview
+ */
+export async function getNotificationPreview(): Promise<NotificationPreviewResponse> {
+  return apiGet<NotificationPreviewResponse>('/dashboard/notification-preview');
 }

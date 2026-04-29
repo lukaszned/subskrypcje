@@ -1,49 +1,56 @@
-// =============================================================
-// src/screens/DashboardScreen.tsx
-//
-// Główny ekran aplikacji — zasilony live data z backendu.
-// =============================================================
-
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ScrollView,
-  Animated,
-  Platform,
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { 
+  View, 
+  Text, 
+  ScrollView, 
+  StyleSheet, 
+  TouchableOpacity, 
   RefreshControl,
+  Dimensions,
+  Animated,
+  ActivityIndicator,
+  FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, ArrowRight, Activity, AlertCircle, LogOut, Sun, Moon, TrendingUp, Bell, Settings } from 'lucide-react-native';
-import * as Notifications from 'expo-notifications';
+import { 
+  Plus, 
+  Bell, 
+  Settings as SettingsIcon, 
+  LogOut, 
+  TrendingUp, 
+  Clock, 
+  AlertCircle,
+  ArrowRight,
+  ChevronRight,
+  Activity,
+  Sun,
+  Moon,
+  Settings
+} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useQueryClient } from '@tanstack/react-query';
+import { StackNavigationProp } from '@react-navigation/stack';
 
 // App imports
 import { AppStackParamList } from '../../App';
-import { useDashboardSummary } from '../hooks/useDashboardSummary';
-import { useUpcomingPayments } from '../hooks/useUpcomingPayments';
-import { useSubscriptions } from '../hooks/useSubscriptions';
-import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
-import { useReminders } from '../hooks/useReminders';
-import { useTrials } from '../hooks/useTrials';
-import { useDashboardSavings } from '../hooks/useDashboardSavings';
-import { useDashboardTrends } from '../hooks/useDashboardTrends';
+import { useDashboardOverview } from '../hooks/useDashboardOverview';
 import { useUserSettings } from '../hooks/useUserSettings';
 import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
-import { Subscription, UpcomingPaymentItem, CATEGORY_LABELS, CategoryBreakdownItem } from '../types/api';
 import { ErrorState } from '../components/ErrorState';
-import { EmptyState } from '../components/EmptyState';
+import { useBudgetImpact } from '../hooks/useBudgetImpact';
+import { useNotificationPreview } from '../hooks/useNotificationPreview';
+import { 
+  UpcomingPaymentItem, 
+  CategoryBreakdownItem,
+  SubscriptionCategory
+} from '../types/api';
+
+const { width } = Dimensions.get('window');
 
 // ─────────────────────────────────────────────────────────────
 // SKELETON
 // ─────────────────────────────────────────────────────────────
-const Skeleton = ({ width, height, style, borderRadius = 8 }: any) => {
+const Skeleton = React.memo(({ width, height, style, borderRadius = 8 }: any) => {
   const pulseAnim = React.useRef(new Animated.Value(0.3)).current;
   useEffect(() => {
     Animated.loop(
@@ -59,99 +66,667 @@ const Skeleton = ({ width, height, style, borderRadius = 8 }: any) => {
       style={[{ width, height, backgroundColor: '#E2E8F0', borderRadius, opacity: pulseAnim }, style]}
     />
   );
-};
+});
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENT
 // ─────────────────────────────────────────────────────────────
 export const DashboardScreen = () => {
-  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const navigation = useNavigation<StackNavigationProp<AppStackParamList>>();
   const { signOut } = useAuth();
-  const queryClient = useQueryClient();
+  
   const [isDark, setIsDark] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notifPermission, setNotifPermission] = useState<string>('granted');
 
   // Data
-  const summary = useDashboardSummary();
-  const upcoming = useUpcomingPayments(30);
-  const breakdown = useCategoryBreakdown();
-  const reminders = useReminders();
-  const trials = useTrials(30);
-  const savings = useDashboardSavings();
-  const trends = useDashboardTrends(6);
-  const userSettings = useUserSettings();
+  const { data: overview, isLoading: isOverviewLoading, isError: isOverviewError, error: overviewError, refetch } = useDashboardOverview();
+  const { data: settings, isLoading: isSettingsLoading, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useUserSettings();
+  const { data: budgetImpact, isLoading: isBudgetLoading } = useBudgetImpact();
+  const { data: notifPreview } = useNotificationPreview();
 
-  const isInitialLoading = summary.isLoading || upcoming.isLoading;
+  const isLoading = isOverviewLoading || isSettingsLoading || isBudgetLoading;
+  const isError = isOverviewError || isSettingsError;
+  const hasData = !!overview;
+
+  // DIAGNOSTIC LOGGING
+  console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
+  if (isOverviewError) console.error('[DashboardScreen] Overview Error:', overviewError);
+  if (isSettingsError) console.error('[DashboardScreen] Settings Error:', settingsError);
+
+  const summaryData = overview?.summary;
+  const upcomingData = overview?.upcoming;
+  const breakdownData = overview?.breakdown;
+  const trialsData = overview?.trials;
+  const savingsData = overview?.savings;
+  const trendsData = overview?.trends;
+
+  const monthlyTotal = summaryData?.monthlyTotal ?? 0;
+  const yearlyTotal = summaryData?.yearlyTotal ?? 0;
+  const baseCurrency = summaryData?.baseCurrency ?? 'PLN';
+  const overdueCount = summaryData?.overdueCount ?? 0;
+
+  // Memoized Category Breakdown Data
+  const memoizedBreakdownItems = useMemo(() => {
+    if (!breakdownData?.items) return [];
+    return breakdownData.items.map(item => ({
+      ...item,
+      color: (() => {
+        switch (item.category) {
+          case 'entertainment': return '#6366F1';
+          case 'productivity': return '#10B981';
+          case 'utilities': return '#3B82F6';
+          case 'finance': return '#F59E0B';
+          case 'health': return '#EF4444';
+          default: return '#64748B';
+        }
+      })(),
+      label: (() => {
+        switch (item.category) {
+          case 'entertainment': return 'Rozrywka';
+          case 'productivity': return 'Produktywność';
+          case 'utilities': return 'Narzędzia';
+          case 'finance': return 'Finanse';
+          case 'health': return 'Zdrowie';
+          default: return item.category;
+        }
+      })()
+    }));
+  }, [breakdownData]);
+
+  // Memoized Trend Data
+  const memoizedTrends = useMemo(() => {
+    if (!trendsData?.items) return { items: [], maxAmount: 1 };
+    const items = trendsData.items;
+    const maxAmount = Math.max(...items.map(i => i.amount), 1);
+    return { items, maxAmount };
+  }, [trendsData]);
 
   // Sync Notifications
   useEffect(() => {
-    if (reminders.data?.items) {
-      syncReminders(reminders.data.items);
+    const reminderItems = overview?.reminders?.items;
+    if (reminderItems && Array.isArray(reminderItems) && reminderItems.length > 0) {
+      // Synchronizujemy powiadomienia w tle, nie blokujemy UI
+      (async () => {
+        try {
+          await syncReminders(reminderItems);
+        } catch (e) {
+          console.warn('Notification sync failed', e);
+        }
+      })();
     }
-  }, [reminders.data]);
+  }, [overview]);
 
   useEffect(() => {
     const checkPermissions = async () => {
-      const { status } = await Notifications.getPermissionsAsync();
-      setNotifPermission(status);
+      // W Expo Go notifications działają inaczej, ale zostawiamy logikę
+      setNotifPermission('granted');
     };
     checkPermissions();
   }, []);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await Promise.all([
-      summary.refetch(),
-      upcoming.refetch(),
-      breakdown.refetch(),
-      reminders.refetch(),
-      savings.refetch(),
-      trials.refetch(),
-      trends.refetch(),
-      userSettings.refetch(),
-    ]);
-    setIsRefreshing(false);
-  };
-
-  const handleSignOut = async () => {
     try {
-      queryClient.clear();
-      await signOut();
+      await Promise.all([
+        refetch(),
+        refetchSettings(),
+        // New hooks will refetch automatically if we reset query client or just call their refetch
+      ]);
     } catch (e) {
-      console.error('Błąd wylogowania:', e);
+      console.warn('Refresh failed', e);
+    } finally {
+      setIsRefreshing(false);
     }
   };
 
+  const handleSignOut = async () => {
+    await signOut();
+  };
+
+  // THEME COLORS (inline simple theme for now)
   const theme = useMemo(() => ({
-    bg: isDark ? '#0F172A' : '#F8FAFC',
+    background: isDark ? '#0F172A' : '#F8FAFC',
     card: isDark ? '#1E293B' : '#FFFFFF',
-    text: isDark ? '#F8FAFC' : '#0F172A',
+    text: isDark ? '#F8FAFC' : '#1E293B',
     textDim: isDark ? '#94A3B8' : '#64748B',
     border: isDark ? '#334155' : '#E2E8F0',
-    iconBg: isDark ? '#334155' : '#EEF2FF',
-    iconWarningBg: isDark ? '#78350F' : '#FEF3C7',
-    iconWarningText: isDark ? '#FBBF24' : '#D97706',
-    cardWarningBg: isDark ? '#451A03' : '#FFFBEB',
-    cardWarningBorder: isDark ? 'rgba(245, 158, 11, 0.2)' : 'rgba(245, 158, 11, 0.4)',
-    redBg: isDark ? '#450A0A' : '#FEF2F2',
-    redText: isDark ? '#FCA5A5' : '#EF4444',
+    primary: '#6366F1',
+    success: '#10B981',
+    warning: '#F59E0B',
+    error: '#EF4444',
   }), [isDark]);
 
-  const dynamicStyles = useMemo(() => getStyles(theme), [theme]);
+  const dynamicStyles = useMemo(() => StyleSheet.create({
+    safeArea: { flex: 1, backgroundColor: theme.background },
+    container: { flex: 1 },
+    content: { padding: 20, paddingBottom: 40 },
+    headerCard: {
+      backgroundColor: theme.card,
+      borderRadius: 24,
+      padding: 24,
+      marginBottom: 24,
+    },
+    shadow: {
+      shadowColor: '#6366F1',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.1,
+      shadowRadius: 20,
+      elevation: 5,
+    },
+    shadowSm: {
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    headerTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 20,
+    },
+    headerActions: {
+      flexDirection: 'row',
+      gap: 16,
+    },
+    summaryMain: {
+      marginBottom: 16,
+    },
+    headerGridLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: theme.textDim,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+      marginBottom: 4,
+    },
+    headerAmountRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+    },
+    headerAmount: {
+      fontSize: 36,
+      fontWeight: '800',
+      color: theme.text,
+    },
+    headerCurrency: {
+      fontSize: 18,
+      fontWeight: '600',
+      color: theme.textDim,
+      marginLeft: 6,
+    },
+    summaryDivider: {
+      height: 1,
+      backgroundColor: theme.border,
+      marginVertical: 16,
+    },
+    summarySecondary: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+    },
+    summarySecondaryItem: {
+      flex: 1,
+    },
+    headerSecondaryAmount: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    statsRow: {
+      flexDirection: 'row',
+      marginTop: 24,
+      paddingTop: 20,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    statBox: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    statValue: {
+      fontSize: 18,
+      fontWeight: '800',
+      color: theme.text,
+    },
+    statLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: theme.textDim,
+      marginTop: 2,
+    },
+    sectionContainer: {
+      marginBottom: 28,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    sectionTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    seeAllBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    seeAllText: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.primary,
+      marginRight: 4,
+    },
+    horizontalListPadding: {
+      paddingRight: 20,
+    },
+    upcomingCard: {
+      width: 150,
+      backgroundColor: theme.card,
+      borderRadius: 20,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    upcomingCardWarning: {
+      borderColor: theme.error,
+      backgroundColor: isDark ? '#451a1a' : '#FEF2F2',
+    },
+    upcomingTop: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 12,
+    },
+    upcomingIconPlaceholder: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      backgroundColor: theme.primary + '15',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    upcomingIconPlaceholderWarning: {
+      backgroundColor: theme.error + '20',
+    },
+    upcomingIconText: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.primary,
+    },
+    upcomingIconTextWarning: {
+      color: theme.error,
+    },
+    upcomingDate: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: theme.textDim,
+    },
+    upcomingDateWarning: {
+      color: theme.error,
+    },
+    upcomingName: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.text,
+      marginBottom: 4,
+    },
+    upcomingAmount: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.textDim,
+    },
+    breakdownCard: {
+      backgroundColor: theme.card,
+      borderRadius: 20,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    breakdownItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    breakdownIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    breakdownInfo: {
+      flex: 1,
+    },
+    breakdownRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    breakdownLabel: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    breakdownValue: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    progressBarBg: {
+      height: 6,
+      backgroundColor: theme.border,
+      borderRadius: 3,
+      overflow: 'hidden',
+    },
+    progressBarFill: {
+      height: '100%',
+      borderRadius: 3,
+    },
+    trendsCard: {
+      backgroundColor: theme.card,
+      borderRadius: 20,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    chartContainer: {
+      height: 180,
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      justifyContent: 'space-between',
+      marginTop: 10,
+    },
+    chartBarContainer: {
+      alignItems: 'center',
+      flex: 1,
+    },
+    chartBar: {
+      width: 24,
+      backgroundColor: theme.primary,
+      borderRadius: 6,
+      marginBottom: 8,
+    },
+    chartLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: theme.textDim,
+    },
+    savingsCard: {
+      backgroundColor: '#ECFDF5',
+      borderRadius: 20,
+      padding: 20,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: '#A7F3D0',
+    },
+    savingsHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    savingsIconContainer: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: '#D1FAE5',
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    savingsTitle: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: '#065F46',
+    },
+    savingsAmount: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: '#059669',
+    },
+    savingsFooter: {
+      borderTopWidth: 1,
+      borderTopColor: '#D1FAE5',
+      paddingTop: 12,
+    },
+    savingsFooterText: {
+      fontSize: 13,
+      color: '#047857',
+      lineHeight: 18,
+    },
+    overdueSection: {
+      marginBottom: 20,
+    },
+    overdueBanner: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#FEF2F2',
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: '#FEE2E2',
+    },
+    overdueBannerText: {
+      flex: 1,
+      fontSize: 13,
+      fontWeight: '600',
+      color: '#DC2626',
+    },
+    overdueActionText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: '#DC2626',
+      textDecorationLine: 'underline',
+    },
+    infoBox: {
+      flexDirection: 'row',
+      padding: 12,
+      borderRadius: 12,
+      gap: 10,
+      alignItems: 'center',
+    },
+    infoBoxText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    budgetCard: {
+      backgroundColor: theme.card,
+      borderRadius: 24,
+      padding: 20,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    budgetHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      marginBottom: 16,
+    },
+    budgetTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    budgetProgressContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      marginBottom: 12,
+    },
+    budgetProgressBarBg: {
+      flex: 1,
+      height: 10,
+      backgroundColor: theme.border,
+      borderRadius: 5,
+      overflow: 'hidden',
+    },
+    budgetProgressBarFill: {
+      height: '100%',
+      backgroundColor: theme.primary,
+      borderRadius: 5,
+    },
+    budgetPercentage: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.primary,
+    },
+    budgetDesc: {
+      fontSize: 13,
+      color: theme.textDim,
+      lineHeight: 18,
+    },
+    insightCard: {
+      width: 240,
+      backgroundColor: theme.card,
+      borderRadius: 20,
+      padding: 16,
+      borderLeftWidth: 4,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 2 },
+      shadowOpacity: 0.05,
+      shadowRadius: 8,
+      elevation: 2,
+    },
+    insightHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      marginBottom: 8,
+    },
+    insightTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: theme.text,
+    },
+    insightDesc: {
+      fontSize: 12,
+      color: theme.textDim,
+      lineHeight: 16,
+    },
+  }), [theme, isDark]);
 
-  // HELPER RENDERS
+  // SMART SUGGESTIONS GENERATOR
+  const smartSuggestions = useMemo(() => {
+    const list = [];
+    
+    if (overdueCount > 0) {
+      list.push({
+        id: 'overdue',
+        title: 'Masz zaległą płatność',
+        desc: `Płatność za ${overdueCount} subskrypcji wymaga uwagi.`,
+        icon: AlertCircle,
+        color: theme.error
+      });
+    }
+
+    if (trialsData && trialsData.count > 0) {
+      const nextTrial = trialsData.items[0];
+      list.push({
+        id: 'trial',
+        title: 'Trial kończy się wkrótce',
+        desc: `Twój trial ${nextTrial.name} kończy się za ${nextTrial.daysLeft} dni.`,
+        icon: Clock,
+        color: theme.warning
+      });
+    }
+
+    if (budgetImpact?.hasIncome && budgetImpact.subscriptionsIncomePercentage > 20) {
+      list.push({
+        id: 'budget',
+        title: 'Wysoki wpływ na budżet',
+        desc: `Subskrypcje pochłaniają ${budgetImpact.subscriptionsIncomePercentage}% Twojego dochodu.`,
+        icon: TrendingUp,
+        color: theme.primary
+      });
+    }
+
+    if (savingsData && savingsData.monthlySavings > 0) {
+      list.push({
+        id: 'savings',
+        title: 'Oszczędzasz środki',
+        desc: `Anulowane subskrypcje oszczędzają Ci ${savingsData.monthlySavings.toFixed(2)} ${baseCurrency} miesięcznie.`,
+        icon: Activity,
+        color: theme.success
+      });
+    }
+
+    return list;
+  }, [overdueCount, trialsData, budgetImpact, savingsData, theme, baseCurrency]);
+
+  const renderBudgetCard = () => {
+    if (!budgetImpact || !budgetImpact.hasIncome) return null;
+
+    return (
+      <View style={[dynamicStyles.budgetCard, dynamicStyles.shadowSm]}>
+        <View style={dynamicStyles.budgetHeader}>
+          <Wallet size={20} color={theme.primary} />
+          <Text style={dynamicStyles.budgetTitle}>Wpływ na budżet</Text>
+        </View>
+        
+        <View style={dynamicStyles.budgetProgressContainer}>
+          <View style={dynamicStyles.budgetProgressBarBg}>
+            <View 
+              style={[
+                dynamicStyles.budgetProgressBarFill, 
+                { width: `${Math.min(budgetImpact.subscriptionsIncomePercentage, 100)}%` }
+              ]} 
+            />
+          </View>
+          <Text style={dynamicStyles.budgetPercentage}>
+            {budgetImpact.subscriptionsIncomePercentage}%
+          </Text>
+        </View>
+        
+        <Text style={dynamicStyles.budgetDesc}>
+          Subskrypcje pochłaniają {budgetImpact.monthlySubscriptionsTotal.toFixed(2)} {baseCurrency} z Twojego dochodu {budgetImpact.monthlyIncome.toFixed(2)} {budgetImpact.incomeCurrency}.
+        </Text>
+      </View>
+    );
+  };
+
+  const renderSmartInsights = () => {
+    if (smartSuggestions.length === 0) return null;
+
+    return (
+      <View style={dynamicStyles.sectionContainer}>
+        <Text style={dynamicStyles.sectionTitle}>Inteligentne wskazówki</Text>
+        <ScrollView 
+          horizontal 
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 12, paddingVertical: 12 }}
+        >
+          {smartSuggestions.map(s => (
+            <View key={s.id} style={[dynamicStyles.insightCard, { borderLeftColor: s.color }]}>
+              <View style={dynamicStyles.insightHeader}>
+                <s.icon size={18} color={s.color} />
+                <Text style={dynamicStyles.insightTitle}>{s.title}</Text>
+              </View>
+              <Text style={dynamicStyles.insightDesc}>{s.desc}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    );
+  };
   const renderHeader = () => {
-    const monthlyTotal = summary.data?.monthlyTotal ?? 0;
-    const yearlyTotal = summary.data?.yearlyTotal ?? 0;
-    const overdueCount = summary.data?.overdueCount ?? 0;
-    const baseCurrency = summary.data?.baseCurrency ?? 'PLN';
+    const monthlyTotal = Number(summaryData?.monthlyTotal) || 0;
+    const yearlyTotal = Number(summaryData?.yearlyTotal) || 0;
+    const overdueCount = Number(summaryData?.overdueCount) || 0;
+    const baseCurrency = summaryData?.baseCurrency || 'PLN';
 
     return (
       <View style={[dynamicStyles.headerCard, dynamicStyles.shadow]}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={dynamicStyles.headerSubtitle}>Podsumowanie</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View style={dynamicStyles.headerTop}>
+          <Text style={dynamicStyles.sectionTitle}>Dashboard</Text>
+          <View style={dynamicStyles.headerActions}>
             <TouchableOpacity onPress={() => setIsDark(!isDark)}>
               {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
             </TouchableOpacity>
@@ -182,32 +757,34 @@ export const DashboardScreen = () => {
           <View style={dynamicStyles.summarySecondaryItem}>
             <Text style={dynamicStyles.headerGridLabel}>Średnio / sub</Text>
             <Text style={dynamicStyles.headerSecondaryAmount}>
-              {summary.data?.activeSubscriptionsCount ? (monthlyTotal / summary.data.activeSubscriptionsCount).toFixed(2) : '0.00'} {baseCurrency}
+              {summaryData?.activeSubscriptionsCount && summaryData.activeSubscriptionsCount > 0 
+                ? (monthlyTotal / summaryData.activeSubscriptionsCount).toFixed(2) 
+                : '0.00'} {baseCurrency}
             </Text>
           </View>
         </View>
 
         <View style={dynamicStyles.statsRow}>
           <View style={dynamicStyles.statBox}>
-            <Text style={dynamicStyles.statValue}>{summary.data?.activeSubscriptionsCount ?? 0}</Text>
+            <Text style={dynamicStyles.statValue}>{summaryData?.activeSubscriptionsCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Aktywne</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: '#D97706' }]}>{summary.data?.trialsCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: '#D97706' }]}>{summaryData?.trialsCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Triale</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: '#DC2626' }]}>{summary.data?.overdueCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: '#DC2626' }]}>{summaryData?.overdueCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Zaległe</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: '#4F46E5' }]}>{summary.data?.upcomingPaymentsCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: '#4F46E5' }]}>{summaryData?.upcomingPaymentsCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Wkrótce</Text>
           </View>
         </View>
 
         {notifPermission !== 'granted' && (
-          <View style={[dynamicStyles.infoBox, { marginBottom: 16, backgroundColor: '#FEF3C7' }]}>
+          <View style={[dynamicStyles.infoBox, { marginTop: 16, backgroundColor: '#FEF3C7' }]}>
             <Bell size={16} color="#D97706" />
             <Text style={[dynamicStyles.infoBoxText, { color: '#92400E' }]}>
               Powiadomienia są wyłączone. Włącz je w ustawieniach, aby nie przegapić płatności.
@@ -233,7 +810,7 @@ export const DashboardScreen = () => {
   };
 
   const renderSavingsCard = () => {
-    const data = savings.data;
+    const data = savingsData;
     if (!data || data.canceledSubscriptionsCount === 0) return null;
 
     return (
@@ -288,7 +865,7 @@ export const DashboardScreen = () => {
         </View>
       </TouchableOpacity>
     );
-  }, [navigation, dynamicStyles]);
+  }, [navigation, dynamicStyles, isDark]);
 
   const renderTrialItem = useCallback(({ item }: { item: any }) => {
     const daysLeft = item.daysLeft;
@@ -301,157 +878,161 @@ export const DashboardScreen = () => {
       >
         <View style={[
           dynamicStyles.upcomingCard, 
-          isEndingSoon && { borderColor: '#FCA5A5', backgroundColor: '#FFF1F2' },
+          isEndingSoon && { borderColor: '#D97706', backgroundColor: isDark ? '#3d2b10' : '#FFFBEB' },
           dynamicStyles.shadowSm
         ]}>
           <View style={dynamicStyles.upcomingTop}>
-            <View style={[dynamicStyles.upcomingIconPlaceholder, { backgroundColor: '#FEE2E2' }]}>
-              <Text style={[dynamicStyles.upcomingIconText, { color: '#EF4444' }]}>T</Text>
+            <View style={[
+              dynamicStyles.upcomingIconPlaceholder, 
+              { backgroundColor: '#F59E0B20' }
+            ]}>
+              <Clock size={16} color="#D97706" />
             </View>
-            <Text style={[dynamicStyles.upcomingDate, isEndingSoon && { color: '#EF4444' }]} numberOfLines={1}>
-              {daysLeft === 0 ? 'Koniec dziś' : `Koniec za ${daysLeft} dni`}
+            <Text style={[
+              dynamicStyles.upcomingDate, 
+              { color: '#D97706' }
+            ]}>
+              {daysLeft} d.
             </Text>
           </View>
           <Text style={dynamicStyles.upcomingName} numberOfLines={1}>{item.name}</Text>
-          <Text style={[dynamicStyles.upcomingAmount, { color: '#EF4444' }]}>TRIAL</Text>
+          <Text style={dynamicStyles.upcomingAmount}>Koniec triala</Text>
         </View>
       </TouchableOpacity>
     );
-  }, [navigation, dynamicStyles]);
+  }, [navigation, dynamicStyles, isDark]);
 
   const renderCategoryBreakdown = () => {
-    const data = breakdown.data;
-    const items = (data?.items || []) as CategoryBreakdownItem[];
-    if (items.length === 0 || !data) return null;
-
-    const CATEGORY_COLORS = ['#6366F1', '#F59E0B', '#10B981', '#8B5CF6', '#06B6D4', '#EC4899'];
+    if (memoizedBreakdownItems.length === 0) return null;
 
     return (
-      <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm]}>
-        <View style={dynamicStyles.analyticsHeader}>
-          <Text style={dynamicStyles.sectionTitle}>Analityka wydatków</Text>
+      <View style={dynamicStyles.sectionContainer}>
+        <Text style={dynamicStyles.sectionTitle}>Podział na kategorie</Text>
+        <View style={[dynamicStyles.breakdownCard, dynamicStyles.shadowSm, { marginTop: 16 }]}>
+          {memoizedBreakdownItems.map((item) => (
+            <View key={item.category} style={dynamicStyles.breakdownItem}>
+              <View style={[dynamicStyles.breakdownIcon, { backgroundColor: item.color + '15' }]}>
+                <Activity size={20} color={item.color} />
+              </View>
+              <View style={dynamicStyles.breakdownInfo}>
+                <View style={dynamicStyles.breakdownRow}>
+                  <Text style={dynamicStyles.breakdownLabel}>{item.label}</Text>
+                  <Text style={dynamicStyles.breakdownValue}>{item.monthlyAmount.toFixed(2)} {breakdownData?.baseCurrency}</Text>
+                </View>
+                <View style={dynamicStyles.progressBarBg}>
+                  <View 
+                    style={[
+                      dynamicStyles.progressBarFill, 
+                      { 
+                        backgroundColor: item.color, 
+                        width: `${item.percentage}%` 
+                      }
+                    ]} 
+                  />
+                </View>
+              </View>
+            </View>
+          ))}
         </View>
-        {items.map((item, index) => (
-          <View key={index} style={dynamicStyles.categoryRow}>
-            <View style={dynamicStyles.categoryInfoRow}>
-              <Text style={dynamicStyles.categoryLabel}>{CATEGORY_LABELS[item.category] || item.category}</Text>
-              <Text style={dynamicStyles.categoryValue}>{item.monthlyAmount.toFixed(2)} {data.baseCurrency}</Text>
-            </View>
-            <View style={dynamicStyles.progressBg}>
-              <View 
-                style={[
-                  dynamicStyles.progressFill, 
-                  { 
-                    width: `${item.percentage}%`,
-                    backgroundColor: CATEGORY_COLORS[index % CATEGORY_COLORS.length]
-                  }
-                ]} 
-              />
-            </View>
-          </View>
-        ))}
-
-        {items.length > 0 && (
-          <View style={dynamicStyles.insightBox}>
-            <TrendingUp size={16} color="#4F46E5" />
-            <Text style={dynamicStyles.insightText}>
-              Najwięcej wydajesz na <Text style={{ fontWeight: '700' }}>{CATEGORY_LABELS[items[0].category] || items[0].category}</Text> 
-              ({items[0].percentage.toFixed(0)}% kosztów).
-            </Text>
-          </View>
-        )}
       </View>
     );
   };
 
   const renderTrendsChart = () => {
-    const data = trends.data;
-    if (!data || !data.items || data.items.length === 0) return null;
-
-    const maxTotal = Math.max(...data.items.map(i => i.total), 1);
+    const { items, maxAmount } = memoizedTrends;
+    if (items.length === 0) return null;
 
     return (
-      <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm, { marginBottom: 32 }]}>
-        <View style={dynamicStyles.analyticsHeader}>
+      <View style={dynamicStyles.sectionContainer}>
+        <View style={dynamicStyles.sectionHeader}>
           <Text style={dynamicStyles.sectionTitle}>Trend wydatków</Text>
-          <Text style={{ fontSize: 12, color: theme.textDim, fontWeight: '600' }}>Planowane ({data.baseCurrency})</Text>
+          <TrendingUp size={18} color={theme.primary} />
         </View>
-        
-        <View style={dynamicStyles.chartContainer}>
-          {data.items.map((item, index) => {
-            const barHeight = (item.total / maxTotal) * 100;
-            return (
-              <View key={index} style={dynamicStyles.chartBarWrapper}>
-                <View style={dynamicStyles.chartBarOuter}>
-                  <View 
-                    style={[
-                      dynamicStyles.chartBarInner, 
-                      { height: `${barHeight}%` }
-                    ]} 
-                  />
+        <View style={[dynamicStyles.trendsCard, dynamicStyles.shadowSm]}>
+          <View style={dynamicStyles.chartContainer}>
+            {items.map((item, idx) => {
+              const height = (item.amount / maxAmount) * 120;
+              return (
+                <View key={idx} style={dynamicStyles.chartBarContainer}>
+                  <View style={[dynamicStyles.chartBar, { height: Math.max(height, 5) }]} />
+                  <Text style={dynamicStyles.chartLabel}>{item.month}</Text>
                 </View>
-                <Text style={dynamicStyles.chartLabel}>{item.label}</Text>
-              </View>
-            );
-          })}
-        </View>
-
-        <View style={dynamicStyles.insightBox}>
-          <Activity size={16} color="#4F46E5" />
-          <Text style={dynamicStyles.insightText}>
-            W nadchodzącym miesiącu zapłacisz <Text style={{ fontWeight: '700' }}>{data.items[0].total.toFixed(2)} {data.baseCurrency}</Text> za swoje subskrypcje.
-          </Text>
+              );
+            })}
+          </View>
         </View>
       </View>
     );
   };
 
+  // MAIN RENDER
+  if (isLoading && !hasData) {
+    return (
+      <SafeAreaView style={dynamicStyles.safeArea}>
+        <View style={dynamicStyles.content}>
+          <Skeleton width="100%" height={240} borderRadius={24} style={{ marginBottom: 24 }} />
+          <Skeleton width={180} height={24} style={{ marginBottom: 16 }} />
+          <View style={{ flexDirection: 'row', gap: 16 }}>
+            <Skeleton width={150} height={100} borderRadius={20} />
+            <Skeleton width={150} height={100} borderRadius={20} />
+          </View>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
-  if (summary.isError) {
+  if (isError && !hasData) {
+    const errorDetails = isOverviewError 
+      ? `Overview Error: ${overviewError?.message || JSON.stringify(overviewError)}` 
+      : isSettingsError ? `Settings Error: ${settingsError?.message || JSON.stringify(settingsError)}` : 'Unknown error';
+
+    const checkConnectivity = async () => {
+      try {
+        const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
+        const res = await fetch(`${baseUrl}/health`);
+        const data = await res.json();
+        Alert.alert('Połączenie OK', `Serwer odpowiedział: ${JSON.stringify(data)}\nURL: ${baseUrl}`);
+      } catch (err: any) {
+        Alert.alert('Błąd połączenia', `Nie udało się połączyć z serwerem!\nURL: ${process.env.EXPO_PUBLIC_API_BASE_URL}\nBłąd: ${err.message}`);
+      }
+    };
+
     return (
       <SafeAreaView style={dynamicStyles.safeArea}>
         <ErrorState 
           isDark={isDark} 
           message="Nie udało się pobrać danych z serwera. Sprawdź połączenie." 
-          onRetry={handleRefresh} 
+          details={errorDetails}
+          onRetry={handleRefresh}
+          onSignOut={handleSignOut}
         />
+        <TouchableOpacity 
+          style={{ padding: 15, alignItems: 'center' }} 
+          onPress={checkConnectivity}
+        >
+          <Text style={{ color: theme.primary, fontWeight: '700' }}>Sprawdź połączenie z backendem</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
 
-  if (isInitialLoading) {
-    return (
-      <SafeAreaView style={dynamicStyles.safeArea}>
-        <ScrollView style={dynamicStyles.container} contentContainerStyle={dynamicStyles.scrollContent}>
-          <Skeleton width="100%" height={160} borderRadius={24} style={{ marginBottom: 24, marginTop: 8 }} />
-          <Skeleton width={180} height={24} style={{ marginBottom: 16 }} />
-          <View style={{ flexDirection: 'row', marginBottom: 32 }}>
-            <Skeleton width={140} height={110} borderRadius={16} style={{ marginRight: 16 }} />
-            <Skeleton width={140} height={110} borderRadius={16} style={{ marginRight: 16 }} />
-          </View>
-        </ScrollView>
-      </SafeAreaView>
-    );
-  }
-
-  const upcomingItems = upcoming.data?.items ?? [];
+  const upcomingItems = upcomingData?.items ?? [];
 
   return (
     <SafeAreaView style={dynamicStyles.safeArea}>
-      <ScrollView
+      <ScrollView 
         style={dynamicStyles.container}
-        contentContainerStyle={dynamicStyles.scrollContent}
+        contentContainerStyle={dynamicStyles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handleRefresh}
-            tintColor="#6366F1"
-            colors={['#6366F1']}
-          />
+          <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
         }
       >
         {renderHeader()}
+
+        {renderSmartInsights()}
+        {renderBudgetCard()}
+
         {renderSavingsCard()}
 
         {upcomingItems.length > 0 && (
@@ -466,297 +1047,63 @@ export const DashboardScreen = () => {
                 <ArrowRight size={16} color="#6366F1" />
               </TouchableOpacity>
             </View>
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={upcomingItems}
-              keyExtractor={(item) => item.id}
-              renderItem={renderUpcomingPayment}
-              contentContainerStyle={dynamicStyles.horizontalListPadding}
-              ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dynamicStyles.horizontalListPadding}>
+              {upcomingItems.map((item, idx) => (
+                <React.Fragment key={item.id}>
+                  {renderUpcomingPayment({ item })}
+                  {idx < upcomingItems.length - 1 && <View style={{ width: 16 }} />}
+                </React.Fragment>
+              ))}
+            </ScrollView>
           </View>
         )}
 
-        {trials.data && trials.data.items.length > 0 && (
+        {trialsData && trialsData.items.length > 0 && (
           <View style={dynamicStyles.sectionContainer}>
             <View style={dynamicStyles.sectionHeader}>
               <Text style={dynamicStyles.sectionTitle}>Kończące się okresy próbne</Text>
             </View>
-            <FlatList
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              data={trials.data.items}
-              keyExtractor={(item) => item.id}
-              renderItem={renderTrialItem}
-              contentContainerStyle={dynamicStyles.horizontalListPadding}
-              ItemSeparatorComponent={() => <View style={{ width: 16 }} />}
-            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dynamicStyles.horizontalListPadding}>
+              {trialsData.items.map((item, idx) => (
+                <React.Fragment key={item.id}>
+                  {renderTrialItem({ item })}
+                  {idx < trialsData.items.length - 1 && <View style={{ width: 16 }} />}
+                </React.Fragment>
+              ))}
+            </ScrollView>
           </View>
         )}
 
-        <View style={dynamicStyles.sectionContainer}>
-          {renderTrendsChart()}
-          {renderCategoryBreakdown()}
-        </View>
+        {renderCategoryBreakdown()}
+
+        {renderTrendsChart()}
       </ScrollView>
 
-      <TouchableOpacity
-        style={[dynamicStyles.fab, dynamicStyles.shadowLg]}
-        activeOpacity={0.8}
+      <TouchableOpacity 
+        style={[
+          {
+            position: 'absolute',
+            bottom: 30,
+            right: 30,
+            width: 60,
+            height: 60,
+            borderRadius: 30,
+            backgroundColor: theme.primary,
+            alignItems: 'center',
+            justifyContent: 'center',
+            shadowColor: theme.primary,
+            shadowOffset: { width: 0, height: 4 },
+            shadowOpacity: 0.3,
+            shadowRadius: 10,
+            elevation: 8,
+          }
+        ]}
         onPress={() => navigation.navigate('AddSubscription')}
       >
-        <Plus size={28} color="#FFFFFF" />
+        <Plus size={30} color="#FFFFFF" />
       </TouchableOpacity>
     </SafeAreaView>
   );
 };
-
-const getStyles = (theme: any) => StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: theme.bg },
-  container: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 100, flexGrow: 1 },
-  shadow: {
-    shadowColor: '#64748B', shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.08, shadowRadius: 16, elevation: 8,
-  },
-  shadowSm: {
-    shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05, shadowRadius: 8, elevation: 4,
-  },
-  shadowLg: {
-    shadowColor: '#6366F1', shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.3, shadowRadius: 16, elevation: 12,
-  },
-  headerCard: {
-    backgroundColor: theme.card, borderRadius: 24,
-    padding: 24, marginBottom: 32, marginTop: 8,
-  },
-  headerSubtitle: {
-    fontSize: 14, color: theme.textDim, fontWeight: '500',
-    marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5,
-  },
-  headerAmountRow: { flexDirection: 'row', alignItems: 'baseline', marginBottom: 16 },
-  headerAmount: { fontSize: 40, fontWeight: '800', color: theme.text, letterSpacing: -1 },
-  headerCurrency: { fontSize: 20, fontWeight: '600', color: theme.textDim, marginLeft: 8 },
-  headerChangeContainer: { flexDirection: 'row' },
-  sectionContainer: { marginBottom: 32 },
-  lastSection: { marginBottom: 20 },
-  sectionHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 16,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: theme.text },
-  seeAllBtn: { flexDirection: 'row', alignItems: 'center' },
-  seeAllText: { fontSize: 14, fontWeight: '600', color: '#6366F1', marginRight: 4 },
-  horizontalListPadding: { paddingVertical: 4, paddingHorizontal: 4 },
-  upcomingCard: {
-    backgroundColor: theme.card, borderRadius: 16, padding: 16,
-    width: 140, borderWidth: 1, borderColor: 'transparent',
-  },
-  upcomingCardWarning: {
-    borderColor: theme.cardWarningBorder,
-    backgroundColor: theme.cardWarningBg,
-  },
-  upcomingTop: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'flex-start', marginBottom: 16,
-  },
-  upcomingIconPlaceholder: {
-    width: 32, height: 32, borderRadius: 10,
-    backgroundColor: theme.iconBg, alignItems: 'center', justifyContent: 'center',
-  },
-  upcomingIconPlaceholderWarning: { backgroundColor: theme.iconWarningBg },
-  upcomingIconText: { fontSize: 14, fontWeight: '700', color: '#6366F1' },
-  upcomingIconTextWarning: { color: theme.iconWarningText },
-  upcomingDate: { fontSize: 12, fontWeight: '600', color: theme.textDim, marginTop: 4 },
-  upcomingDateWarning: { color: theme.iconWarningText },
-  upcomingName: { fontSize: 14, fontWeight: '600', color: theme.text, marginBottom: 4 },
-  upcomingAmount: { fontSize: 16, fontWeight: '800', color: theme.text },
-  analyticsCard: { backgroundColor: theme.card, borderRadius: 20, padding: 20 },
-  analyticsHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 16,
-  },
-  analyticsSubtitle: { fontSize: 13, color: theme.textDim, marginBottom: 20 },
-  subscriptionRow: {
-    flexDirection: 'row', alignItems: 'center',
-    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F8FAFC',
-  },
-  subscriptionLogo: {
-    width: 48, height: 48, borderRadius: 24, backgroundColor: theme.border,
-    alignItems: 'center', justifyContent: 'center', marginRight: 16,
-  },
-  subscriptionInitial: { fontSize: 20, fontWeight: '700', color: '#475569' },
-  subscriptionInfo: { flex: 1, justifyContent: 'center' },
-  subscriptionName: { fontSize: 16, fontWeight: '600', color: theme.text, marginBottom: 4 },
-  categoryTag: {
-    alignSelf: 'flex-start', backgroundColor: theme.border,
-    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6,
-  },
-  categoryTagText: { fontSize: 11, fontWeight: '500', color: theme.textDim, textTransform: 'uppercase' },
-  subscriptionPriceContainer: { alignItems: 'flex-end' },
-  subscriptionPrice: { fontSize: 16, fontWeight: '700', color: theme.text },
-  fab: {
-    position: 'absolute',
-    bottom: Platform.OS === 'ios' ? 40 : 24,
-    right: 24, width: 60, height: 60, borderRadius: 30,
-    backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center',
-  },
-  categoryRow: { marginBottom: 16 },
-  categoryInfoRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
-  categoryLabel: { fontSize: 14, color: theme.text, fontWeight: '600' },
-  categoryValue: { fontSize: 14, color: theme.textDim, fontWeight: '700' },
-  progressBg: { height: 8, backgroundColor: theme.border, borderRadius: 4, overflow: 'hidden' },
-  progressFill: { height: '100%', backgroundColor: '#6366F1', borderRadius: 4 },
-  headerGridLabel: { fontSize: 11, color: theme.textDim, fontWeight: '700', marginBottom: 4, textTransform: 'uppercase', letterSpacing: 0.5 },
-  summaryMain: { marginBottom: 20 },
-  summaryDivider: { height: 1, backgroundColor: theme.border, marginVertical: 16, opacity: 0.5 },
-  summarySecondary: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 20 },
-  summarySecondaryItem: { flex: 1 },
-  headerSecondaryAmount: { fontSize: 18, fontWeight: '700', color: theme.text },
-  statsRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: theme.border,
-  },
-  statBox: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    color: theme.text,
-    marginBottom: 2,
-  },
-  statLabel: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.textDim,
-    textTransform: 'uppercase',
-  },
-  insightBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EEF2FF',
-    padding: 12,
-    borderRadius: 12,
-    marginTop: 8,
-    gap: 8,
-  },
-  insightText: {
-    fontSize: 12,
-    color: '#4F46E5',
-    flex: 1,
-  },
-  overdueSection: {
-    marginTop: 12,
-  },
-  overdueBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#FEF2F2',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FEE2E2',
-  },
-  overdueBannerText: { color: '#B91C1C', fontSize: 13, fontWeight: '600', flex: 1 },
-  overdueActionText: { color: '#EF4444', fontSize: 13, fontWeight: '700', textDecorationLine: 'underline' },
-  infoBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 12,
-    borderRadius: 12,
-    gap: 8,
-  },
-  infoBoxText: {
-    fontSize: 12,
-    fontWeight: '600',
-    flex: 1,
-  },
-  savingsCard: {
-    backgroundColor: '#ECFDF5',
-    borderRadius: 20,
-    padding: 20,
-    marginBottom: 32,
-    borderWidth: 1,
-    borderColor: 'rgba(16, 185, 129, 0.1)',
-  },
-  savingsHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-    marginBottom: 12,
-  },
-  savingsIconContainer: {
-    width: 44,
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: '#FFFFFF',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  savingsTitle: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#047857',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  savingsAmount: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#065F46',
-  },
-  savingsFooter: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(16, 185, 129, 0.1)',
-    paddingTop: 12,
-  },
-  savingsFooterText: {
-    fontSize: 13,
-    color: '#065F46',
-    lineHeight: 18,
-    fontWeight: '500',
-  },
-  chartContainer: {
-    flexDirection: 'row',
-    height: 140,
-    alignItems: 'flex-end',
-    justifyContent: 'space-between',
-    paddingTop: 20,
-    marginBottom: 20,
-    paddingHorizontal: 10,
-  },
-  chartBarWrapper: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  chartBarOuter: {
-    width: 12,
-    height: 100,
-    backgroundColor: theme.border,
-    borderRadius: 6,
-    justifyContent: 'flex-end',
-    overflow: 'hidden',
-  },
-  chartBarInner: {
-    width: '100%',
-    backgroundColor: '#6366F1',
-    borderRadius: 6,
-  },
-  chartLabel: {
-    marginTop: 8,
-    fontSize: 10,
-    fontWeight: '700',
-    color: theme.textDim,
-  },
-});
 
 export default DashboardScreen;

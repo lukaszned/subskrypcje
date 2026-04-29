@@ -9,6 +9,6 @@ export const useDashboardSavings = () => {
       const { data } = await apiClient.get<SavingsResponse>('/dashboard/savings');
       return data;
     },
-    staleTime: 30000,
+    staleTime: 300000,
   });
 };

@@ -1,14 +1,16 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { AlertCircle, RefreshCw } from 'lucide-react-native';
 
 interface ErrorStateProps {
   message?: string;
+  details?: string;
   onRetry?: () => void;
+  onSignOut?: () => void;
   isDark?: boolean;
 }
 
-export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', onRetry, isDark }: ErrorStateProps) => {
+export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', details, onRetry, onSignOut, isDark }: ErrorStateProps) => {
   const theme = {
     bg: isDark ? '#0F172A' : '#F8FAFC',
     text: isDark ? '#F8FAFC' : '#0F172A',
@@ -25,12 +27,30 @@ export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', onRetr
         <Text style={[styles.title, { color: theme.text }]}>Ojej, coś poszło nie tak</Text>
         <Text style={[styles.message, { color: theme.textDim }]}>{message}</Text>
         
-        {onRetry && (
-          <TouchableOpacity style={styles.button} onPress={onRetry} activeOpacity={0.8}>
-            <RefreshCw size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
-            <Text style={styles.buttonText}>Spróbuj ponownie</Text>
-          </TouchableOpacity>
+        {details && (
+          <View style={[styles.detailsContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9' }]}>
+            <Text style={[styles.detailsText, { color: theme.textDim }]}>{details}</Text>
+          </View>
         )}
+        
+        <View style={styles.retryContainer}>
+          {onRetry && (
+            <TouchableOpacity style={styles.button} onPress={onRetry} activeOpacity={0.8}>
+              <RefreshCw size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <Text style={styles.buttonText}>Spróbuj ponownie</Text>
+            </TouchableOpacity>
+          )}
+
+          {onSignOut && (
+            <TouchableOpacity 
+              style={[styles.button, styles.buttonSecondary]} 
+              onPress={onSignOut} 
+              activeOpacity={0.8}
+            >
+              <Text style={[styles.buttonText, { color: theme.textDim }]}>Wyloguj się</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
     </View>
   );
@@ -52,6 +72,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 4,
+  },
+  retryContainer: {
+    width: '100%',
+    gap: 12,
   },
   iconContainer: {
     width: 80,
@@ -86,5 +110,16 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
+  },
+  detailsContainer: {
+    width: '100%',
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 20,
+  },
+  detailsText: {
+    fontSize: 11,
+    fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    textAlign: 'center',
   },
 });

@@ -151,7 +151,10 @@ export const SubscriptionListScreen = () => {
           category: CATEGORY_LABELS[item.category] || item.category,
           amount: item.amount,
           currency: item.currency,
-          nextPaymentDate: item.nextPaymentDate ? new Date(item.nextPaymentDate).toLocaleDateString('pl-PL') : '-',
+          nextPaymentDate: item.nextPaymentDate ? (() => {
+            const d = new Date(item.nextPaymentDate);
+            return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+          })() : '-',
           cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle,
           status: item.status,
           isTrial: item.isTrial,
