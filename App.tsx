@@ -24,6 +24,7 @@ import DashboardScreen from './src/screens/DashboardScreen';
 import SubscriptionListScreen from './src/screens/SubscriptionListScreen';
 import ManualAddScreen from './src/screens/ManualAddScreen';
 import SubscriptionDetailScreen from './src/screens/SubscriptionDetailScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -40,6 +41,7 @@ export type AppStackParamList = {
   SubscriptionList: undefined;
   AddSubscription: { subscriptionId?: string } | undefined;
   SubscriptionDetail: { id: string };
+  Settings: undefined;
 };
 
 export type RootStackParamList = AuthStackParamList & AppStackParamList;
@@ -99,6 +101,7 @@ function AppNavigator() {
         component={ManualAddScreen}
         options={{ presentation: 'modal' }}
       />
+      <AppStack.Screen name="Settings" component={SettingsScreen} />
     </AppStack.Navigator>
   );
 }

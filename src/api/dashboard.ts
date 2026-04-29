@@ -11,7 +11,31 @@ import {
   DashboardSummary,
   UpcomingPaymentsResponse,
   TrialsResponse,
+  DashboardTrendsResponse,
+  UserSettings,
 } from '../types/api';
+
+/**
+ * GET /dashboard/trends
+ */
+export async function getDashboardTrends(months: number = 6): Promise<DashboardTrendsResponse> {
+  return apiGet<DashboardTrendsResponse>(`/dashboard/trends?months=${months}`);
+}
+
+/**
+ * GET /users/settings
+ */
+export async function getUserSettings(): Promise<UserSettings> {
+  return apiGet<UserSettings>('/users/settings');
+}
+
+/**
+ * PATCH /users/settings
+ */
+export async function updateUserSettings(payload: Partial<UserSettings>): Promise<UserSettings> {
+  const { data } = await apiClient.patch<UserSettings>('/users/settings', payload);
+  return data;
+}
 
 /**
  * GET /dashboard/summary

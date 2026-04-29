@@ -248,3 +248,25 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
   overdue:  'Zaległa',
   canceled: 'Anulowana',
 };
+
+export interface DashboardTrendsItem {
+  month: string;
+  label: string;
+  total: number;
+}
+
+export interface DashboardTrendsResponse {
+  baseCurrency: string;
+  type: 'planned';
+  months: number;
+  items: DashboardTrendsItem[];
+}
+
+export interface UserSettings {
+  userId: string;
+  baseCurrency: string;
+  defaultReminderDaysBefore: number;
+  notificationsEnabled: boolean;
+  emailReportsEnabled: boolean;
+  updatedAt: string;
+}

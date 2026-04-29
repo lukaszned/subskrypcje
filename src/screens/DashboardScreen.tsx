@@ -17,7 +17,7 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Plus, ArrowRight, Activity, AlertCircle, LogOut, Sun, Moon, TrendingUp, Bell } from 'lucide-react-native';
+import { Plus, ArrowRight, Activity, AlertCircle, LogOut, Sun, Moon, TrendingUp, Bell, Settings } from 'lucide-react-native';
 import * as Notifications from 'expo-notifications';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -32,6 +32,8 @@ import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
 import { useReminders } from '../hooks/useReminders';
 import { useTrials } from '../hooks/useTrials';
 import { useDashboardSavings } from '../hooks/useDashboardSavings';
+import { useDashboardTrends } from '../hooks/useDashboardTrends';
+import { useUserSettings } from '../hooks/useUserSettings';
 import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
 import { Subscription, UpcomingPaymentItem, CATEGORY_LABELS, CategoryBreakdownItem } from '../types/api';
@@ -77,6 +79,8 @@ export const DashboardScreen = () => {
   const reminders = useReminders();
   const trials = useTrials(30);
   const savings = useDashboardSavings();
+  const trends = useDashboardTrends(6);
+  const userSettings = useUserSettings();
 
   const isInitialLoading = summary.isLoading || upcoming.isLoading;
 
@@ -104,6 +108,8 @@ export const DashboardScreen = () => {
       reminders.refetch(),
       savings.refetch(),
       trials.refetch(),
+      trends.refetch(),
+      userSettings.refetch(),
     ]);
     setIsRefreshing(false);
   };
@@ -148,6 +154,9 @@ export const DashboardScreen = () => {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <TouchableOpacity onPress={() => setIsDark(!isDark)}>
               {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+              <Settings size={20} color={theme.textDim} />
             </TouchableOpacity>
             <TouchableOpacity onPress={handleSignOut}>
               <LogOut size={20} color={theme.textDim} />
@@ -355,6 +364,48 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderTrendsChart = () => {
+    const data = trends.data;
+    if (!data || !data.items || data.items.length === 0) return null;
+
+    const maxTotal = Math.max(...data.items.map(i => i.total), 1);
+
+    return (
+      <View style={[dynamicStyles.analyticsCard, dynamicStyles.shadowSm, { marginBottom: 32 }]}>
+        <View style={dynamicStyles.analyticsHeader}>
+          <Text style={dynamicStyles.sectionTitle}>Trend wydatków</Text>
+          <Text style={{ fontSize: 12, color: theme.textDim, fontWeight: '600' }}>Planowane ({data.baseCurrency})</Text>
+        </View>
+        
+        <View style={dynamicStyles.chartContainer}>
+          {data.items.map((item, index) => {
+            const barHeight = (item.total / maxTotal) * 100;
+            return (
+              <View key={index} style={dynamicStyles.chartBarWrapper}>
+                <View style={dynamicStyles.chartBarOuter}>
+                  <View 
+                    style={[
+                      dynamicStyles.chartBarInner, 
+                      { height: `${barHeight}%` }
+                    ]} 
+                  />
+                </View>
+                <Text style={dynamicStyles.chartLabel}>{item.label}</Text>
+              </View>
+            );
+          })}
+        </View>
+
+        <View style={dynamicStyles.insightBox}>
+          <Activity size={16} color="#4F46E5" />
+          <Text style={dynamicStyles.insightText}>
+            W nadchodzącym miesiącu zapłacisz <Text style={{ fontWeight: '700' }}>{data.items[0].total.toFixed(2)} {data.baseCurrency}</Text> za swoje subskrypcje.
+          </Text>
+        </View>
+      </View>
+    );
+  };
+
 
   if (summary.isError) {
     return (
@@ -445,6 +496,7 @@ export const DashboardScreen = () => {
         )}
 
         <View style={dynamicStyles.sectionContainer}>
+          {renderTrendsChart()}
           {renderCategoryBreakdown()}
         </View>
       </ScrollView>
@@ -672,6 +724,38 @@ const getStyles = (theme: any) => StyleSheet.create({
     color: '#065F46',
     lineHeight: 18,
     fontWeight: '500',
+  },
+  chartContainer: {
+    flexDirection: 'row',
+    height: 140,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    paddingTop: 20,
+    marginBottom: 20,
+    paddingHorizontal: 10,
+  },
+  chartBarWrapper: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  chartBarOuter: {
+    width: 12,
+    height: 100,
+    backgroundColor: theme.border,
+    borderRadius: 6,
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  chartBarInner: {
+    width: '100%',
+    backgroundColor: '#6366F1',
+    borderRadius: 6,
+  },
+  chartLabel: {
+    marginTop: 8,
+    fontSize: 10,
+    fontWeight: '700',
+    color: theme.textDim,
   },
 });
 
