@@ -5,6 +5,7 @@ import subscriptionsRouter from "./routes/subscriptions";
 import usersRouter from "./routes/users";
 import dashboardRouter from "./routes/dashboard";
 import { prisma } from "./lib/prisma";
+import { startExchangeRateRefreshJob } from "./services/exchange-rate.service";
 
 dotenv.config();
 
@@ -41,6 +42,7 @@ app.use("/users", usersRouter);
 app.use("/subscriptions", subscriptionsRouter);
 app.use("/dashboard", dashboardRouter);
 
-app.listen(Number(PORT), "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT} (accessible from network)`);
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT}`);
+    startExchangeRateRefreshJob();
 });
