@@ -4,6 +4,7 @@ import {
     getCategoryBreakdownForUser,
     getDashboardSummaryForUser,
     getDashboardTrendsForUser,
+    getNotificationPreviewForUser,
     getRemindersForUser,
     getSavingsForUser,
     getTrialsForUser,
@@ -153,6 +154,32 @@ export async function getRemindersHandler(
     }
 }
 
+export async function getNotificationPreviewHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const notificationPreview = await getNotificationPreviewForUser(
+            req.appUser.id
+        );
+
+        return res.json(notificationPreview);
+    } catch (error) {
+        console.error("Error fetching notification preview:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
 export async function getSavingsHandler(
     req: AuthenticatedRequest,
     res: Response
@@ -191,7 +218,7 @@ export async function getDashboardTrendsHandler(
 
         const monthsParam = req.query.months ? Number(req.query.months) : 6;
         const months =
-            Number.isNaN(monthsParam) || monthsParam <= 0 || monthsParam > 12
+            Number.isNaN(monthsParam) || monthsParam <= 0 || monthsParam > 24
                 ? 6
                 : monthsParam;
 

@@ -11,7 +11,6 @@ import {
     convertCurrency,
     normalizeCurrency,
 } from "../config/currency";
-import { getOrCreateUserSettings } from "./user-settings.service";
 
 function toNumber(value: unknown): number {
     if (typeof value === "number") {
@@ -47,6 +46,37 @@ async function getBaseCurrencyForUser(userId: string): Promise<CurrencyCode> {
     });
 
     return normalizeCurrency(settings?.baseCurrency ?? BASE_CURRENCY);
+}
+
+async function getUserNotificationSettings(userId: string) {
+    const existingSettings = await prisma.userSettings.findUnique({
+        where: {
+            userId,
+        },
+    });
+
+    if (existingSettings) {
+        return {
+            notificationsEnabled: existingSettings.notificationsEnabled,
+            defaultReminderDaysBefore:
+                existingSettings.defaultReminderDaysBefore,
+        };
+    }
+
+    const createdSettings = await prisma.userSettings.create({
+        data: {
+            userId,
+            baseCurrency: BASE_CURRENCY,
+            defaultReminderDaysBefore: 2,
+            notificationsEnabled: true,
+            emailReportsEnabled: false,
+        },
+    });
+
+    return {
+        notificationsEnabled: createdSettings.notificationsEnabled,
+        defaultReminderDaysBefore: createdSettings.defaultReminderDaysBefore,
+    };
 }
 
 function calculateMonthlyEquivalent(
@@ -185,19 +215,40 @@ function isSubscriptionActiveInMonth(
     return true;
 }
 
-function normalizeReminderDaysBefore(
-    reminderDaysBefore: number | null | undefined,
-    defaultReminderDaysBefore: number
-): number {
-    if (
-        typeof reminderDaysBefore === "number" &&
-        Number.isFinite(reminderDaysBefore) &&
-        reminderDaysBefore >= 0
-    ) {
-        return reminderDaysBefore;
+function formatDateForNotification(date: Date): string {
+    return new Intl.DateTimeFormat("pl-PL", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+    }).format(date);
+}
+
+function getDaysUntil(targetDate: Date, now: Date): number {
+    const msInDay = 1000 * 60 * 60 * 24;
+    return Math.ceil((targetDate.getTime() - now.getTime()) / msInDay);
+}
+
+function buildNotificationTitle(subscriptionName: string): string {
+    return `Przypomnienie: ${subscriptionName}`;
+}
+
+function buildNotificationBody(params: {
+    name: string;
+    provider: string | null;
+    nextPaymentDate: Date;
+    reminderDaysBefore: number;
+}): string {
+    const displayName = params.provider
+        ? `${params.name} (${params.provider})`
+        : params.name;
+
+    const formattedDate = formatDateForNotification(params.nextPaymentDate);
+
+    if (params.reminderDaysBefore <= 0) {
+        return `${displayName} odnawia się dzisiaj. Termin płatności: ${formattedDate}.`;
     }
 
-    return defaultReminderDaysBefore;
+    return `${displayName} odnowi się za ${params.reminderDaysBefore} dni. Termin płatności: ${formattedDate}.`;
 }
 
 export async function getDashboardSummaryForUser(userId: string) {
@@ -447,7 +498,7 @@ export async function getCategoryBreakdownForUser(userId: string) {
 export async function getRemindersForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
 
-    const settings = await getOrCreateUserSettings(userId);
+    const settings = await getUserNotificationSettings(userId);
 
     if (!settings.notificationsEnabled) {
         return {
@@ -484,10 +535,9 @@ export async function getRemindersForUser(userId: string) {
     });
 
     const items = subscriptions.map((subscription) => {
-        const reminderDaysBefore = normalizeReminderDaysBefore(
-            subscription.reminderDaysBefore,
-            settings.defaultReminderDaysBefore
-        );
+        const reminderDaysBefore =
+            subscription.reminderDaysBefore ??
+            settings.defaultReminderDaysBefore;
 
         const remindAt = calculateRemindAt(
             subscription.nextPaymentDate,
@@ -510,6 +560,96 @@ export async function getRemindersForUser(userId: string) {
         notificationsEnabled: true,
         defaultReminderDaysBefore: settings.defaultReminderDaysBefore,
         count: items.length,
+        items,
+    };
+}
+
+export async function getNotificationPreviewForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const settings = await getUserNotificationSettings(userId);
+
+    if (!settings.notificationsEnabled) {
+        return {
+            notificationsEnabled: false,
+            defaultReminderDaysBefore: settings.defaultReminderDaysBefore,
+            count: 0,
+            nextReminder: null,
+            items: [],
+        };
+    }
+
+    const now = new Date();
+
+    const subscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+            nextPaymentDate: {
+                gte: now,
+            },
+        },
+        orderBy: {
+            nextPaymentDate: "asc",
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            nextPaymentDate: true,
+            reminderDaysBefore: true,
+            status: true,
+        },
+    });
+
+    const items = subscriptions
+        .map((subscription) => {
+            const reminderDaysBefore =
+                subscription.reminderDaysBefore ??
+                settings.defaultReminderDaysBefore;
+
+            const remindAt = calculateRemindAt(
+                subscription.nextPaymentDate,
+                reminderDaysBefore
+            );
+
+            const daysUntilReminder = getDaysUntil(remindAt, now);
+            const daysUntilPayment = getDaysUntil(
+                subscription.nextPaymentDate,
+                now
+            );
+
+            return {
+                id: subscription.id,
+                name: subscription.name,
+                provider: subscription.provider,
+                title: buildNotificationTitle(subscription.name),
+                body: buildNotificationBody({
+                    name: subscription.name,
+                    provider: subscription.provider,
+                    nextPaymentDate: subscription.nextPaymentDate,
+                    reminderDaysBefore,
+                }),
+                nextPaymentDate: subscription.nextPaymentDate,
+                reminderDaysBefore,
+                remindAt,
+                daysUntilReminder,
+                daysUntilPayment,
+                shouldNotifyNow: remindAt <= now,
+                status: subscription.status,
+            };
+        })
+        .sort((a, b) => a.remindAt.getTime() - b.remindAt.getTime());
+
+    const nextReminder = items.length > 0 ? items[0] : null;
+
+    return {
+        notificationsEnabled: true,
+        defaultReminderDaysBefore: settings.defaultReminderDaysBefore,
+        count: items.length,
+        nextReminder,
         items,
     };
 }
@@ -592,7 +732,8 @@ export async function getDashboardTrendsForUser(
 
     const baseCurrency = await getBaseCurrencyForUser(userId);
 
-    const safeMonths = Number.isNaN(months) || months <= 0 || months > 24 ? 6 : months;
+    const safeMonths =
+        Number.isNaN(months) || months <= 0 || months > 24 ? 6 : months;
 
     const now = new Date();
     const startMonth = getStartOfMonth(now);
