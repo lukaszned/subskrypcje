@@ -10,6 +10,7 @@ import {
     deleteSubscriptionForUser,
     findPotentialDuplicateSubscription,
     getSubscriptionByIdForUser,
+    getSubscriptionHistoryForUser,
     getSubscriptionsForUser,
     markSubscriptionAsPaidForUser,
     updateSubscriptionForUser,
@@ -487,5 +488,24 @@ export async function deleteSubscriptionHandler(
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
+    }
+}
+
+export async function getSubscriptionHistoryHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const { id } = req.params;
+        const history = await getSubscriptionHistoryForUser(id, req.appUser.id);
+
+        res.json(history);
+    } catch (error) {
+        console.error("Error fetching history:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
 }

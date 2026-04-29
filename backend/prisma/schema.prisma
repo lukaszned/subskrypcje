@@ -1,5 +1,6 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {
@@ -44,12 +45,12 @@ model User {
   id            String         @id @default(cuid())
   email         String         @unique
   name          String?
-  subscriptions Subscription[]
-  payments      SubscriptionPayment[]
-
-  settings      UserSettings?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+  subscriptions Subscription[]
+  settings      UserSettings?
+  payments      SubscriptionPayment[]
+  events        SubscriptionEvent[]
 }
 
 model UserSettings {
@@ -61,7 +62,7 @@ model UserSettings {
   notificationsEnabled      Boolean  @default(true)
   emailReportsEnabled       Boolean  @default(false)
   monthlyIncome             Decimal? @db.Decimal(12, 2)
-incomeCurrency            String   @default("PLN")
+  incomeCurrency            String   @default("PLN")
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 
@@ -74,7 +75,7 @@ model Subscription {
   provider           String?
   planName           String?
   amount             Decimal              @db.Decimal(10, 2)
-  currency           String
+  currency           String               @default("PLN")
   category           SubscriptionCategory
   billingCycle       BillingCycle
   nextPaymentDate    DateTime
@@ -87,42 +88,47 @@ model Subscription {
   cancelUrl          String?
   notes              String?
   status             SubscriptionStatus   @default(pending)
-  userId             String
-  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
-  events             SubscriptionEvent[]
-  payments           SubscriptionPayment[]
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
 
+  userId             String
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments           SubscriptionPayment[]
+  events             SubscriptionEvent[]
+
   @@index([userId])
+  @@index([nextPaymentDate])
+  @@index([provider])
 }
 
-model SubscriptionEvent {
-  id             String                @id @default(cuid())
-  subscriptionId String
-  userId         String
-  type           SubscriptionEventType
-  payload        Json?
-  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  createdAt      DateTime              @default(now())
-
-  @@index([subscriptionId, createdAt])
-  @@index([userId, createdAt])
-}
 model SubscriptionPayment {
   id                      String        @id @default(cuid())
   subscriptionId          String
+  subscription            Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   userId                  String
-  amount                  Decimal       @db.Decimal(10, 2)
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount                  Decimal       @db.Decimal(12, 2)
   currency                String
   billingCycle            BillingCycle
   paidAt                  DateTime      @default(now())
   previousNextPaymentDate DateTime?
   nextPaymentDateAfter    DateTime?
-  subscription            Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt               DateTime      @default(now())
 
   @@index([subscriptionId, paidAt])
   @@index([userId, paidAt])
+}
+
+model SubscriptionEvent {
+  id             String                @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  userId         String
+  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           SubscriptionEventType
+  payload        Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([subscriptionId, createdAt])
+  @@index([userId, createdAt])
 }

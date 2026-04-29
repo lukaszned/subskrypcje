@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
+import { getUserSettingsForUser, updateUserSettingsForUser } from "../services/user.service";
 
 export async function getMeHandler(
     req: AuthenticatedRequest,
@@ -26,9 +27,43 @@ export async function getMeHandler(
         });
     } catch (error) {
         console.error("Error fetching current user:", error);
-        return res.status(500).json({
+         res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
         });
+    }
+}
+
+export async function getUserSettingsHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const settings = await getUserSettingsForUser(req.appUser.id);
+        res.json(settings);
+    } catch (error) {
+        console.error("Error fetching settings:", error);
+        res.status(500).json({ message: "Internal server error" });
+    }
+}
+
+export async function updateUserSettingsHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({ message: "Unauthorized" });
+        }
+
+        const settings = await updateUserSettingsForUser(req.appUser.id, req.body);
+        res.json(settings);
+    } catch (error) {
+        console.error("Error updating settings:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
 }

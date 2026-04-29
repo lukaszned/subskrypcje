@@ -253,7 +253,6 @@ function buildNotificationBody(params: {
 
 export async function getDashboardSummaryForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
-
     const baseCurrency = await getBaseCurrencyForUser(userId);
 
     const subscriptions = await prisma.subscription.findMany({
@@ -331,8 +330,6 @@ export async function getUpcomingPaymentsForUser(
     userId: string,
     days: number = 7
 ) {
-    await syncOverdueSubscriptionsForUser(userId);
-
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(now.getDate() + days);
@@ -365,15 +362,19 @@ export async function getUpcomingPaymentsForUser(
         },
     });
 
-    return subscriptions.map((subscription) => ({
+    const items = subscriptions.map((subscription) => ({
         ...subscription,
         amount: Number(toNumber(subscription.amount).toFixed(2)),
     }));
+
+    return {
+        days,
+        count: items.length,
+        items,
+    };
 }
 
 export async function getTrialsForUser(userId: string, days: number = 30) {
-    await syncOverdueSubscriptionsForUser(userId);
-
     const now = new Date();
     const futureDate = new Date();
     futureDate.setDate(now.getDate() + days);
@@ -409,20 +410,28 @@ export async function getTrialsForUser(userId: string, days: number = 30) {
         },
     });
 
-    return subscriptions.map((subscription) => {
+    const items = subscriptions.map((subscription) => {
         const trialEndDate = subscription.trialEndDate as Date;
+        const diffTime = trialEndDate.getTime() - now.getTime();
+        const daysLeft = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
         return {
             ...subscription,
             amount: Number(toNumber(subscription.amount).toFixed(2)),
-            daysLeft: getDaysLeft(trialEndDate, now),
+            trialEndDate: trialEndDate.toISOString(),
+            daysLeft,
         };
     });
+
+    return {
+        days,
+        count: items.length,
+        items,
+    };
 }
 
 export async function getCategoryBreakdownForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
-
     const baseCurrency = await getBaseCurrencyForUser(userId);
 
     const subscriptions = await prisma.subscription.findMany({
@@ -497,7 +506,6 @@ export async function getCategoryBreakdownForUser(userId: string) {
 
 export async function getRemindersForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
-
     const settings = await getUserNotificationSettings(userId);
 
     if (!settings.notificationsEnabled) {
@@ -656,7 +664,6 @@ export async function getNotificationPreviewForUser(userId: string) {
 
 export async function getSavingsForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
-
     const baseCurrency = await getBaseCurrencyForUser(userId);
 
     const canceledSubscriptions = await prisma.subscription.findMany({
@@ -729,7 +736,6 @@ export async function getDashboardTrendsForUser(
     months: number = 6
 ) {
     await syncOverdueSubscriptionsForUser(userId);
-
     const baseCurrency = await getBaseCurrencyForUser(userId);
 
     const safeMonths =
@@ -739,7 +745,7 @@ export async function getDashboardTrendsForUser(
     const startMonth = getStartOfMonth(now);
 
     const monthBuckets = Array.from({ length: safeMonths }, (_, index) => {
-        const date = addMonths(startMonth, index);
+        const date = addMonths(startMonth, - (safeMonths - 1 - index)); // Historia + obecny
 
         return {
             date,
@@ -754,28 +760,12 @@ export async function getDashboardTrendsForUser(
     const subscriptions = await prisma.subscription.findMany({
         where: {
             userId,
-            status: {
-                not: SubscriptionStatus.canceled,
-            },
-        },
-        orderBy: {
-            nextPaymentDate: "asc",
         },
     });
 
     for (const bucket of monthBuckets) {
         const total = subscriptions.reduce((sum, subscription) => {
-            if (
-                !isSubscriptionActiveInMonth(
-                    {
-                        createdAt: subscription.createdAt,
-                        status: subscription.status,
-                        updatedAt: subscription.updatedAt,
-                    },
-                    bucket.monthStart,
-                    bucket.monthEnd
-                )
-            ) {
+            if (!isSubscriptionActiveInMonth(subscription, bucket.monthStart, bucket.monthEnd)) {
                 return sum;
             }
 
@@ -806,6 +796,7 @@ export async function getDashboardTrendsForUser(
         })),
     };
 }
+
 export async function getBudgetImpactForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
 
