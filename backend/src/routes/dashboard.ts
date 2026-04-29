@@ -2,6 +2,7 @@ import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.middleware";
 import {
   getCategoryBreakdownHandler,
+  getBudgetImpactHandler,
   getDashboardSummaryHandler,
   getDashboardTrendsHandler,
   getNotificationPreviewHandler,
@@ -21,5 +22,6 @@ router.get("/reminders", requireAuth, getRemindersHandler);
 router.get("/notification-preview", requireAuth, getNotificationPreviewHandler);
 router.get("/savings", requireAuth, getSavingsHandler);
 router.get("/trends", requireAuth, getDashboardTrendsHandler);
+router.get("/budget-impact", requireAuth, getBudgetImpactHandler);
 
 export default router;

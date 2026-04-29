@@ -60,6 +60,8 @@ model UserSettings {
   defaultReminderDaysBefore Int      @default(2)
   notificationsEnabled      Boolean  @default(true)
   emailReportsEnabled       Boolean  @default(false)
+  monthlyIncome             Decimal? @db.Decimal(12, 2)
+incomeCurrency            String   @default("PLN")
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt
 

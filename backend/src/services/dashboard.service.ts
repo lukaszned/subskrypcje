@@ -806,3 +806,60 @@ export async function getDashboardTrendsForUser(
         })),
     };
 }
+export async function getBudgetImpactForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const settings = await prisma.userSettings.findFirst({
+        where: {
+            userId,
+        },
+        select: {
+            baseCurrency: true,
+            monthlyIncome: true,
+            incomeCurrency: true,
+        },
+    });
+
+    const baseCurrency = normalizeCurrency(settings?.baseCurrency ?? BASE_CURRENCY);
+    const incomeCurrency = normalizeCurrency(settings?.incomeCurrency ?? baseCurrency);
+
+    const rawMonthlyIncome = toNumber(settings?.monthlyIncome);
+
+    const summary = await getDashboardSummaryForUser(userId);
+    const monthlySubscriptionsTotal = summary.monthlyTotal;
+
+    if (!rawMonthlyIncome || rawMonthlyIncome <= 0) {
+        return {
+            baseCurrency,
+            hasIncome: false,
+            monthlyIncome: null,
+            incomeCurrency,
+            monthlySubscriptionsTotal,
+            freeAfterSubscriptions: null,
+            subscriptionsIncomePercentage: null,
+        };
+    }
+
+    const monthlyIncome = convertCurrency(
+        rawMonthlyIncome,
+        incomeCurrency,
+        baseCurrency
+    );
+
+    const freeAfterSubscriptions = monthlyIncome - monthlySubscriptionsTotal;
+
+    const subscriptionsIncomePercentage =
+        monthlyIncome > 0 ? (monthlySubscriptionsTotal / monthlyIncome) * 100 : 0;
+
+    return {
+        baseCurrency,
+        hasIncome: true,
+        monthlyIncome: Number(monthlyIncome.toFixed(2)),
+        incomeCurrency,
+        monthlySubscriptionsTotal: Number(monthlySubscriptionsTotal.toFixed(2)),
+        freeAfterSubscriptions: Number(freeAfterSubscriptions.toFixed(2)),
+        subscriptionsIncomePercentage: Number(
+            subscriptionsIncomePercentage.toFixed(2)
+        ),
+    };
+}

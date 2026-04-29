@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
+    getBudgetImpactForUser,
     getCategoryBreakdownForUser,
     getDashboardSummaryForUser,
     getDashboardTrendsForUser,
@@ -227,6 +228,30 @@ export async function getDashboardTrendsHandler(
         return res.json(trends);
     } catch (error) {
         console.error("Error fetching dashboard trends:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+export async function getBudgetImpactHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const budgetImpact = await getBudgetImpactForUser(req.appUser.id);
+
+        return res.json(budgetImpact);
+    } catch (error) {
+        console.error("Error fetching budget impact:", error);
+
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
