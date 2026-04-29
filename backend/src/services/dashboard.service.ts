@@ -5,7 +5,12 @@ import {
     SubscriptionStatus,
 } from "@prisma/client";
 import { syncOverdueSubscriptionsForUser } from "./subscription.service";
-import { BASE_CURRENCY, convertToPLN } from "../config/currency";
+import {
+    BASE_CURRENCY,
+    CurrencyCode,
+    convertCurrency,
+    normalizeCurrency,
+} from "../config/currency";
 
 function toNumber(value: unknown): number {
     if (typeof value === "number") {
@@ -28,6 +33,19 @@ function toNumber(value: unknown): number {
     }
 
     return 0;
+}
+
+async function getBaseCurrencyForUser(userId: string): Promise<CurrencyCode> {
+    const settings = await prisma.userSettings.findFirst({
+        where: {
+            userId,
+        },
+        select: {
+            baseCurrency: true,
+        },
+    });
+
+    return normalizeCurrency(settings?.baseCurrency ?? BASE_CURRENCY);
 }
 
 function calculateMonthlyEquivalent(
@@ -70,22 +88,24 @@ function calculateYearlyEquivalent(
     }
 }
 
-function calculateMonthlyEquivalentInPLN(
+function calculateMonthlyEquivalentInCurrency(
     amount: number,
     currency: string,
-    billingCycle: BillingCycle
+    billingCycle: BillingCycle,
+    targetCurrency: CurrencyCode
 ): number {
     const monthlyEquivalent = calculateMonthlyEquivalent(amount, billingCycle);
-    return convertToPLN(monthlyEquivalent, currency);
+    return convertCurrency(monthlyEquivalent, currency, targetCurrency);
 }
 
-function calculateYearlyEquivalentInPLN(
+function calculateYearlyEquivalentInCurrency(
     amount: number,
     currency: string,
-    billingCycle: BillingCycle
+    billingCycle: BillingCycle,
+    targetCurrency: CurrencyCode
 ): number {
     const yearlyEquivalent = calculateYearlyEquivalent(amount, billingCycle);
-    return convertToPLN(yearlyEquivalent, currency);
+    return convertCurrency(yearlyEquivalent, currency, targetCurrency);
 }
 
 function getDaysLeft(targetDate: Date, now: Date): number {
@@ -102,49 +122,13 @@ function calculateRemindAt(
     return remindAt;
 }
 
-function startOfMonth(date: Date): Date {
-    return new Date(date.getFullYear(), date.getMonth(), 1);
-}
-
-function endOfMonth(date: Date): Date {
-    return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-}
-
-function addMonths(date: Date, months: number): Date {
-    const result = new Date(date);
-    result.setMonth(result.getMonth() + months);
-    return result;
-}
-
-function addBillingCycle(date: Date, billingCycle: BillingCycle): Date | null {
-    const result = new Date(date);
-
-    switch (billingCycle) {
-        case BillingCycle.weekly:
-            result.setDate(result.getDate() + 7);
-            return result;
-        case BillingCycle.monthly:
-            result.setMonth(result.getMonth() + 1);
-            return result;
-        case BillingCycle.yearly:
-            result.setFullYear(result.getFullYear() + 1);
-            return result;
-        case BillingCycle.one_time:
-            return null;
-        case BillingCycle.custom:
-            return null;
-        default:
-            return null;
-    }
-}
-
 function getMonthKey(date: Date): string {
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, "0");
     return `${year}-${month}`;
 }
 
-function getPolishMonthLabel(date: Date): string {
+function getMonthLabel(date: Date): string {
     const labels = [
         "Sty",
         "Lut",
@@ -163,53 +147,47 @@ function getPolishMonthLabel(date: Date): string {
     return labels[date.getMonth()];
 }
 
-function calculatePlannedAmountForMonth(params: {
-    amount: number;
-    currency: string;
-    billingCycle: BillingCycle;
-    nextPaymentDate: Date;
-    monthStart: Date;
-    monthEnd: Date;
-}): number {
-    const amountInPLN = convertToPLN(params.amount, params.currency);
+function addMonths(date: Date, months: number): Date {
+    const next = new Date(date);
+    next.setMonth(next.getMonth() + months);
+    return next;
+}
 
-    if (params.billingCycle === BillingCycle.custom) {
-        return 0;
+function getStartOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth(), 1);
+}
+
+function getEndOfMonth(date: Date): Date {
+    return new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+}
+
+function isSubscriptionActiveInMonth(
+    subscription: {
+        createdAt: Date;
+        status: SubscriptionStatus;
+        updatedAt: Date;
+    },
+    monthStart: Date,
+    monthEnd: Date
+): boolean {
+    if (subscription.createdAt > monthEnd) {
+        return false;
     }
 
-    let paymentDate = new Date(params.nextPaymentDate);
-
-    if (paymentDate < params.monthStart) {
-        while (paymentDate < params.monthStart) {
-            const nextDate = addBillingCycle(paymentDate, params.billingCycle);
-
-            if (!nextDate) {
-                break;
-            }
-
-            paymentDate = nextDate;
-        }
+    if (
+        subscription.status === SubscriptionStatus.canceled &&
+        subscription.updatedAt < monthStart
+    ) {
+        return false;
     }
 
-    let total = 0;
-
-    while (paymentDate >= params.monthStart && paymentDate <= params.monthEnd) {
-        total += amountInPLN;
-
-        const nextDate = addBillingCycle(paymentDate, params.billingCycle);
-
-        if (!nextDate) {
-            break;
-        }
-
-        paymentDate = nextDate;
-    }
-
-    return total;
+    return true;
 }
 
 export async function getDashboardSummaryForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
+
+    const baseCurrency = await getBaseCurrencyForUser(userId);
 
     const subscriptions = await prisma.subscription.findMany({
         where: {
@@ -230,24 +208,28 @@ export async function getDashboardSummaryForUser(userId: string) {
 
     const monthlyTotal = activeSubscriptions.reduce((sum, subscription) => {
         const amount = toNumber(subscription.amount);
+
         return (
             sum +
-            calculateMonthlyEquivalentInPLN(
+            calculateMonthlyEquivalentInCurrency(
                 amount,
                 subscription.currency,
-                subscription.billingCycle
+                subscription.billingCycle,
+                baseCurrency
             )
         );
     }, 0);
 
     const yearlyTotal = activeSubscriptions.reduce((sum, subscription) => {
         const amount = toNumber(subscription.amount);
+
         return (
             sum +
-            calculateYearlyEquivalentInPLN(
+            calculateYearlyEquivalentInCurrency(
                 amount,
                 subscription.currency,
-                subscription.billingCycle
+                subscription.billingCycle,
+                baseCurrency
             )
         );
     }, 0);
@@ -268,7 +250,7 @@ export async function getDashboardSummaryForUser(userId: string) {
     ).length;
 
     return {
-        baseCurrency: BASE_CURRENCY,
+        baseCurrency,
         monthlyTotal: Number(monthlyTotal.toFixed(2)),
         yearlyTotal: Number(yearlyTotal.toFixed(2)),
         activeSubscriptionsCount: activeSubscriptions.length,
@@ -374,6 +356,8 @@ export async function getTrialsForUser(userId: string, days: number = 30) {
 export async function getCategoryBreakdownForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
 
+    const baseCurrency = await getBaseCurrencyForUser(userId);
+
     const subscriptions = await prisma.subscription.findMany({
         where: {
             userId,
@@ -393,10 +377,11 @@ export async function getCategoryBreakdownForUser(userId: string) {
     >();
 
     for (const subscription of subscriptions) {
-        const monthlyAmount = calculateMonthlyEquivalentInPLN(
+        const monthlyAmount = calculateMonthlyEquivalentInCurrency(
             toNumber(subscription.amount),
             subscription.currency,
-            subscription.billingCycle
+            subscription.billingCycle,
+            baseCurrency
         );
 
         if (monthlyAmount <= 0) {
@@ -437,7 +422,7 @@ export async function getCategoryBreakdownForUser(userId: string) {
     }));
 
     return {
-        baseCurrency: BASE_CURRENCY,
+        baseCurrency,
         totalMonthly,
         items: itemsWithPercentage,
     };
@@ -498,6 +483,8 @@ export async function getRemindersForUser(userId: string) {
 export async function getSavingsForUser(userId: string) {
     await syncOverdueSubscriptionsForUser(userId);
 
+    const baseCurrency = await getBaseCurrencyForUser(userId);
+
     const canceledSubscriptions = await prisma.subscription.findMany({
         where: {
             userId,
@@ -520,16 +507,18 @@ export async function getSavingsForUser(userId: string) {
     const items = canceledSubscriptions.map((subscription) => {
         const rawAmount = toNumber(subscription.amount);
 
-        const monthlyAmount = calculateMonthlyEquivalentInPLN(
+        const monthlyAmount = calculateMonthlyEquivalentInCurrency(
             rawAmount,
             subscription.currency,
-            subscription.billingCycle
+            subscription.billingCycle,
+            baseCurrency
         );
 
-        const yearlyAmount = calculateYearlyEquivalentInPLN(
+        const yearlyAmount = calculateYearlyEquivalentInCurrency(
             rawAmount,
             subscription.currency,
-            subscription.billingCycle
+            subscription.billingCycle,
+            baseCurrency
         );
 
         return {
@@ -553,7 +542,7 @@ export async function getSavingsForUser(userId: string) {
     );
 
     return {
-        baseCurrency: BASE_CURRENCY,
+        baseCurrency,
         canceledSubscriptionsCount: items.length,
         monthlySavings,
         yearlySavings,
@@ -567,7 +556,25 @@ export async function getDashboardTrendsForUser(
 ) {
     await syncOverdueSubscriptionsForUser(userId);
 
-    const safeMonths = Number.isNaN(months) || months <= 0 || months > 12 ? 6 : months;
+    const baseCurrency = await getBaseCurrencyForUser(userId);
+
+    const safeMonths = Number.isNaN(months) || months <= 0 || months > 24 ? 6 : months;
+
+    const now = new Date();
+    const startMonth = getStartOfMonth(now);
+
+    const monthBuckets = Array.from({ length: safeMonths }, (_, index) => {
+        const date = addMonths(startMonth, index);
+
+        return {
+            date,
+            monthStart: getStartOfMonth(date),
+            monthEnd: getEndOfMonth(date),
+            month: getMonthKey(date),
+            label: getMonthLabel(date),
+            total: 0,
+        };
+    });
 
     const subscriptions = await prisma.subscription.findMany({
         where: {
@@ -576,50 +583,51 @@ export async function getDashboardTrendsForUser(
                 not: SubscriptionStatus.canceled,
             },
         },
-        select: {
-            id: true,
-            name: true,
-            amount: true,
-            currency: true,
-            billingCycle: true,
-            nextPaymentDate: true,
+        orderBy: {
+            nextPaymentDate: "asc",
         },
     });
 
-    const now = new Date();
-    const firstMonth = startOfMonth(now);
-
-    const items = Array.from({ length: safeMonths }).map((_, index) => {
-        const currentMonth = addMonths(firstMonth, index);
-        const monthStart = startOfMonth(currentMonth);
-        const monthEnd = endOfMonth(currentMonth);
-
+    for (const bucket of monthBuckets) {
         const total = subscriptions.reduce((sum, subscription) => {
+            if (
+                !isSubscriptionActiveInMonth(
+                    {
+                        createdAt: subscription.createdAt,
+                        status: subscription.status,
+                        updatedAt: subscription.updatedAt,
+                    },
+                    bucket.monthStart,
+                    bucket.monthEnd
+                )
+            ) {
+                return sum;
+            }
+
             const amount = toNumber(subscription.amount);
 
-            const plannedAmount = calculatePlannedAmountForMonth({
-                amount,
-                currency: subscription.currency,
-                billingCycle: subscription.billingCycle,
-                nextPaymentDate: subscription.nextPaymentDate,
-                monthStart,
-                monthEnd,
-            });
-
-            return sum + plannedAmount;
+            return (
+                sum +
+                calculateMonthlyEquivalentInCurrency(
+                    amount,
+                    subscription.currency,
+                    subscription.billingCycle,
+                    baseCurrency
+                )
+            );
         }, 0);
 
-        return {
-            month: getMonthKey(currentMonth),
-            label: getPolishMonthLabel(currentMonth),
-            total: Number(total.toFixed(2)),
-        };
-    });
+        bucket.total = Number(total.toFixed(2));
+    }
 
     return {
-        baseCurrency: BASE_CURRENCY,
+        baseCurrency,
         type: "planned",
         months: safeMonths,
-        items,
+        items: monthBuckets.map((bucket) => ({
+            month: bucket.month,
+            label: bucket.label,
+            total: bucket.total,
+        })),
     };
 }
