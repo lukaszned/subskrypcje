@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import subscriptionsRouter from "./routes/subscriptions";
 import usersRouter from "./routes/users";
 import dashboardRouter from "./routes/dashboard";
+import cancelGuideRoutes from "./routes/cancel-guides";
 import { prisma } from "./lib/prisma";
 import { startExchangeRateRefreshJob } from "./services/exchange-rate.service";
 
@@ -41,6 +42,7 @@ app.get("/users", async (_req, res) => {
 app.use("/users", usersRouter);
 app.use("/subscriptions", subscriptionsRouter);
 app.use("/dashboard", dashboardRouter);
+app.use("/cancel-guides", cancelGuideRoutes);
 
 app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT}`);

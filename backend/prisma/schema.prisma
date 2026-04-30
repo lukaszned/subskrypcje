@@ -41,6 +41,12 @@ enum SubscriptionEventType {
   canceled
 }
 
+enum CancelDifficulty {
+  easy
+  medium
+  hard
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -124,11 +130,33 @@ model SubscriptionEvent {
   subscriptionId String
   subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   userId         String
-  user                   User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   type           SubscriptionEventType
   payload        Json?
   createdAt      DateTime              @default(now())
 
   @@index([subscriptionId, createdAt])
   @@index([userId, createdAt])
+}
+
+model ProviderCancelGuide {
+  id                    String               @id @default(cuid())
+  providerName          String
+  providerSlug          String               @unique
+  category              SubscriptionCategory
+  logoKey               String?
+  cancelUrl             String?
+  supportUrl            String?
+  difficulty            CancelDifficulty     @default(medium)
+  estimatedTimeMinutes  Int                  @default(5)
+  instructions          String[]
+  notes                 String?
+  matchingKeywords      String[]
+  isActive              Boolean              @default(true)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([providerSlug])
+  @@index([category])
+  @@index([isActive])
 }
