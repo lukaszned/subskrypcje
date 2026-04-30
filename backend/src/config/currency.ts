@@ -4,6 +4,8 @@ export const SUPPORTED_CURRENCIES = ["PLN", "EUR", "USD"] as const;
 
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
+export type CurrencyCode = SupportedCurrency;
+
 const DEFAULT_EXCHANGE_RATES_TO_PLN: Record<SupportedCurrency, number> = {
     PLN: 1,
     EUR: 4.3,

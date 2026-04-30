@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { requireAuth } from "../middlewares/auth.middleware";
 import {
-  getCategoryBreakdownHandler,
   getBudgetImpactHandler,
+  getCategoryBreakdownHandler,
   getDashboardSummaryHandler,
   getDashboardTrendsHandler,
   getNotificationPreviewHandler,
@@ -10,12 +10,10 @@ import {
   getSavingsHandler,
   getTrialsHandler,
   getUpcomingPaymentsHandler,
-  getDashboardOverviewHandler,
 } from "../controllers/dashboard.controller";
 
 const router = Router();
 
-router.get("/overview", requireAuth, getDashboardOverviewHandler);
 router.get("/summary", requireAuth, getDashboardSummaryHandler);
 router.get("/upcoming", requireAuth, getUpcomingPaymentsHandler);
 router.get("/trials", requireAuth, getTrialsHandler);
