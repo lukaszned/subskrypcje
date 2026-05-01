@@ -25,14 +25,21 @@ import {
   Activity,
   Sun,
   Moon,
-  Settings
+  Settings,
+  Wallet
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 
 // App imports
 import { AppStackParamList } from '../../App';
-import { useDashboardOverview } from '../hooks/useDashboardOverview';
+import { useDashboardSummary } from '../hooks/useDashboardSummary';
+import { useUpcomingPayments } from '../hooks/useUpcomingPayments';
+import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
+import { useTrials } from '../hooks/useTrials';
+import { useDashboardSavings } from '../hooks/useDashboardSavings';
+import { useDashboardTrends } from '../hooks/useDashboardTrends';
+import { useReminders } from '../hooks/useReminders';
 import { useUserSettings } from '../hooks/useUserSettings';
 import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
@@ -80,26 +87,26 @@ export const DashboardScreen = () => {
   const [notifPermission, setNotifPermission] = useState<string>('granted');
 
   // Data
-  const { data: overview, isLoading: isOverviewLoading, isError: isOverviewError, error: overviewError, refetch } = useDashboardOverview();
+  const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useDashboardSummary();
+  const { data: upcomingData, isLoading: isUpcomingLoading, refetch: refetchUpcoming } = useUpcomingPayments(30);
+  const { data: breakdownData, isLoading: isBreakdownLoading, refetch: refetchBreakdown } = useCategoryBreakdown();
+  const { data: trialsData, isLoading: isTrialsLoading, refetch: refetchTrials } = useTrials(30);
+  const { data: savingsData, isLoading: isSavingsLoading, refetch: refetchSavings } = useDashboardSavings();
+  const { data: trendsData, isLoading: isTrendsLoading, refetch: refetchTrends } = useDashboardTrends(6);
+  const { data: remindersData, refetch: refetchReminders } = useReminders();
+
   const { data: settings, isLoading: isSettingsLoading, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useUserSettings();
   const { data: budgetImpact, isLoading: isBudgetLoading } = useBudgetImpact();
   const { data: notifPreview } = useNotificationPreview();
 
-  const isLoading = isOverviewLoading || isSettingsLoading || isBudgetLoading;
-  const isError = isOverviewError || isSettingsError;
-  const hasData = !!overview;
+  const isLoading = isSummaryLoading || isUpcomingLoading || isBreakdownLoading || isTrialsLoading || isSavingsLoading || isTrendsLoading || isSettingsLoading || isBudgetLoading;
+  const isError = isSummaryError || isSettingsError;
+  const hasData = !!summaryData;
 
   // DIAGNOSTIC LOGGING
   console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
-  if (isOverviewError) console.error('[DashboardScreen] Overview Error:', overviewError);
+  if (isSummaryError) console.error('[DashboardScreen] Summary Error');
   if (isSettingsError) console.error('[DashboardScreen] Settings Error:', settingsError);
-
-  const summaryData = overview?.summary;
-  const upcomingData = overview?.upcoming;
-  const breakdownData = overview?.breakdown;
-  const trialsData = overview?.trials;
-  const savingsData = overview?.savings;
-  const trendsData = overview?.trends;
 
   const monthlyTotal = summaryData?.monthlyTotal ?? 0;
   const yearlyTotal = summaryData?.yearlyTotal ?? 0;
@@ -144,7 +151,7 @@ export const DashboardScreen = () => {
 
   // Sync Notifications
   useEffect(() => {
-    const reminderItems = overview?.reminders?.items;
+    const reminderItems = remindersData?.items;
     if (reminderItems && Array.isArray(reminderItems) && reminderItems.length > 0) {
       // Synchronizujemy powiadomienia w tle, nie blokujemy UI
       (async () => {
@@ -155,7 +162,7 @@ export const DashboardScreen = () => {
         }
       })();
     }
-  }, [overview]);
+  }, [remindersData]);
 
   useEffect(() => {
     const checkPermissions = async () => {
@@ -169,9 +176,14 @@ export const DashboardScreen = () => {
     setIsRefreshing(true);
     try {
       await Promise.all([
-        refetch(),
+        refetchSummary(),
+        refetchUpcoming(),
+        refetchBreakdown(),
+        refetchTrials(),
+        refetchSavings(),
+        refetchTrends(),
+        refetchReminders(),
         refetchSettings(),
-        // New hooks will refetch automatically if we reset query client or just call their refetch
       ]);
     } catch (e) {
       console.warn('Refresh failed', e);
@@ -982,8 +994,8 @@ export const DashboardScreen = () => {
   }
 
   if (isError && !hasData) {
-    const errorDetails = isOverviewError 
-      ? `Overview Error: ${overviewError?.message || JSON.stringify(overviewError)}` 
+    const errorDetails = isSummaryError
+      ? `Summary Error: ${summaryError?.message || JSON.stringify(summaryError)}`
       : isSettingsError ? `Settings Error: ${settingsError?.message || JSON.stringify(settingsError)}` : 'Unknown error';
 
     const checkConnectivity = async () => {

@@ -13,6 +13,7 @@ interface SkeletonProps {
   height: number | string;
   borderRadius?: number;
   style?: ViewStyle;
+  isDark?: boolean;
 }
 
 export const Skeleton: React.FC<SkeletonProps> = ({
@@ -20,6 +21,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   height,
   borderRadius = 8,
   style,
+  isDark = false,
 }) => {
   const opacity = useRef(new Animated.Value(0.3)).current;
 
@@ -32,10 +34,12 @@ export const Skeleton: React.FC<SkeletonProps> = ({
     ).start();
   }, [opacity]);
 
+  const backgroundColor = isDark ? '#334155' : '#E2E8F0';
+
   return (
     <Animated.View
       style={[
-        { width: width as any, height, backgroundColor: '#E2E8F0', borderRadius, opacity },
+        { width: width as any, height, backgroundColor, borderRadius, opacity },
         style,
       ]}
     />
@@ -44,16 +48,16 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 
 // ─── Preset: lista wierszy ────────────────────────────────────
 
-export const SkeletonList: React.FC<{ rows?: number }> = ({ rows = 4 }) => (
+export const SkeletonList: React.FC<{ rows?: number, isDark?: boolean }> = ({ rows = 4, isDark }) => (
   <View style={styles.listContainer}>
     {Array.from({ length: rows }).map((_, i) => (
-      <View key={i} style={styles.row}>
-        <Skeleton width={48} height={48} borderRadius={24} style={styles.avatar} />
+      <View key={i} style={[styles.row, isDark && { borderBottomColor: '#1E293B' }]}>
+        <Skeleton width={48} height={48} borderRadius={24} style={styles.avatar} isDark={isDark} />
         <View style={styles.rowContent}>
-          <Skeleton width={140} height={16} style={styles.mb8} />
-          <Skeleton width={90} height={12} />
+          <Skeleton width={140} height={16} style={styles.mb8} isDark={isDark} />
+          <Skeleton width={90} height={12} isDark={isDark} />
         </View>
-        <Skeleton width={70} height={20} borderRadius={6} />
+        <Skeleton width={70} height={20} borderRadius={6} isDark={isDark} />
       </View>
     ))}
   </View>
@@ -61,10 +65,10 @@ export const SkeletonList: React.FC<{ rows?: number }> = ({ rows = 4 }) => (
 
 // ─── Preset: karty poziome ────────────────────────────────────
 
-export const SkeletonCards: React.FC<{ count?: number }> = ({ count = 3 }) => (
+export const SkeletonCards: React.FC<{ count?: number, isDark?: boolean }> = ({ count = 3, isDark }) => (
   <View style={styles.cardsRow}>
     {Array.from({ length: count }).map((_, i) => (
-      <Skeleton key={i} width={140} height={110} borderRadius={16} style={styles.card} />
+      <Skeleton key={i} width={140} height={110} borderRadius={16} style={styles.card} isDark={isDark} />
     ))}
   </View>
 );

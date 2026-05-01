@@ -65,6 +65,9 @@ export interface Subscription {
   cancelUrl: string | null;
   notes: string | null;
   status: SubscriptionStatus;
+  isShared?: boolean;
+  peopleCount?: number;
+  includeInStats?: boolean;
   createdAt: string;
   updatedAt: string;
   userId: string;
@@ -86,6 +89,9 @@ export interface CreateSubscriptionPayload {
   paymentMethodLabel?: string;
   cancelUrl?: string;
   notes?: string;
+  isShared?: boolean;
+  peopleCount?: number;
+  includeInStats?: boolean;
 }
 
 export type UpdateSubscriptionPayload = Partial<CreateSubscriptionPayload>;
@@ -334,4 +340,19 @@ export interface NotificationPreviewResponse {
   count: number;
   nextReminder: NotificationPreviewItem | null;
   items: NotificationPreviewItem[];
+}
+
+export interface CancelGuide {
+  providerName: string;
+  providerSlug: string;
+  category: string;
+  logoKey: string | null;
+  cancelUrl: string | null;
+  supportUrl: string | null;
+  difficulty: 'easy' | 'medium' | 'hard';
+  estimatedTimeMinutes: number;
+  instructions: string[];
+  notes: string | null;
+  matchingKeywords: string[];
+  isActive: boolean;
 }

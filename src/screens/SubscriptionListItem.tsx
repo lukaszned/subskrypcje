@@ -39,6 +39,7 @@ interface Props {
   onDelete: (id: string) => void;
   /** Semantycznie: oznacz jako opłaconą */
   onPause: (id: string) => void;
+  onPress?: () => void;
 }
 
 // Mapowanie etykiet kategorii -> kolor tła awatara
@@ -59,7 +60,7 @@ function getCategoryStyle(category: string) {
   return CATEGORY_COLORS[key] ?? { bg: '#F1F5F9', text: '#64748B' };
 }
 
-const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
+const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
   const catStyle = getCategoryStyle(item.category);
   const isCancelled = item.status === 'canceled';
 
@@ -123,7 +124,11 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
       friction={2}
       rightThreshold={40}
     >
-      <View style={[styles.rowContainer, isCancelled && styles.rowContainerCancelled]}>
+      <TouchableOpacity 
+        style={[styles.rowContainer, isCancelled && styles.rowContainerCancelled]}
+        onPress={onPress}
+        activeOpacity={0.7}
+      >
         {/* Avatar */}
         <View
           style={[
@@ -170,7 +175,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause }) => {
             <Text style={styles.cycleText}>{item.cycle}</Text>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
     </Swipeable>
   );
 };

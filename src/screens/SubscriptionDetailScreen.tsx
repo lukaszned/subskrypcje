@@ -19,10 +19,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   ArrowLeft, Edit, Trash2, Calendar, CreditCard, 
-  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight
+  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { AppStackParamList } from '../../App';
+import { CancelAssistantModal } from '../components/CancelAssistantModal';
 
 // Hooks
 import { useSubscription } from '../hooks/useSubscription';
@@ -45,6 +46,8 @@ export const SubscriptionDetailScreen = () => {
   const deleteMutation = useDeleteSubscription();
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
+
+  const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
 
   const isLoading = isSubLoading || isHistoryLoading || isPaymentsLoading;
 
@@ -92,17 +95,21 @@ export const SubscriptionDetailScreen = () => {
   };
 
   const handleCancel = () => {
-    Alert.alert('Anuluj subskrypcję', 'Czy na pewno chcesz oznaczyć tę subskrypcję jako anulowaną?', [
-      { text: 'Nie', style: 'cancel' },
-      { 
-        text: 'Tak, anuluj', 
-        onPress: () => cancelMutation.mutate(id) 
-      },
-    ]);
+    setIsCancelModalVisible(true);
   };
 
   const nextDate = new Date(sub.nextPaymentDate);
   const diffDays = Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+
+  let parsedNotes = { text: sub.notes || '', isShared: false, peopleCount: undefined as number | undefined };
+  try {
+    if (sub.notes?.startsWith('{')) {
+      const parsed = JSON.parse(sub.notes);
+      if (parsed.text !== undefined) parsedNotes.text = parsed.text;
+      if (parsed.isShared !== undefined) parsedNotes.isShared = parsed.isShared;
+      if (parsed.peopleCount !== undefined) parsedNotes.peopleCount = parsed.peopleCount;
+    }
+  } catch(e) {}
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -165,6 +172,16 @@ export const SubscriptionDetailScreen = () => {
             </View>
           </View>
 
+          {parsedNotes.isShared && parsedNotes.peopleCount && (
+            <View style={styles.infoRow}>
+              <Users size={20} color="#94A3B8" />
+              <View style={styles.infoTextContainer}>
+                <Text style={styles.infoLabel}>Współdzielenie</Text>
+                <Text style={styles.infoValue}>Koszt podzielony na {parsedNotes.peopleCount} osoby</Text>
+              </View>
+            </View>
+          )}
+
           {sub.isTrial && sub.trialEndDate && (
             <View style={[styles.infoRow, { backgroundColor: '#FFFBEB', padding: 12, borderRadius: 16, marginBottom: 12 }]}>
               <Clock size={20} color="#F59E0B" />
@@ -191,12 +208,12 @@ export const SubscriptionDetailScreen = () => {
           )}
         </View>
 
-        {sub.notes && (
+        {parsedNotes.text ? (
           <View style={styles.infoCard}>
             <Text style={styles.infoLabel}>Notatki</Text>
-            <Text style={styles.notesText}>{sub.notes}</Text>
+            <Text style={styles.notesText}>{parsedNotes.text}</Text>
           </View>
-        )}
+        ) : null}
 
         <View style={styles.infoCard}>
           <View style={styles.sectionHeader}>
@@ -276,6 +293,14 @@ export const SubscriptionDetailScreen = () => {
           <Text style={styles.deleteBtnText}>Usuń subskrypcję na stałe</Text>
         </TouchableOpacity>
       </ScrollView>
+
+      <CancelAssistantModal
+        isVisible={isCancelModalVisible}
+        onClose={() => setIsCancelModalVisible(false)}
+        subscriptionId={id}
+        subscriptionName={sub.name}
+        onConfirmCancel={() => cancelMutation.mutate(id)}
+      />
     </SafeAreaView>
   );
 };

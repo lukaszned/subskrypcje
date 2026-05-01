@@ -40,12 +40,14 @@ export const SettingsScreen = () => {
   }, [settings]);
 
   const handleSave = () => {
+    const parsedIncome = income ? parseFloat(income.replace(',', '.')) : null;
+
     updateMutation.mutate({
       baseCurrency: currency,
       defaultReminderDaysBefore: reminderDays,
       notificationsEnabled: notifsEnabled,
       emailReportsEnabled: emailsEnabled,
-      monthlyIncome: income ? parseFloat(income) : null,
+      monthlyIncome: parsedIncome,
       incomeCurrency: incomeCurrency,
     }, {
       onSuccess: () => {

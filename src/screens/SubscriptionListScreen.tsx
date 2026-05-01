@@ -161,6 +161,7 @@ export const SubscriptionListScreen = () => {
         }}
         onDelete={(id) => handleCancel(id, item.name)}
         onPause={(id) => handlePay(id, item.name)}
+        onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
       />
     );
   };

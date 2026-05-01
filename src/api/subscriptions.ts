@@ -15,6 +15,7 @@ import {
   UpdateSubscriptionPayload,
   SubscriptionHistoryResponse,
   SubscriptionPaymentsResponse,
+  CancelGuide,
 } from '../types/api';
 
 // ─────────────────────────────────────────────────────────────
@@ -108,4 +109,17 @@ export async function cancelSubscription(id: string): Promise<Subscription> {
 
 export async function deleteSubscription(id: string): Promise<void> {
   return apiDelete(`/subscriptions/${id}`);
+}
+
+export async function getSubscriptionCancelGuide(id: string): Promise<CancelGuide | null> {
+  try {
+    const data = await apiGet<CancelGuide>(`/subscriptions/${id}/cancel-guide`);
+    return data;
+  } catch (error: any) {
+    // If no guide is found, return null instead of throwing (usually it might return 404)
+    if (error?.status === 404 || error?.response?.status === 404) {
+      return null;
+    }
+    throw error;
+  }
 }

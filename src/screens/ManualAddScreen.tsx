@@ -68,19 +68,20 @@ interface PopularSubscription {
   category: SubscriptionCategory;
   color: string;
   provider: string;
+  availablePlans?: number[];
 }
 
 const POPULAR_SUBSCRIPTIONS: PopularSubscription[] = [
-  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix' },
-  { name: 'Spotify', defaultPrice: '24.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify' },
-  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google' },
-  { name: 'Disney+', defaultPrice: '37.99', category: 'entertainment', color: '#006E99', provider: 'Disney' },
+  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix', availablePlans: [29, 43, 60] },
+  { name: 'Spotify', defaultPrice: '24.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify', availablePlans: [24.99, 32.99] },
+  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [25.99, 46.99] },
+  { name: 'Disney+', defaultPrice: '37.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [37.99, 379.90] },
   { name: 'HBO Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros' },
   { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon' },
   { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple' },
-  { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple' },
+  { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple', availablePlans: [3.99, 14.99, 49.99] },
   { name: 'ChatGPT Plus', defaultPrice: '20.00', category: 'productivity', color: '#10A37F', provider: 'OpenAI' },
-  { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony' },
+  { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony', availablePlans: [37, 58, 70] },
 ];
 
 export const ManualAddScreen = () => {
@@ -108,7 +109,18 @@ export const ManualAddScreen = () => {
   const [notes, setNotes] = useState('');
   const [cancelUrl, setCancelUrl] = useState('');
 
+  const [selectedService, setSelectedService] = useState<PopularSubscription | null>(null);
+  const [isShared, setIsShared] = useState(false);
+  const [peopleCount, setPeopleCount] = useState(2);
+  const [includeInStats, setIncludeInStats] = useState(true);
+
   const parsedAmount = parseFloat(amount.replace(',', '.'));
+  const finalCalculatedCost = useMemo(() => {
+    if (isNaN(parsedAmount)) return 0;
+    if (isShared && peopleCount > 0) return parsedAmount / peopleCount;
+    return parsedAmount;
+  }, [parsedAmount, isShared, peopleCount]);
+
   const [isSubmitted, setIsSubmitted] = useState(false);
 
   // Suggestions logic
@@ -121,12 +133,22 @@ export const ManualAddScreen = () => {
 
   const handleSelectPopular = (service: PopularSubscription) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-    setName(service.name);
-    setAmount(service.defaultPrice);
-    setCategory(service.category);
-    setProvider(service.provider);
-    if (service.name.includes('ChatGPT')) setCurrency('USD');
-    else setCurrency('PLN');
+    if (selectedService?.name === service.name) {
+      setSelectedService(null);
+      setName('');
+      setAmount('');
+      setCategory('entertainment');
+      setProvider('');
+      setCurrency('PLN');
+    } else {
+      setSelectedService(service);
+      setName(service.name);
+      setAmount(service.defaultPrice);
+      setCategory(service.category);
+      setProvider(service.provider);
+      if (service.name.includes('ChatGPT')) setCurrency('USD');
+      else setCurrency('PLN');
+    }
     
     Keyboard.dismiss();
   };
@@ -142,7 +164,25 @@ export const ManualAddScreen = () => {
       setCategory(existingSub.category);
       setCurrency(existingSub.currency || 'PLN');
       setIsTrial(existingSub.isTrial);
-      setNotes(existingSub.notes || '');
+      setCancelUrl(existingSub.cancelUrl || '');
+
+      let parsedText = existingSub.notes || '';
+      try {
+        if (existingSub.notes?.startsWith('{')) {
+          const parsed = JSON.parse(existingSub.notes);
+          if (parsed.text !== undefined) parsedText = parsed.text;
+          if (parsed.isShared !== undefined) setIsShared(parsed.isShared);
+          if (parsed.peopleCount !== undefined) setPeopleCount(parsed.peopleCount);
+          if (parsed.includeInStats !== undefined) setIncludeInStats(parsed.includeInStats);
+          
+          if (parsed.isShared && parsed.peopleCount && existingSub.amount) {
+            setAmount((existingSub.amount * parsed.peopleCount).toString());
+          }
+        }
+      } catch (e) {
+        // Not a JSON string
+      }
+      setNotes(parsedText);
       setCancelUrl(existingSub.cancelUrl || '');
       if (existingSub.nextPaymentDate) {
         setDate(new Date(existingSub.nextPaymentDate));
@@ -171,9 +211,16 @@ export const ManualAddScreen = () => {
     setIsSubmitted(true);
     if (!isValid || createMutation.isPending || updateMutation.isPending) return;
 
+    const notesPayload = JSON.stringify({
+      text: notes.trim(),
+      isShared,
+      peopleCount: isShared ? peopleCount : undefined,
+      includeInStats,
+    });
+
     const payload = {
       name: name.trim(),
-      amount: parsedAmount,
+      amount: finalCalculatedCost,
       currency,
       category,
       billingCycle: cycle,
@@ -181,7 +228,7 @@ export const ManualAddScreen = () => {
       nextPaymentDate: date.toISOString().split('T')[0],
       isTrial,
       trialEndDate: isTrial ? trialEndDate.toISOString().split('T')[0] : undefined,
-      notes: notes.trim() || undefined,
+      notes: notesPayload,
       cancelUrl: cancelUrl.trim() || undefined,
       reminderDaysBefore: 1,
     };
@@ -243,17 +290,39 @@ export const ManualAddScreen = () => {
             >
               <View style={styles.amountHeader}>
                 <Text style={styles.amountLabel}>Miesięczny koszt</Text>
-                <View style={styles.amountRow}>
-                  <TextInput
-                    style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: '#FECACA' }]}
-                    value={amount}
-                    onChangeText={setAmount}
-                    keyboardType="decimal-pad"
-                    placeholder="0.00"
-                    placeholderTextColor="rgba(255,255,255,0.4)"
-                  />
-                  <Text style={styles.currencyLabel}>{currency}</Text>
-                </View>
+                {selectedService?.availablePlans && selectedService.availablePlans.length > 0 ? (
+                  <View style={{ marginTop: 10, alignItems: 'center' }}>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 20 }}>
+                      {selectedService.availablePlans.map((planPrice) => (
+                        <TouchableOpacity
+                          key={planPrice}
+                          style={[
+                            styles.planPill,
+                            parsedAmount === planPrice && styles.planPillActive
+                          ]}
+                          onPress={() => setAmount(planPrice.toString())}
+                        >
+                          <Text style={[styles.planPillText, parsedAmount === planPrice && styles.planPillTextActive]}>
+                            {planPrice.toFixed(2)}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                ) : (
+                  <View style={styles.amountRow}>
+                    <TextInput
+                      style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: '#FECACA' }]}
+                      value={amount}
+                      onChangeText={setAmount}
+                      keyboardType="decimal-pad"
+                      placeholder="0.00"
+                      placeholderTextColor="rgba(255,255,255,0.4)"
+                    />
+                    <Text style={styles.currencyLabel}>{currency}</Text>
+                  </View>
+                )}
+                
                 <View style={styles.currencyPills}>
                   {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
                     <TouchableOpacity 
@@ -427,6 +496,65 @@ export const ManualAddScreen = () => {
                   />
                 </View>
 
+                <View style={styles.inputGroup}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.label}>Czy współdzielisz tę subskrypcję?</Text>
+                    <TouchableOpacity 
+                      onPress={() => {
+                        LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                        setIsShared(!isShared);
+                      }}
+                      style={[styles.toggle, isShared && styles.toggleActive]}
+                    >
+                      <View style={[styles.toggleDot, isShared && styles.toggleDotActive]} />
+                    </TouchableOpacity>
+                  </View>
+                  
+                  {isShared && (
+                    <View style={{ marginTop: 16, backgroundColor: '#F8FAFC', padding: 16, borderRadius: 16 }}>
+                      <Text style={[styles.label, { marginBottom: 12 }]}>Liczba osób</Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+                        <TouchableOpacity 
+                          style={styles.stepperBtn}
+                          onPress={() => setPeopleCount(Math.max(2, peopleCount - 1))}
+                        >
+                          <Text style={styles.stepperBtnText}>-</Text>
+                        </TouchableOpacity>
+                        <Text style={{ fontSize: 24, fontWeight: '700', color: '#0F172A', minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
+                        <TouchableOpacity 
+                          style={styles.stepperBtn}
+                          onPress={() => setPeopleCount(peopleCount + 1)}
+                        >
+                          <Text style={styles.stepperBtnText}>+</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                  
+                  {isShared && parsedAmount > 0 && (
+                    <View style={{ marginTop: 12, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#10B981' }}>
+                        Twój koszt: {finalCalculatedCost.toFixed(2)} {currency}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <View style={styles.rowBetween}>
+                    <Text style={styles.label}>Statystyki</Text>
+                    <TouchableOpacity 
+                      onPress={() => setIncludeInStats(!includeInStats)}
+                      style={[styles.toggle, includeInStats && styles.toggleActive]}
+                    >
+                      <View style={[styles.toggleDot, includeInStats && styles.toggleDotActive]} />
+                    </TouchableOpacity>
+                  </View>
+                  <Text style={[styles.infoBoxText, { marginTop: 8, color: '#64748B' }]}>
+                    Uwzględniaj w statystykach miesięcznych. Wyłączenie spowoduje, że koszt tej usługi nie będzie doliczany do głównego wykresu wydatków.
+                  </Text>
+                </View>
+
                 <TouchableOpacity
                   style={[styles.saveButton, isLoading && styles.saveButtonLoading]}
                   onPress={handleSave}
@@ -586,6 +714,40 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#334155',
+  },
+  planPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
+  planPillActive: {
+    backgroundColor: '#FFFFFF',
+    borderColor: '#FFFFFF',
+  },
+  planPillText: {
+    color: 'rgba(255,255,255,0.8)',
+    fontWeight: '700',
+    fontSize: 16,
+  },
+  planPillTextActive: {
+    color: '#6366F1',
+  },
+  stepperBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E2E8F0',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stepperBtnText: {
+    fontSize: 24,
+    fontWeight: '600',
+    color: '#334155',
+    lineHeight: 28,
   },
 });
 
