@@ -3,6 +3,7 @@ import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
     getBudgetImpactForUser,
     getCategoryBreakdownForUser,
+    getDashboardActivityForUser,
     getDashboardSummaryForUser,
     getDashboardTrendsForUser,
     getNotificationPreviewForUser,
@@ -235,6 +236,39 @@ export async function getBudgetImpactHandler(
         return res.json(budgetImpact);
     } catch (error) {
         console.error("Error fetching budget impact:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function getDashboardActivityHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const limitParam = req.query.limit ? Number(req.query.limit) : 10;
+        const limit =
+            Number.isNaN(limitParam) || limitParam <= 0 || limitParam > 50
+                ? 10
+                : limitParam;
+
+        const activity = await getDashboardActivityForUser(
+            req.appUser.id,
+            limit
+        );
+
+        return res.json(activity);
+    } catch (error) {
+        console.error("Error fetching dashboard activity:", error);
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",

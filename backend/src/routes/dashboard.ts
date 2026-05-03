@@ -3,6 +3,7 @@ import { requireAuth } from "../middlewares/auth.middleware";
 import {
   getBudgetImpactHandler,
   getCategoryBreakdownHandler,
+  getDashboardActivityHandler,
   getDashboardSummaryHandler,
   getDashboardTrendsHandler,
   getNotificationPreviewHandler,
@@ -23,5 +24,6 @@ router.get("/notification-preview", requireAuth, getNotificationPreviewHandler);
 router.get("/savings", requireAuth, getSavingsHandler);
 router.get("/trends", requireAuth, getDashboardTrendsHandler);
 router.get("/budget-impact", requireAuth, getBudgetImpactHandler);
+router.get("/activity", requireAuth, getDashboardActivityHandler);
 
 export default router;

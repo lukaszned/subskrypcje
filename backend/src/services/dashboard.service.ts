@@ -2,6 +2,7 @@ import { prisma } from "../lib/prisma";
 import {
     BillingCycle,
     SubscriptionCategory,
+    SubscriptionEventType,
     SubscriptionStatus,
 } from "@prisma/client";
 import { syncOverdueSubscriptionsForUser } from "./subscription.service";
@@ -852,5 +853,95 @@ export async function getBudgetImpactForUser(userId: string) {
         subscriptionsIncomePercentage: Number(
             subscriptionsIncomePercentage.toFixed(2)
         ),
+    };
+}
+function buildActivityMessage(params: {
+    type: SubscriptionEventType;
+    subscriptionName: string;
+    provider: string | null;
+}): string {
+    const displayName = params.provider
+        ? `${params.subscriptionName} (${params.provider})`
+        : params.subscriptionName;
+
+    switch (params.type) {
+        case SubscriptionEventType.created:
+            return `Dodano subskrypcję ${displayName}`;
+        case SubscriptionEventType.updated:
+            return `Zaktualizowano subskrypcję ${displayName}`;
+        case SubscriptionEventType.paid:
+            return `Odnotowano płatność dla ${displayName}`;
+        case SubscriptionEventType.canceled:
+            return `Anulowano subskrypcję ${displayName}`;
+        default:
+            return `Zarejestrowano aktywność dla ${displayName}`;
+    }
+}
+
+export async function getDashboardActivityForUser(
+    userId: string,
+    limit: number = 10
+) {
+    const safeLimit =
+        Number.isNaN(limit) || limit <= 0 || limit > 50 ? 10 : limit;
+
+    const events = await prisma.subscriptionEvent.findMany({
+        where: {
+            userId,
+        },
+        orderBy: {
+            createdAt: "desc",
+        },
+        take: safeLimit,
+        include: {
+            subscription: {
+                select: {
+                    id: true,
+                    name: true,
+                    provider: true,
+                    amount: true,
+                    currency: true,
+                    status: true,
+                    nextPaymentDate: true,
+                    lastPaymentDate: true,
+                    category: true,
+                    billingCycle: true,
+                },
+            },
+        },
+    });
+
+    const items = events.map((event) => {
+        const subscription = event.subscription;
+
+        return {
+            id: event.id,
+            type: event.type,
+            message: buildActivityMessage({
+                type: event.type,
+                subscriptionName: subscription.name,
+                provider: subscription.provider,
+            }),
+            payload: event.payload,
+            createdAt: event.createdAt,
+            subscription: {
+                id: subscription.id,
+                name: subscription.name,
+                provider: subscription.provider,
+                amount: Number(toNumber(subscription.amount).toFixed(2)),
+                currency: subscription.currency,
+                status: subscription.status,
+                nextPaymentDate: subscription.nextPaymentDate,
+                lastPaymentDate: subscription.lastPaymentDate,
+                category: subscription.category,
+                billingCycle: subscription.billingCycle,
+            },
+        };
+    });
+
+    return {
+        count: items.length,
+        limit: safeLimit,
+        items,
     };
 }
