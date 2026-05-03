@@ -11,12 +11,14 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet } from 'lucide-react-native';
+import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet, User, LogOut } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
+import { useAuth } from '../context/AuthContext';
 
 export const SettingsScreen = () => {
   const navigation = useNavigation();
+  const { user, signOut } = useAuth();
   const { data: settings, isLoading } = useUserSettings();
   const updateMutation = useUpdateUserSettings();
 
@@ -59,6 +61,21 @@ export const SettingsScreen = () => {
     });
   };
 
+  const renderProfileHeader = () => (
+    <View style={styles.profileHeader}>
+      <View style={styles.avatarContainer}>
+        <User size={32} color="#FFFFFF" />
+      </View>
+      <View style={styles.profileInfo}>
+        <Text style={styles.profileName}>{user?.email?.split('@')[0] || 'Użytkownik'}</Text>
+        <Text style={styles.profileEmail}>{user?.email || 'brak email'}</Text>
+        <View style={styles.badge}>
+          <Text style={styles.badgeText}>Plan Premium</Text>
+        </View>
+      </View>
+    </View>
+  );
+
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -88,7 +105,8 @@ export const SettingsScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {renderProfileHeader()}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Finanse</Text>
           
@@ -213,6 +231,23 @@ export const SettingsScreen = () => {
         <View style={styles.footer}>
           <Text style={styles.versionText}>Sub-Sentry v1.0.0 (MVP)</Text>
           <Text style={styles.footerInfo}>Twoje dane są bezpieczne i szyfrowane.</Text>
+          
+          <TouchableOpacity 
+            style={styles.logoutBtn} 
+            onPress={() => {
+              Alert.alert(
+                'Wyloguj się',
+                'Czy na pewno chcesz się wylogować?',
+                [
+                  { text: 'Anuluj', style: 'cancel' },
+                  { text: 'Wyloguj', style: 'destructive', onPress: signOut }
+                ]
+              );
+            }}
+          >
+            <LogOut size={20} color="#EF4444" />
+            <Text style={styles.logoutBtnText}>Wyloguj się</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -336,9 +371,75 @@ const styles = StyleSheet.create({
   miniPillTextActive: {
     color: '#6366F1',
   },
-  footer: { marginTop: 20, alignItems: 'center' },
+  profileHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    marginBottom: 24,
+    shadowColor: '#64748B',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 12,
+    elevation: 3,
+  },
+  avatarContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: '#6366F1',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16,
+  },
+  profileInfo: {
+    flex: 1,
+  },
+  profileName: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  profileEmail: {
+    fontSize: 14,
+    color: '#64748B',
+    marginTop: 2,
+  },
+  badge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#EEF2FF',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: '#6366F1',
+  },
+  badgeText: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: '#6366F1',
+    textTransform: 'uppercase',
+  },
+  footer: { marginTop: 20, marginBottom: 40, alignItems: 'center' },
   versionText: { fontSize: 13, fontWeight: '600', color: '#94A3B8' },
   footerInfo: { fontSize: 12, color: '#CBD5E1', marginTop: 4 },
+  logoutBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 32,
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 16,
+    backgroundColor: '#FFF1F2',
+  },
+  logoutBtnText: {
+    color: '#EF4444',
+    fontWeight: '700',
+    fontSize: 16,
+  },
 });
 
 export default SettingsScreen;

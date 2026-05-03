@@ -26,7 +26,9 @@ import {
   Sun,
   Moon,
   Settings,
-  Wallet
+  Wallet,
+  List,
+  Lightbulb
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -147,6 +149,14 @@ export const DashboardScreen = () => {
     const items = trendsData.items;
     const maxAmount = Math.max(...items.map(i => i.amount), 1);
     return { items, maxAmount };
+  }, [trendsData]);
+
+  // Check if user has history (expenses in previous months)
+  const hasHistory = useMemo(() => {
+    if (!trendsData?.items || trendsData.items.length <= 1) return false;
+    // Check all months except the last one (current month)
+    const pastItems = trendsData.items.slice(0, -1);
+    return pastItems.some(i => i.amount > 0);
   }, [trendsData]);
 
   // Sync Notifications
@@ -292,6 +302,35 @@ export const DashboardScreen = () => {
       paddingTop: 20,
       borderTopWidth: 1,
       borderTopColor: theme.border,
+    },
+    mySubscriptionsBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+      borderRadius: 16,
+      padding: 16,
+      marginTop: 20,
+      borderWidth: 1,
+      borderColor: isDark ? '#334155' : '#E0E7FF',
+    },
+    mySubscriptionsBtnContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    mySubscriptionsBtnIcon: {
+      width: 40,
+      height: 40,
+      borderRadius: 12,
+      backgroundColor: theme.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    mySubscriptionsBtnText: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: theme.primary,
     },
     statBox: {
       flex: 1,
@@ -795,6 +834,20 @@ export const DashboardScreen = () => {
           </View>
         </View>
 
+        <TouchableOpacity 
+          style={dynamicStyles.mySubscriptionsBtn} 
+          onPress={() => navigation.navigate('SubscriptionList')}
+          activeOpacity={0.8}
+        >
+          <View style={dynamicStyles.mySubscriptionsBtnContent}>
+            <View style={dynamicStyles.mySubscriptionsBtnIcon}>
+              <List size={20} color="#FFFFFF" />
+            </View>
+            <Text style={dynamicStyles.mySubscriptionsBtnText}>Moje subskrypcje</Text>
+          </View>
+          <ArrowRight size={20} color={theme.primary} />
+        </TouchableOpacity>
+
         {notifPermission !== 'granted' && (
           <View style={[dynamicStyles.infoBox, { marginTop: 16, backgroundColor: '#FEF3C7' }]}>
             <Bell size={16} color="#D97706" />
@@ -950,7 +1003,32 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderFinancialTip = () => {
+    return (
+      <View style={dynamicStyles.sectionContainer}>
+        <Text style={dynamicStyles.sectionTitle}>Finansowa mądrość</Text>
+        <View style={[dynamicStyles.breakdownCard, dynamicStyles.shadowSm, { marginTop: 8, borderColor: theme.primary, backgroundColor: isDark ? '#1E293B' : '#EEF2FF' }]}>
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+            <View style={{ backgroundColor: theme.primary, padding: 10, borderRadius: 12 }}>
+              <Lightbulb size={24} color="#FFFFFF" />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 4 }}>
+                Widzisz pełen obraz?
+              </Text>
+              <Text style={{ fontSize: 13, color: theme.textDim, lineHeight: 20 }}>
+                Dodaj nie tylko subskrypcje, ale też stałe opłaty jak czynsz, rachunki czy karnet. Poniżej znajdziesz trend swoich wydatków, gdy tylko uzbierasz min. miesiąc historii.
+              </Text>
+            </View>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
   const renderTrendsChart = () => {
+    if (!hasHistory) return null; // Show only after 1 month of data
+
     const { items, maxAmount } = memoizedTrends;
     if (items.length === 0) return null;
 
@@ -1088,6 +1166,7 @@ export const DashboardScreen = () => {
 
         {renderCategoryBreakdown()}
 
+        {renderFinancialTip()}
         {renderTrendsChart()}
       </ScrollView>
 

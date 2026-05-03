@@ -77,8 +77,13 @@ const POPULAR_SUBSCRIPTIONS: PopularSubscription[] = [
   { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [25.99, 46.99] },
   { name: 'Disney+', defaultPrice: '37.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [37.99, 379.90] },
   { name: 'HBO Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros' },
-  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon' },
+  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon', availablePlans: [10.99, 49.00] },
   { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple' },
+  { name: 'Apple TV+', defaultPrice: '34.99', category: 'entertainment', color: '#000000', provider: 'Apple', availablePlans: [34.99, 349.90] },
+  { name: 'Canva', defaultPrice: '49.99', category: 'productivity', color: '#00C4CC', provider: 'Canva', availablePlans: [49.99, 64.99] },
+  { name: 'Xbox Game Pass', defaultPrice: '42.99', category: 'entertainment', color: '#107C10', provider: 'Microsoft', availablePlans: [40.00, 42.99, 62.99] },
+  { name: 'Allegro Smart!', defaultPrice: '10.99', category: 'shopping', color: '#FF5A00', provider: 'Allegro', availablePlans: [10.99, 59.90] },
+  { name: 'Strava', defaultPrice: '32.99', category: 'health', color: '#FC4C02', provider: 'Strava', availablePlans: [32.99, 249.99] },
   { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple', availablePlans: [3.99, 14.99, 49.99] },
   { name: 'ChatGPT Plus', defaultPrice: '20.00', category: 'productivity', color: '#10A37F', provider: 'OpenAI' },
   { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony', availablePlans: [37, 58, 70] },
@@ -125,10 +130,14 @@ export const ManualAddScreen = () => {
 
   // Suggestions logic
   const filteredSuggestions = useMemo(() => {
-    if (!name.trim()) return POPULAR_SUBSCRIPTIONS;
-    return POPULAR_SUBSCRIPTIONS.filter(s => 
-      s.name.toLowerCase().includes(name.toLowerCase())
-    );
+    let list = POPULAR_SUBSCRIPTIONS;
+    if (name.trim()) {
+      list = POPULAR_SUBSCRIPTIONS.filter(s => 
+        s.name.toLowerCase().includes(name.toLowerCase())
+      );
+    }
+    // Sort alphabetically
+    return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [name]);
 
   const handleSelectPopular = (service: PopularSubscription) => {
@@ -272,42 +281,97 @@ export const ManualAddScreen = () => {
 
   const isLoading = createMutation.isPending || updateMutation.isPending;
 
-  return (
-    <SafeAreaView style={styles.safeArea}>
-      <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.inner}>
-            <View style={styles.header}>
-              <TouchableOpacity onPress={() => navigation.goBack()}><X size={24} color="#64748B" /></TouchableOpacity>
-              <Text style={styles.headerTitle}>{subscriptionId ? 'Edytuj' : 'Nowa'}</Text>
-              <View style={{ width: 24 }} />
-            </View>
-
-            <ScrollView 
-              showsVerticalScrollIndicator={false} 
-              contentContainerStyle={styles.scrollContent}
-              keyboardShouldPersistTaps="handled"
-            >
+    const scrollViewRef = useRef<ScrollView>(null);
+  
+    const scrollToForm = () => {
+      if (scrollViewRef.current) {
+        scrollViewRef.current.scrollTo({ y: 150, animated: true });
+      }
+    };
+  
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+            <View style={styles.inner}>
+              <View style={styles.header}>
+                <TouchableOpacity onPress={() => navigation.goBack()}><X size={24} color="#64748B" /></TouchableOpacity>
+                <Text style={styles.headerTitle}>{subscriptionId ? 'Edytuj' : 'Nowa'}</Text>
+                <View style={{ width: 24 }} />
+              </View>
+  
+              <ScrollView 
+                ref={scrollViewRef}
+                showsVerticalScrollIndicator={false} 
+                contentContainerStyle={styles.scrollContent}
+                keyboardShouldPersistTaps="handled"
+              >
               <View style={styles.amountHeader}>
                 <Text style={styles.amountLabel}>Miesięczny koszt</Text>
+                
                 {selectedService?.availablePlans && selectedService.availablePlans.length > 0 ? (
-                  <View style={{ marginTop: 10, alignItems: 'center' }}>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingHorizontal: 20 }}>
+                  <View style={styles.planSelectionContainer}>
+                    <View style={styles.planSelectionHeader}>
+                      <Text style={styles.planSelectionTitle}>Wybierz plan dla {selectedService.name}</Text>
+                      <TouchableOpacity 
+                        style={styles.planBackButton}
+                        onPress={() => {
+                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                          setSelectedService(null);
+                          setAmount('');
+                        }}
+                      >
+                        <Text style={styles.planBackButtonText}>Wpisz ręcznie</Text>
+                      </TouchableOpacity>
+                    </View>
+                    
+                    <ScrollView 
+                      horizontal 
+                      showsHorizontalScrollIndicator={false} 
+                      contentContainerStyle={styles.plansScrollContent}
+                    >
                       {selectedService.availablePlans.map((planPrice) => (
                         <TouchableOpacity
                           key={planPrice}
                           style={[
-                            styles.planPill,
-                            parsedAmount === planPrice && styles.planPillActive
+                            styles.planCard,
+                            parsedAmount === planPrice && styles.planCardActive
                           ]}
-                          onPress={() => setAmount(planPrice.toString())}
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setAmount(planPrice.toString());
+                            // Proceed further: scroll to form
+                            scrollToForm();
+                          }}
                         >
-                          <Text style={[styles.planPillText, parsedAmount === planPrice && styles.planPillTextActive]}>
-                            {planPrice.toFixed(2)}
+                          <View style={styles.planCardPriceRow}>
+                            <Text style={[styles.planCardPrice, parsedAmount === planPrice && styles.planCardPriceActive]}>
+                              {planPrice.toFixed(2)}
+                            </Text>
+                            <Text style={[styles.planCardCurrency, parsedAmount === planPrice && styles.planCardCurrencyActive]}>
+                              {currency}
+                            </Text>
+                          </View>
+                          <Text style={[styles.planCardCycle, parsedAmount === planPrice && styles.planCardCycleActive]}>
+                            Miesięcznie
                           </Text>
                         </TouchableOpacity>
                       ))}
                     </ScrollView>
+                    
+                    {parsedAmount > 0 && (
+                      <TouchableOpacity 
+                        style={styles.planConfirmButton}
+                        onPress={() => {
+                          // Action to "go further"
+                          Keyboard.dismiss();
+                          scrollToForm();
+                        }}
+                      >
+                        <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
+                        <ArrowRight size={16} color="#6366F1" />
+                      </TouchableOpacity>
+                    )}
                   </View>
                 ) : (
                   <View style={styles.amountRow}>
@@ -323,17 +387,19 @@ export const ManualAddScreen = () => {
                   </View>
                 )}
                 
-                <View style={styles.currencyPills}>
-                  {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
-                    <TouchableOpacity 
-                      key={c} 
-                      style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
-                      onPress={() => setCurrency(c)}
-                    >
-                      <Text style={[styles.currencyPillText, currency === c && styles.currencyPillTextActive]}>{c}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                {!selectedService?.availablePlans && (
+                  <View style={styles.currencyPills}>
+                    {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
+                      <TouchableOpacity 
+                        key={c} 
+                        style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
+                        onPress={() => setCurrency(c)}
+                      >
+                        <Text style={[styles.currencyPillText, currency === c && styles.currencyPillTextActive]}>{c}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
 
               <View style={styles.formSection}>
@@ -715,25 +781,104 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#334155',
   },
-  planPill: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderWidth: 1,
-    borderColor: 'transparent',
+  planSelectionContainer: {
+    width: '100%',
+    paddingVertical: 10,
   },
-  planPillActive: {
+  planSelectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    marginBottom: 16,
+  },
+  planSelectionTitle: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  planBackButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 8,
+  },
+  planBackButtonText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  plansScrollContent: {
+    paddingHorizontal: 20,
+    gap: 12,
+    paddingBottom: 10,
+  },
+  planCard: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    padding: 16,
+    borderRadius: 20,
+    minWidth: 110,
+    borderWidth: 2,
+    borderColor: 'transparent',
+    alignItems: 'center',
+  },
+  planCardActive: {
     backgroundColor: '#FFFFFF',
     borderColor: '#FFFFFF',
+    transform: [{ scale: 1.05 }],
   },
-  planPillText: {
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '700',
-    fontSize: 16,
+  planCardPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    marginBottom: 4,
   },
-  planPillTextActive: {
+  planCardPrice: {
+    color: '#FFFFFF',
+    fontSize: 22,
+    fontWeight: '800',
+  },
+  planCardPriceActive: {
     color: '#6366F1',
+  },
+  planCardCurrency: {
+    color: 'rgba(255,255,255,0.8)',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 2,
+  },
+  planCardCurrencyActive: {
+    color: '#6366F1',
+    opacity: 0.7,
+  },
+  planCardCycle: {
+    color: 'rgba(255,255,255,0.6)',
+    fontSize: 10,
+    fontWeight: '700',
+    textTransform: 'uppercase',
+  },
+  planCardCycleActive: {
+    color: '#64748B',
+  },
+  planConfirmButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 40,
+    marginTop: 20,
+    paddingVertical: 12,
+    borderRadius: 16,
+    gap: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    elevation: 5,
+  },
+  planConfirmButtonText: {
+    color: '#6366F1',
+    fontSize: 14,
+    fontWeight: '700',
   },
   stepperBtn: {
     width: 44,
