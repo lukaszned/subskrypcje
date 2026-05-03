@@ -1021,3 +1021,410 @@ export async function getDashboardActivityForUser(
         items,
     };
 }
+type HealthScoreStatus = "excellent" | "good" | "needs_attention" | "risky";
+
+type HealthScoreFactor = {
+    type: "positive" | "negative" | "neutral";
+    code: string;
+    title: string;
+    description: string;
+    impact: number;
+};
+
+type HealthScoreRecommendedAction = {
+    type: string;
+    title: string;
+    description: string;
+};
+
+function clampHealthScore(score: number): number {
+    return Math.max(0, Math.min(100, Math.round(score)));
+}
+
+function getHealthScoreStatus(score: number): {
+    status: HealthScoreStatus;
+    label: string;
+} {
+    if (score >= 90) {
+        return {
+            status: "excellent",
+            label: "Świetnie",
+        };
+    }
+
+    if (score >= 75) {
+        return {
+            status: "good",
+            label: "Dobrze",
+        };
+    }
+
+    if (score >= 50) {
+        return {
+            status: "needs_attention",
+            label: "Wymaga uwagi",
+        };
+    }
+
+    return {
+        status: "risky",
+        label: "Ryzykownie",
+    };
+}
+
+function normalizeGuideMatchValue(value: string | null | undefined): string {
+    return (value ?? "")
+        .toLowerCase()
+        .trim()
+        .replace(/-/g, " ")
+        .replace(/\s+/g, " ");
+}
+
+function subscriptionHasCatalogCancelGuide(
+    subscription: {
+        name: string;
+        provider: string | null;
+    },
+    guides: Array<{
+        providerName: string;
+        providerSlug: string;
+        matchingKeywords: string[];
+    }>
+): boolean {
+    const searchText = normalizeGuideMatchValue(
+        `${subscription.name} ${subscription.provider ?? ""}`
+    );
+
+    return guides.some((guide) => {
+        const providerName = normalizeGuideMatchValue(guide.providerName);
+        const providerSlug = normalizeGuideMatchValue(guide.providerSlug);
+
+        if (providerName && searchText.includes(providerName)) {
+            return true;
+        }
+
+        if (providerSlug && searchText.includes(providerSlug)) {
+            return true;
+        }
+
+        return guide.matchingKeywords.some((keyword) => {
+            const normalizedKeyword = normalizeGuideMatchValue(keyword);
+            return (
+                normalizedKeyword.length > 0 &&
+                searchText.includes(normalizedKeyword)
+            );
+        });
+    });
+}
+
+function buildHealthSummary(params: {
+    score: number;
+    overdueCount: number;
+    trialsEndingSoonCount: number;
+    subscriptionsIncomePercentage: number | null;
+    hasIncome: boolean;
+}): string {
+    if (params.score >= 90) {
+        return "Bardzo dobrze kontrolujesz swoje subskrypcje.";
+    }
+
+    if (params.overdueCount > 0) {
+        return `Masz ${params.overdueCount} zaległe płatności, które warto sprawdzić w pierwszej kolejności.`;
+    }
+
+    if (params.trialsEndingSoonCount > 0) {
+        return `Masz ${params.trialsEndingSoonCount} triale kończące się w ciągu 7 dni. Warto zdecydować, czy chcesz je kontynuować.`;
+    }
+
+    if (
+        params.hasIncome &&
+        params.subscriptionsIncomePercentage !== null &&
+        params.subscriptionsIncomePercentage > 10
+    ) {
+        return `Subskrypcje stanowią ${params.subscriptionsIncomePercentage}% Twojego miesięcznego dochodu. Warto sprawdzić, czy wszystkie są nadal potrzebne.`;
+    }
+
+    if (!params.hasIncome) {
+        return "Dodaj miesięczny dochód w ustawieniach, żeby aplikacja mogła dokładniej ocenić wpływ subskrypcji na budżet.";
+    }
+
+    return "Twoje subskrypcje są pod kontrolą, ale kilka elementów warto regularnie monitorować.";
+}
+
+export async function getDashboardHealthScoreForUser(userId: string) {
+    await syncOverdueSubscriptionsForUser(userId);
+
+    const now = new Date();
+
+    const next3Days = new Date(now);
+    next3Days.setDate(now.getDate() + 3);
+
+    const next7Days = new Date(now);
+    next7Days.setDate(now.getDate() + 7);
+
+    const budgetImpact = await getBudgetImpactForUser(userId);
+    const summary = await getDashboardSummaryForUser(userId);
+
+    const activeSubscriptions = await prisma.subscription.findMany({
+        where: {
+            userId,
+            status: {
+                not: SubscriptionStatus.canceled,
+            },
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            status: true,
+            isTrial: true,
+            trialEndDate: true,
+            nextPaymentDate: true,
+            amount: true,
+            currency: true,
+            billingCycle: true,
+        },
+    });
+
+    const activeCancelGuides = await prisma.providerCancelGuide.findMany({
+        where: {
+            isActive: true,
+        },
+        select: {
+            providerName: true,
+            providerSlug: true,
+            matchingKeywords: true,
+        },
+    });
+
+    const overdueCount = activeSubscriptions.filter(
+        (subscription) => subscription.status === SubscriptionStatus.overdue
+    ).length;
+
+    const trialsEndingSoonCount = activeSubscriptions.filter((subscription) => {
+        return (
+            subscription.isTrial &&
+            subscription.trialEndDate !== null &&
+            subscription.trialEndDate >= now &&
+            subscription.trialEndDate <= next7Days
+        );
+    }).length;
+
+    const upcomingPaymentsSoonCount = activeSubscriptions.filter(
+        (subscription) => {
+            return (
+                subscription.nextPaymentDate >= now &&
+                subscription.nextPaymentDate <= next3Days
+            );
+        }
+    ).length;
+
+    const missingCancelGuidesCount = activeSubscriptions.filter(
+        (subscription) =>
+            !subscriptionHasCatalogCancelGuide(subscription, activeCancelGuides)
+    ).length;
+
+    let score = 100;
+
+    const factors: HealthScoreFactor[] = [];
+    const recommendedActions: HealthScoreRecommendedAction[] = [];
+
+    if (overdueCount > 0) {
+        const impact = -Math.min(overdueCount * 20, 40);
+        score += impact;
+
+        factors.push({
+            type: "negative",
+            code: "OVERDUE_PAYMENTS",
+            title: "Zaległe płatności",
+            description: `${overdueCount} subskrypcje mają status zaległej płatności.`,
+            impact,
+        });
+
+        recommendedActions.push({
+            type: "review_overdue",
+            title: "Sprawdź zaległe płatności",
+            description:
+                "Zweryfikuj subskrypcje oznaczone jako zaległe i oznacz je jako opłacone albo anulowane.",
+        });
+    } else {
+        factors.push({
+            type: "positive",
+            code: "NO_OVERDUE_PAYMENTS",
+            title: "Brak zaległości",
+            description: "Nie masz aktualnie zaległych płatności.",
+            impact: 0,
+        });
+    }
+
+    if (trialsEndingSoonCount > 0) {
+        const impact = -Math.min(trialsEndingSoonCount * 15, 30);
+        score += impact;
+
+        factors.push({
+            type: "negative",
+            code: "TRIALS_ENDING_SOON",
+            title: "Trial wymaga decyzji",
+            description: `${trialsEndingSoonCount} triale kończą się w ciągu 7 dni.`,
+            impact,
+        });
+
+        recommendedActions.push({
+            type: "review_trials",
+            title: "Sprawdź kończące się triale",
+            description:
+                "Zdecyduj, czy chcesz kontynuować triale przed pierwszą płatnością.",
+        });
+    }
+
+    if (upcomingPaymentsSoonCount > 0) {
+        const impact = -Math.min(upcomingPaymentsSoonCount * 5, 15);
+        score += impact;
+
+        factors.push({
+            type: "negative",
+            code: "UPCOMING_PAYMENTS_SOON",
+            title: "Nadchodzące płatności",
+            description: `${upcomingPaymentsSoonCount} płatności przypadają w ciągu 3 dni.`,
+            impact,
+        });
+
+        recommendedActions.push({
+            type: "review_upcoming",
+            title: "Sprawdź najbliższe płatności",
+            description:
+                "Przejrzyj najbliższe odnowienia i upewnij się, że nadal chcesz z nich korzystać.",
+        });
+    }
+
+    if (!budgetImpact.hasIncome) {
+        score -= 5;
+
+        factors.push({
+            type: "neutral",
+            code: "MISSING_INCOME",
+            title: "Brak miesięcznego dochodu",
+            description:
+                "Nie podano miesięcznego dochodu, więc analiza wpływu subskrypcji na budżet jest mniej dokładna.",
+            impact: -5,
+        });
+
+        recommendedActions.push({
+            type: "add_income",
+            title: "Dodaj miesięczny dochód",
+            description:
+                "Uzupełnij dochód w ustawieniach, żeby lepiej ocenić wpływ subskrypcji na budżet.",
+        });
+    } else if (
+        budgetImpact.subscriptionsIncomePercentage !== null &&
+        budgetImpact.subscriptionsIncomePercentage > 20
+    ) {
+        score -= 35;
+
+        factors.push({
+            type: "negative",
+            code: "VERY_HIGH_INCOME_SHARE",
+            title: "Bardzo wysoki udział w dochodzie",
+            description: `Subskrypcje stanowią ${budgetImpact.subscriptionsIncomePercentage}% miesięcznego dochodu.`,
+            impact: -35,
+        });
+
+        recommendedActions.push({
+            type: "reduce_costs",
+            title: "Przejrzyj najdroższe subskrypcje",
+            description:
+                "Subskrypcje mają wysoki udział w dochodzie. Warto sprawdzić, które można anulować lub obniżyć.",
+        });
+    } else if (
+        budgetImpact.subscriptionsIncomePercentage !== null &&
+        budgetImpact.subscriptionsIncomePercentage > 10
+    ) {
+        score -= 20;
+
+        factors.push({
+            type: "negative",
+            code: "HIGH_INCOME_SHARE",
+            title: "Wysoki udział w dochodzie",
+            description: `Subskrypcje stanowią ${budgetImpact.subscriptionsIncomePercentage}% miesięcznego dochodu.`,
+            impact: -20,
+        });
+
+        recommendedActions.push({
+            type: "review_costs",
+            title: "Sprawdź koszt subskrypcji",
+            description:
+                "Warto przejrzeć subskrypcje i sprawdzić, czy wszystkie są nadal potrzebne.",
+        });
+    } else {
+        factors.push({
+            type: "positive",
+            code: "HEALTHY_INCOME_SHARE",
+            title: "Dobry udział w dochodzie",
+            description: `Subskrypcje stanowią ${budgetImpact.subscriptionsIncomePercentage}% miesięcznego dochodu.`,
+            impact: 0,
+        });
+    }
+
+    if (missingCancelGuidesCount > 0) {
+        const impact = -Math.min(missingCancelGuidesCount * 3, 15);
+        score += impact;
+
+        factors.push({
+            type: "negative",
+            code: "MISSING_CANCEL_GUIDES",
+            title: "Brak instrukcji anulowania",
+            description: `${missingCancelGuidesCount} aktywne subskrypcje nie mają jeszcze gotowej instrukcji anulowania.`,
+            impact,
+        });
+
+        recommendedActions.push({
+            type: "request_cancel_guides",
+            title: "Zgłoś brakujące instrukcje",
+            description:
+                "Dla usług bez gotowego poradnika można później dodać opcję zgłoszenia brakującej instrukcji anulowania.",
+        });
+    } else if (activeSubscriptions.length > 0) {
+        factors.push({
+            type: "positive",
+            code: "CANCEL_GUIDES_AVAILABLE",
+            title: "Instrukcje anulowania dostępne",
+            description:
+                "Aktywne subskrypcje mają dopasowane instrukcje anulowania w katalogu.",
+            impact: 0,
+        });
+    }
+
+    const finalScore = clampHealthScore(score);
+    const { status, label } = getHealthScoreStatus(finalScore);
+
+    return {
+        score: finalScore,
+        status,
+        label,
+        summary: buildHealthSummary({
+            score: finalScore,
+            overdueCount,
+            trialsEndingSoonCount,
+            subscriptionsIncomePercentage:
+                budgetImpact.subscriptionsIncomePercentage,
+            hasIncome: budgetImpact.hasIncome,
+        }),
+        baseCurrency: budgetImpact.baseCurrency,
+        metrics: {
+            monthlySubscriptionsTotal: budgetImpact.monthlySubscriptionsTotal,
+            monthlyIncome: budgetImpact.monthlyIncome,
+            incomeCurrency: budgetImpact.incomeCurrency,
+            freeAfterSubscriptions: budgetImpact.freeAfterSubscriptions,
+            subscriptionsIncomePercentage:
+                budgetImpact.subscriptionsIncomePercentage,
+            activeSubscriptionsCount: summary.activeSubscriptionsCount,
+            trialsCount: summary.trialsCount,
+            trialsEndingSoonCount,
+            overdueCount,
+            upcomingPaymentsSoonCount,
+            missingCancelGuidesCount,
+        },
+        factors,
+        recommendedActions,
+    };
+}

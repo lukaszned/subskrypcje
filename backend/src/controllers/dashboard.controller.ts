@@ -10,6 +10,7 @@ import {
     getRemindersForUser,
     getSavingsForUser,
     getTrialsForUser,
+    getDashboardHealthScoreForUser,
     getUpcomingPaymentsForUser,
 } from "../services/dashboard.service";
 
@@ -277,6 +278,31 @@ export async function getDashboardActivityHandler(
         return res.json(activity);
     } catch (error) {
         console.error("Error fetching dashboard activity:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+export async function getDashboardHealthScoreHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const healthScore = await getDashboardHealthScoreForUser(
+            req.appUser.id
+        );
+
+        return res.json(healthScore);
+    } catch (error) {
+        console.error("Error fetching dashboard health score:", error);
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",

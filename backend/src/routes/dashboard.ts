@@ -11,6 +11,7 @@ import {
   getSavingsHandler,
   getTrialsHandler,
   getUpcomingPaymentsHandler,
+  getDashboardHealthScoreHandler,
 } from "../controllers/dashboard.controller";
 
 const router = Router();
@@ -25,5 +26,6 @@ router.get("/savings", requireAuth, getSavingsHandler);
 router.get("/trends", requireAuth, getDashboardTrendsHandler);
 router.get("/budget-impact", requireAuth, getBudgetImpactHandler);
 router.get("/activity", requireAuth, getDashboardActivityHandler);
+router.get("/health-score", requireAuth, getDashboardHealthScoreHandler);
 
 export default router;
