@@ -1,15 +1,18 @@
 export const BASE_CURRENCY = "PLN" as const;
 
-export const SUPPORTED_CURRENCIES = ["PLN", "EUR", "USD"] as const;
+export const SUPPORTED_CURRENCIES = ["PLN", "EUR", "USD", "GBP"] as const;
 
 export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
 
+// Alias zostawiamy dla kompatybilności z istniejącymi serwisami,
+// które importują CurrencyCode.
 export type CurrencyCode = SupportedCurrency;
 
 const DEFAULT_EXCHANGE_RATES_TO_PLN: Record<SupportedCurrency, number> = {
     PLN: 1,
     EUR: 4.3,
     USD: 4.0,
+    GBP: 5.0,
 };
 
 let exchangeRatesToPLN: Record<SupportedCurrency, number> = {

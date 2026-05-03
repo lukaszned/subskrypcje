@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const supportedCurrencySchema = z.enum(["PLN", "EUR", "USD"]);
+export const supportedCurrencySchema = z.enum(["PLN", "EUR", "USD", "GBP"]);
 
 export const updateUserSettingsSchema = z.object({
     baseCurrency: supportedCurrencySchema.optional(),
