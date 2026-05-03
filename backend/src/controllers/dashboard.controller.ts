@@ -209,7 +209,15 @@ export async function getDashboardTrendsHandler(
                 ? 6
                 : monthsParam;
 
-        const trends = await getDashboardTrendsForUser(req.appUser.id, months);
+        const type =
+            typeof req.query.type === "string" ? req.query.type : "planned";
+
+        const trends = await getDashboardTrendsForUser(
+            req.appUser.id,
+            months,
+            type
+        );
+
         return res.json(trends);
     } catch (error) {
         console.error("Error fetching dashboard trends:", error);

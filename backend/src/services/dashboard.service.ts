@@ -732,9 +732,22 @@ export async function getSavingsForUser(userId: string) {
     };
 }
 
+type DashboardTrendsType = "planned" | "real";
+
+function normalizeDashboardTrendsType(
+    type: string | null | undefined
+): DashboardTrendsType {
+    if (type === "real") {
+        return "real";
+    }
+
+    return "planned";
+}
+
 export async function getDashboardTrendsForUser(
     userId: string,
-    months: number = 6
+    months: number = 6,
+    type: string = "planned"
 ) {
     await syncOverdueSubscriptionsForUser(userId);
     const baseCurrency = await getBaseCurrencyForUser(userId);
@@ -742,11 +755,13 @@ export async function getDashboardTrendsForUser(
     const safeMonths =
         Number.isNaN(months) || months <= 0 || months > 24 ? 6 : months;
 
+    const trendsType = normalizeDashboardTrendsType(type);
+
     const now = new Date();
-    const startMonth = getStartOfMonth(now);
+    const currentMonthStart = getStartOfMonth(now);
 
     const monthBuckets = Array.from({ length: safeMonths }, (_, index) => {
-        const date = addMonths(startMonth, - (safeMonths - 1 - index)); // Historia + obecny
+        const date = addMonths(currentMonthStart, -(safeMonths - 1 - index));
 
         return {
             date,
@@ -758,6 +773,61 @@ export async function getDashboardTrendsForUser(
         };
     });
 
+    if (trendsType === "real") {
+        const firstBucket = monthBuckets[0];
+        const lastBucket = monthBuckets[monthBuckets.length - 1];
+
+        const payments = await prisma.subscriptionPayment.findMany({
+            where: {
+                userId,
+                paidAt: {
+                    gte: firstBucket.monthStart,
+                    lte: lastBucket.monthEnd,
+                },
+            },
+            orderBy: {
+                paidAt: "asc",
+            },
+            select: {
+                amount: true,
+                currency: true,
+                paidAt: true,
+            },
+        });
+
+        for (const payment of payments) {
+            const bucket = monthBuckets.find((monthBucket) => {
+                return (
+                    payment.paidAt >= monthBucket.monthStart &&
+                    payment.paidAt <= monthBucket.monthEnd
+                );
+            });
+
+            if (!bucket) {
+                continue;
+            }
+
+            const convertedAmount = convertCurrency(
+                toNumber(payment.amount),
+                payment.currency,
+                baseCurrency
+            );
+
+            bucket.total += convertedAmount;
+        }
+
+        return {
+            baseCurrency,
+            type: trendsType,
+            months: safeMonths,
+            items: monthBuckets.map((bucket) => ({
+                month: bucket.month,
+                label: bucket.label,
+                total: Number(bucket.total.toFixed(2)),
+            })),
+        };
+    }
+
     const subscriptions = await prisma.subscription.findMany({
         where: {
             userId,
@@ -766,7 +836,13 @@ export async function getDashboardTrendsForUser(
 
     for (const bucket of monthBuckets) {
         const total = subscriptions.reduce((sum, subscription) => {
-            if (!isSubscriptionActiveInMonth(subscription, bucket.monthStart, bucket.monthEnd)) {
+            if (
+                !isSubscriptionActiveInMonth(
+                    subscription,
+                    bucket.monthStart,
+                    bucket.monthEnd
+                )
+            ) {
                 return sum;
             }
 
@@ -788,7 +864,7 @@ export async function getDashboardTrendsForUser(
 
     return {
         baseCurrency,
-        type: "planned",
+        type: trendsType,
         months: safeMonths,
         items: monthBuckets.map((bucket) => ({
             month: bucket.month,
