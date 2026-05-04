@@ -1129,10 +1129,18 @@ function buildHealthSummary(params: {
     }
 
     if (params.overdueCount > 0) {
+        if (params.overdueCount === 1) {
+            return "Masz 1 zaległą płatność, którą warto sprawdzić w pierwszej kolejności.";
+        }
+
         return `Masz ${params.overdueCount} zaległe płatności, które warto sprawdzić w pierwszej kolejności.`;
     }
 
     if (params.trialsEndingSoonCount > 0) {
+        if (params.trialsEndingSoonCount === 1) {
+            return "Masz 1 trial kończący się w ciągu 7 dni. Warto zdecydować, czy chcesz go kontynuować.";
+        }
+
         return `Masz ${params.trialsEndingSoonCount} triale kończące się w ciągu 7 dni. Warto zdecydować, czy chcesz je kontynuować.`;
     }
 
@@ -1237,7 +1245,10 @@ export async function getDashboardHealthScoreForUser(userId: string) {
             type: "negative",
             code: "OVERDUE_PAYMENTS",
             title: "Zaległe płatności",
-            description: `${overdueCount} subskrypcje mają status zaległej płatności.`,
+            description:
+                overdueCount === 1
+                    ? "1 subskrypcja ma status zaległej płatności."
+                    : `${overdueCount} subskrypcje mają status zaległej płatności.`,
             impact,
         });
 
@@ -1265,7 +1276,10 @@ export async function getDashboardHealthScoreForUser(userId: string) {
             type: "negative",
             code: "TRIALS_ENDING_SOON",
             title: "Trial wymaga decyzji",
-            description: `${trialsEndingSoonCount} triale kończą się w ciągu 7 dni.`,
+            description:
+                trialsEndingSoonCount === 1
+                    ? "1 trial kończy się w ciągu 7 dni."
+                    : `${trialsEndingSoonCount} triale kończą się w ciągu 7 dni.`,
             impact,
         });
 
@@ -1285,7 +1299,10 @@ export async function getDashboardHealthScoreForUser(userId: string) {
             type: "negative",
             code: "UPCOMING_PAYMENTS_SOON",
             title: "Nadchodzące płatności",
-            description: `${upcomingPaymentsSoonCount} płatności przypadają w ciągu 3 dni.`,
+            description:
+                upcomingPaymentsSoonCount === 1
+                    ? "1 płatność przypada w ciągu 3 dni."
+                    : `${upcomingPaymentsSoonCount} płatności przypadają w ciągu 3 dni.`,
             impact,
         });
 
@@ -1373,7 +1390,10 @@ export async function getDashboardHealthScoreForUser(userId: string) {
             type: "negative",
             code: "MISSING_CANCEL_GUIDES",
             title: "Brak instrukcji anulowania",
-            description: `${missingCancelGuidesCount} aktywne subskrypcje nie mają jeszcze gotowej instrukcji anulowania.`,
+            description:
+                missingCancelGuidesCount === 1
+                    ? "1 aktywna subskrypcja nie ma jeszcze gotowej instrukcji anulowania."
+                    : `${missingCancelGuidesCount} aktywne subskrypcje nie mają jeszcze gotowej instrukcji anulowania.`,
             impact,
         });
 
