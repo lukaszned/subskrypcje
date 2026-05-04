@@ -9,8 +9,8 @@ import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
 
 interface SkeletonProps {
-  width: number | string;
-  height: number | string;
+  width: ViewStyle['width'];
+  height: ViewStyle['height'];
   borderRadius?: number;
   style?: ViewStyle;
   isDark?: boolean;
@@ -39,7 +39,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   return (
     <Animated.View
       style={[
-        { width: width as any, height, backgroundColor, borderRadius, opacity },
+        { width, height, backgroundColor, borderRadius, opacity },
         style,
       ]}
     />

@@ -146,33 +146,38 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
           </Text>
         </View>
 
-        {/* Środek — nazwa + data */}
+        {/* Środek — nazwa + status + data */}
         <View style={styles.middleContent}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <Text
-              style={[styles.name, isCancelled && styles.textCancelled]}
-              numberOfLines={1}
-            >
-              {item.name}
-            </Text>
+          <Text
+            style={[styles.name, isCancelled && styles.textCancelled]}
+            numberOfLines={2}
+          >
+            {item.name}
+          </Text>
+          <View style={styles.statusRow}>
             <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-              <Text style={[styles.statusBadgeText, { color: statusInfo.color }]}>
+              <Text style={[styles.statusBadgeText, { color: statusInfo.color }]} numberOfLines={1}>
                 {statusInfo.label}
               </Text>
             </View>
           </View>
-          <Text style={styles.dateText}>
+          <Text style={styles.dateText} numberOfLines={1}>
             {isCancelled ? 'Anulowana' : `Następna: ${item.nextPaymentDate}`}
           </Text>
         </View>
 
         {/* Prawa strona — kwota + cykl */}
         <View style={styles.rightContent}>
-          <Text style={[styles.amount, isCancelled && styles.textCancelled]}>
+          <Text
+            style={[styles.amount, isCancelled && styles.textCancelled]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.82}
+          >
             {(Number(item.amount) || 0).toFixed(2)} {item.currency}
           </Text>
           <View style={styles.cycleBadge}>
-            <Text style={styles.cycleText}>{item.cycle}</Text>
+            <Text style={styles.cycleText} numberOfLines={1}>{item.cycle}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -183,10 +188,10 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
 const styles = StyleSheet.create({
   rowContainer: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     backgroundColor: '#FFFFFF',
     paddingVertical: 16,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
     borderBottomColor: '#F8FAFC',
   },
@@ -199,7 +204,7 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   avatarText: {
     fontSize: 20,
@@ -208,12 +213,15 @@ const styles = StyleSheet.create({
   middleContent: {
     flex: 1,
     justifyContent: 'center',
+    minWidth: 0,
+    paddingRight: 10,
   },
   name: {
     fontSize: 16,
     fontWeight: '700',
     color: '#0F172A',
     marginBottom: 4,
+    lineHeight: 20,
   },
   textCancelled: {
     color: '#94A3B8',
@@ -227,12 +235,16 @@ const styles = StyleSheet.create({
   rightContent: {
     alignItems: 'flex-end',
     justifyContent: 'center',
+    minWidth: 104,
+    maxWidth: 126,
+    paddingTop: 2,
   },
   amount: {
     fontSize: 16,
     fontWeight: '800',
     color: '#0F172A',
     marginBottom: 4,
+    textAlign: 'right',
   },
   cycleBadge: {
     backgroundColor: '#F1F5F9',
@@ -274,14 +286,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   statusBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginBottom: 5,
   },
   statusBadgeText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
+  },
+  statusRow: {
+    alignItems: 'flex-start',
   },
 });
 

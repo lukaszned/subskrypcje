@@ -22,7 +22,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Search, ArrowUpDown, Frown, ArrowLeft } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { AppStackParamList } from '../../App';
+import type { AppStackParamList } from '../types/navigation';
 
 // Hooki
 import { useSubscriptions } from '../hooks/useSubscriptions';
@@ -30,7 +30,7 @@ import { useCancelSubscription } from '../hooks/useCancelSubscription';
 import { usePaySubscription } from '../hooks/usePaySubscription';
 
 // Typy
-import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS } from '../types/api';
+import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS, SubscriptionStatus } from '../types/api';
 
 // Komponent item
 import SubscriptionListItem from './SubscriptionListItem';

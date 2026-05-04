@@ -170,6 +170,8 @@ export interface ReminderItem {
 }
 
 export interface RemindersResponse {
+  notificationsEnabled?: boolean;
+  defaultReminderDaysBefore?: number;
   count: number;
   items: ReminderItem[];
 }
@@ -257,26 +259,87 @@ export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
 
 export interface DashboardTrendsItem {
   month: string;
+  label?: string;
   amount: number;
 }
 
 export interface DashboardTrendsResponse {
   baseCurrency: string;
-  type: 'planned';
+  type: 'planned' | 'real';
   months: number;
   items: DashboardTrendsItem[];
 }
 
-export interface DashboardOverviewResponse {
-  summary: DashboardSummary;
-  upcoming: UpcomingPaymentsResponse;
-  trials: TrialsResponse;
-  breakdown: CategoryBreakdownResponse;
-  savings: SavingsResponse;
-  trends: DashboardTrendsResponse;
-  reminders: RemindersResponse;
-  budgetImpact?: BudgetImpactResponse;
-  notificationPreview?: NotificationPreviewResponse;
+export interface DashboardActivityItem {
+  id: string;
+  type: 'created' | 'updated' | 'paid' | 'canceled';
+  message: string;
+  payload: any;
+  createdAt: string;
+  subscription: {
+    id: string;
+    name: string;
+    provider: string | null;
+    amount: number;
+    currency: string;
+    status: SubscriptionStatus;
+    nextPaymentDate: string | null;
+    lastPaymentDate: string | null;
+    category: SubscriptionCategory;
+    billingCycle: BillingCycle;
+  };
+}
+
+export interface DashboardActivityResponse {
+  count: number;
+  limit: number;
+  items: DashboardActivityItem[];
+}
+
+export interface HealthScoreResponse {
+  score: number;
+  status: 'excellent' | 'good' | 'needs_attention' | 'risky';
+  label: string;
+  summary: string;
+  baseCurrency: string;
+  metrics: {
+    monthlySubscriptionsTotal: number;
+    monthlyIncome: number | null;
+    incomeCurrency: string;
+    freeAfterSubscriptions: number | null;
+    subscriptionsIncomePercentage: number | null;
+    activeSubscriptionsCount: number;
+    trialsCount: number;
+    overdueCount: number;
+    trialsEndingSoonCount: number;
+    upcomingPaymentsSoonCount: number;
+    missingCancelGuidesCount: number;
+  };
+  factors: {
+    type: 'positive' | 'negative' | 'neutral';
+    code: string;
+    title: string;
+    description: string;
+    impact: number;
+  }[];
+  recommendedActions: {
+    type: string;
+    title: string;
+    description: string;
+  }[];
+}
+
+export interface CancelGuideRequestResponse {
+  id: string;
+  status: 'pending' | 'reviewed' | 'completed';
+  alreadyExisted: boolean;
+  message: string;
+  subscription: {
+    id: string;
+    name: string;
+    provider: string | null;
+  };
+  createdAt: string;
 }
 
 export interface UserSettings {
@@ -287,7 +350,7 @@ export interface UserSettings {
   emailReportsEnabled: boolean;
   monthlyIncome: number | null;
   incomeCurrency: string | null;
-  theme: 'light' | 'dark' | 'system';
+  theme?: 'light' | 'dark' | 'system';
   updatedAt: string;
 }
 
@@ -312,11 +375,11 @@ export interface SubscriptionPaymentsResponse {
 export interface BudgetImpactResponse {
   baseCurrency: string;
   hasIncome: boolean;
-  monthlyIncome: number;
+  monthlyIncome: number | null;
   incomeCurrency: string;
   monthlySubscriptionsTotal: number;
-  freeAfterSubscriptions: number;
-  subscriptionsIncomePercentage: number;
+  freeAfterSubscriptions: number | null;
+  subscriptionsIncomePercentage: number | null;
 }
 
 export interface NotificationPreviewItem {
@@ -343,16 +406,23 @@ export interface NotificationPreviewResponse {
 }
 
 export interface CancelGuide {
+  id: string | null;
   providerName: string;
-  providerSlug: string;
-  category: string;
+  providerSlug: string | null;
+  category: SubscriptionCategory | null;
   logoKey: string | null;
   cancelUrl: string | null;
   supportUrl: string | null;
-  difficulty: 'easy' | 'medium' | 'hard';
-  estimatedTimeMinutes: number;
+  difficulty: 'easy' | 'medium' | 'hard' | null;
+  estimatedTimeMinutes: number | null;
   instructions: string[];
   notes: string | null;
-  matchingKeywords: string[];
-  isActive: boolean;
+  matchingKeywords?: string[];
+  isActive?: boolean;
+}
+
+export interface CancelGuideLookupResponse {
+  hasGuide: boolean;
+  source: 'catalog' | 'subscription' | 'none';
+  guide: CancelGuide | null;
 }

@@ -13,18 +13,45 @@ import {
   TrialsResponse,
   DashboardTrendsResponse,
   UserSettings,
-  DashboardOverviewResponse,
   BudgetImpactResponse,
   NotificationPreviewResponse,
   RemindersResponse,
+  DashboardActivityResponse,
+  HealthScoreResponse,
+  SavingsResponse,
 } from '../types/api';
 
+function normalizeItemsResponse<T>(
+  raw: any,
+  fallbackDays: number,
+  mapItem: (item: any) => T
+): { days: number; count: number; items: T[] } {
+  const items = Array.isArray(raw?.items) ? raw.items.map(mapItem) : [];
+
+  return {
+    days: Number(raw?.days ?? fallbackDays),
+    count: Number(raw?.count ?? items.length),
+    items,
+  };
+}
+
+function normalizeTrendItem(item: any) {
+  const amount = item?.amount ?? item?.total ?? 0;
+  return {
+    ...item,
+    month: item?.label ?? item?.month ?? '',
+    label: item?.label,
+    amount: Number(amount || 0),
+  };
+}
+
 /**
- * GET /dashboard/overview
+ * Removed dashboard overview compatibility helper.
  */
-export async function getDashboardOverview(): Promise<DashboardOverviewResponse> {
-  try {
-    const data = await apiGet<DashboardOverviewResponse>('/dashboard/overview');
+export async function getDashboardOverview(): Promise<never> {
+  throw new Error('Dashboard overview endpoint was removed. Use modular dashboard endpoints instead.');
+  /*
+    const data = undefined as any;
     
     if (!data || !data.summary) {
       throw new Error('Otrzymano niekompletne dane z serwera (brak sekcji summary).');
@@ -58,10 +85,7 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResponse>
       },
       trends: {
         ...data.trends,
-        items: (data.trends?.items || []).map(i => ({
-          ...i,
-          amount: Number(i.amount || 0)
-        }))
+        items: (data.trends?.items || []).map(normalizeTrendItem)
       },
       trials: {
         ...data.trials,
@@ -78,13 +102,25 @@ export async function getDashboardOverview(): Promise<DashboardOverviewResponse>
     }
     throw error;
   }
+  */
 }
 
 /**
  * GET /dashboard/trends
  */
-export async function getDashboardTrends(months: number = 6): Promise<DashboardTrendsResponse> {
-  return apiGet<DashboardTrendsResponse>(`/dashboard/trends?months=${months}`);
+export async function getDashboardTrends(
+  months: number = 6, 
+  type: 'planned' | 'real' = 'planned'
+): Promise<DashboardTrendsResponse> {
+  const data = await apiGet<any>(`/dashboard/trends?months=${months}&type=${type}`);
+  const responseType = data?.type === 'planned' || data?.type === 'real' ? data.type : type;
+
+  return {
+    ...data,
+    type: responseType,
+    months: Number(data?.months ?? months),
+    items: Array.isArray(data?.items) ? data.items.map(normalizeTrendItem) : [],
+  };
 }
 
 /**
@@ -120,13 +156,10 @@ export async function getUpcomingPayments(
   days: number = 7
 ): Promise<UpcomingPaymentsResponse> {
   const data = await apiGet<any>(`/dashboard/upcoming?days=${days}`);
-  return {
-    ...data,
-    items: data.items.map((item: any) => ({
+  return normalizeItemsResponse(data, days, (item) => ({
       ...item,
-      amount: typeof item.amount === 'string' ? parseFloat(item.amount) : item.amount,
-    })),
-  };
+      amount: Number(item.amount || 0),
+  }));
 }
 
 /**
@@ -136,13 +169,10 @@ export async function getTrials(
   days: number = 30
 ): Promise<TrialsResponse> {
   const data = await apiGet<any>(`/dashboard/trials?days=${days}`);
-  return {
-    ...data,
-    items: data.items.map((item: any) => ({
+  return normalizeItemsResponse(data, days, (item) => ({
       ...item,
-      amount: typeof item.amount === 'string' ? parseFloat(item.amount) : item.amount,
-    })),
-  };
+      amount: Number(item.amount || 0),
+  }));
 }
 
 /**
@@ -151,6 +181,18 @@ export async function getTrials(
 export async function getCategoryBreakdown() {
   const data = await apiGet<any>('/dashboard/category-breakdown');
   return data;
+}
+
+/**
+ * GET /dashboard/savings
+ */
+export async function getDashboardSavings(): Promise<SavingsResponse> {
+  const data = await apiGet<SavingsResponse>('/dashboard/savings');
+  return {
+    ...data,
+    monthlySavings: Number(data.monthlySavings || 0),
+    yearlySavings: Number(data.yearlySavings || 0),
+  };
 }
 
 /**
@@ -167,9 +209,12 @@ export async function getBudgetImpact(): Promise<BudgetImpactResponse> {
   const data = await apiGet<BudgetImpactResponse>('/dashboard/budget-impact');
   return {
     ...data,
-    monthlyIncome: Number(data.monthlyIncome || 0),
+    monthlyIncome: data.monthlyIncome === null ? null : Number(data.monthlyIncome || 0),
     monthlySubscriptionsTotal: Number(data.monthlySubscriptionsTotal || 0),
-    freeAfterSubscriptions: Number(data.freeAfterSubscriptions || 0),
+    freeAfterSubscriptions: data.freeAfterSubscriptions === null ? null : Number(data.freeAfterSubscriptions || 0),
+    subscriptionsIncomePercentage: data.subscriptionsIncomePercentage === null
+      ? null
+      : Number(data.subscriptionsIncomePercentage || 0),
   };
 }
 
@@ -178,4 +223,18 @@ export async function getBudgetImpact(): Promise<BudgetImpactResponse> {
  */
 export async function getNotificationPreview(): Promise<NotificationPreviewResponse> {
   return apiGet<NotificationPreviewResponse>('/dashboard/notification-preview');
+}
+
+/**
+ * GET /dashboard/activity
+ */
+export async function getDashboardActivity(limit: number = 10): Promise<DashboardActivityResponse> {
+  return apiGet<DashboardActivityResponse>(`/dashboard/activity?limit=${limit}`);
+}
+
+/**
+ * GET /dashboard/health-score
+ */
+export async function getHealthScore(): Promise<HealthScoreResponse> {
+  return apiGet<HealthScoreResponse>('/dashboard/health-score');
 }

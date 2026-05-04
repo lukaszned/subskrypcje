@@ -19,10 +19,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   ArrowLeft, Edit, Trash2, Calendar, CreditCard, 
-  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users
+  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users, AlertCircle
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AppStackParamList } from '../../App';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AppStackParamList } from '../types/navigation';
 import { CancelAssistantModal } from '../components/CancelAssistantModal';
 
 // Hooks
@@ -32,10 +33,12 @@ import { useSubscriptionPayments } from '../hooks/useSubscriptionPayments';
 import { useDeleteSubscription } from '../hooks/useDeleteSubscription';
 import { usePaySubscription } from '../hooks/usePaySubscription';
 import { useCancelSubscription } from '../hooks/useCancelSubscription';
+import { useSubscriptionCancelGuide } from '../hooks/useSubscriptionCancelGuide';
+import { useCancelGuideRequest } from '../hooks/useCancelGuideRequest';
 import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
 
 export const SubscriptionDetailScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'SubscriptionDetail'>>();
   const { id } = route.params;
 
@@ -46,6 +49,9 @@ export const SubscriptionDetailScreen = () => {
   const deleteMutation = useDeleteSubscription();
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
+  const requestGuideMutation = useCancelGuideRequest();
+  
+  const { data: cancelGuideLookup } = useSubscriptionCancelGuide(id);
 
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
 
@@ -98,8 +104,30 @@ export const SubscriptionDetailScreen = () => {
     setIsCancelModalVisible(true);
   };
 
-  const nextDate = new Date(sub.nextPaymentDate);
-  const diffDays = Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24));
+  const handleRequestGuide = () => {
+    requestGuideMutation.mutate(id, {
+      onSuccess: (data) => {
+        Alert.alert(
+          data.alreadyExisted ? 'Zgłoszenie już istnieje' : 'Dziękujemy',
+          data.message || (data.alreadyExisted ? 'To zgłoszenie jest już zapisane.' : 'Zapisaliśmy zgłoszenie.')
+        );
+      },
+      onError: (err: any) => {
+        if (err?.status === 409 && err?.body?.code === 'CANCEL_GUIDE_ALREADY_EXISTS') {
+          Alert.alert('Informacja', 'Instrukcja dla tej usługi właśnie się pojawiła!');
+        } else if (err?.status === 404) {
+          Alert.alert('Nie znaleziono subskrypcji', 'Nie udało się znaleźć tej subskrypcji dla aktualnego konta.');
+        } else {
+          Alert.alert('Błąd', 'Nie udało się wysłać zgłoszenia.');
+        }
+      }
+    });
+  };
+
+  const nextDate = sub.nextPaymentDate ? new Date(sub.nextPaymentDate) : null;
+  const diffDays = nextDate
+    ? Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24))
+    : null;
 
   let parsedNotes = { text: sub.notes || '', isShared: false, peopleCount: undefined as number | undefined };
   try {
@@ -159,7 +187,9 @@ export const SubscriptionDetailScreen = () => {
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Następna płatność</Text>
               <Text style={styles.infoValue}>
-                {`${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()}`} ({diffDays > 0 ? `za ${diffDays} dni` : 'dziś'})
+                {nextDate
+                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} (${diffDays && diffDays > 0 ? `za ${diffDays} dni` : 'dziś'})`
+                  : 'Brak zaplanowanej płatności'}
               </Text>
             </View>
           </View>
@@ -204,6 +234,23 @@ export const SubscriptionDetailScreen = () => {
             >
               <ExternalLink size={20} color="#6366F1" />
               <Text style={styles.cancelUrlBtnText}>Otwórz stronę rezygnacji</Text>
+            </TouchableOpacity>
+          )}
+          
+          {cancelGuideLookup?.hasGuide === false && cancelGuideLookup.source === 'none' && (
+            <TouchableOpacity 
+              style={[styles.cancelUrlBtn, { borderTopWidth: sub.cancelUrl ? 1 : 0 }]} 
+              onPress={handleRequestGuide}
+              disabled={requestGuideMutation.isPending}
+            >
+              {requestGuideMutation.isPending ? (
+                <ActivityIndicator size="small" color="#6366F1" />
+              ) : (
+                <>
+                  <AlertCircle size={20} color="#6366F1" />
+                  <Text style={styles.cancelUrlBtnText}>Zgłoś brak instrukcji anulowania</Text>
+                </>
+              )}
             </TouchableOpacity>
           )}
         </View>

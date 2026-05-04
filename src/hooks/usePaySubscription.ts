@@ -29,15 +29,16 @@ export function usePaySubscription() {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
       
-      // Reschedule notification
-      scheduleSubscriptionReminder(
-        data.id,
-        data.name,
-        data.amount,
-        data.currency,
-        data.nextPaymentDate,
-        data.reminderDaysBefore
-      );
+      if (data.nextPaymentDate) {
+        scheduleSubscriptionReminder(
+          data.id,
+          data.name,
+          data.amount,
+          data.currency,
+          data.nextPaymentDate,
+          data.reminderDaysBefore
+        );
+      }
     },
   });
 }

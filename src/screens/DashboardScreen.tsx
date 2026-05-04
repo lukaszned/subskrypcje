@@ -10,6 +10,7 @@ import {
   Animated,
   ActivityIndicator,
   FlatList,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
@@ -28,13 +29,14 @@ import {
   Settings,
   Wallet,
   List,
-  Lightbulb
+  Lightbulb,
+  History
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // App imports
-import { AppStackParamList } from '../../App';
+import type { AppStackParamList } from '../types/navigation';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useUpcomingPayments } from '../hooks/useUpcomingPayments';
 import { useCategoryBreakdown } from '../hooks/useCategoryBreakdown';
@@ -48,6 +50,8 @@ import { useAuth } from '../context/AuthContext';
 import { ErrorState } from '../components/ErrorState';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
+import { useHealthScore } from '../hooks/useHealthScore';
+import { useDashboardActivity } from '../hooks/useDashboardActivity';
 import { 
   UpcomingPaymentItem, 
   CategoryBreakdownItem,
@@ -55,6 +59,11 @@ import {
 } from '../types/api';
 
 const { width } = Dimensions.get('window');
+
+const formatDays = (days: number) => {
+  if (days === 1) return '1 dzień';
+  return `${days} dni`;
+};
 
 // ─────────────────────────────────────────────────────────────
 // SKELETON
@@ -81,27 +90,30 @@ const Skeleton = React.memo(({ width, height, style, borderRadius = 8 }: any) =>
 // COMPONENT
 // ─────────────────────────────────────────────────────────────
 export const DashboardScreen = () => {
-  const navigation = useNavigation<StackNavigationProp<AppStackParamList>>();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Dashboard'>>();
   const { signOut } = useAuth();
   
   const [isDark, setIsDark] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notifPermission, setNotifPermission] = useState<string>('granted');
+  const [trendType, setTrendType] = useState<'planned' | 'real'>('planned');
 
   // Data
   const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useDashboardSummary();
-  const { data: upcomingData, isLoading: isUpcomingLoading, refetch: refetchUpcoming } = useUpcomingPayments(30);
-  const { data: breakdownData, isLoading: isBreakdownLoading, refetch: refetchBreakdown } = useCategoryBreakdown();
-  const { data: trialsData, isLoading: isTrialsLoading, refetch: refetchTrials } = useTrials(30);
-  const { data: savingsData, isLoading: isSavingsLoading, refetch: refetchSavings } = useDashboardSavings();
-  const { data: trendsData, isLoading: isTrendsLoading, refetch: refetchTrends } = useDashboardTrends(6);
+  const { data: upcomingData, refetch: refetchUpcoming } = useUpcomingPayments(30);
+  const { data: breakdownData, refetch: refetchBreakdown } = useCategoryBreakdown();
+  const { data: trialsData, refetch: refetchTrials } = useTrials(30);
+  const { data: savingsData, refetch: refetchSavings } = useDashboardSavings();
+  const { data: trendsData, refetch: refetchTrends } = useDashboardTrends(6, trendType);
   const { data: remindersData, refetch: refetchReminders } = useReminders();
+  const { data: healthData, refetch: refetchHealth } = useHealthScore();
+  const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10);
 
-  const { data: settings, isLoading: isSettingsLoading, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useUserSettings();
-  const { data: budgetImpact, isLoading: isBudgetLoading } = useBudgetImpact();
+  const { data: settings, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useUserSettings();
+  const { data: budgetImpact } = useBudgetImpact();
   const { data: notifPreview } = useNotificationPreview();
 
-  const isLoading = isSummaryLoading || isUpcomingLoading || isBreakdownLoading || isTrialsLoading || isSavingsLoading || isTrendsLoading || isSettingsLoading || isBudgetLoading;
+  const isLoading = isSummaryLoading;
   const isError = isSummaryError || isSettingsError;
   const hasData = !!summaryData;
 
@@ -194,6 +206,8 @@ export const DashboardScreen = () => {
         refetchTrends(),
         refetchReminders(),
         refetchSettings(),
+        refetchHealth(),
+        refetchActivity(),
       ]);
     } catch (e) {
       console.warn('Refresh failed', e);
@@ -662,6 +676,101 @@ export const DashboardScreen = () => {
       color: theme.textDim,
       lineHeight: 16,
     },
+    healthCard: {
+      backgroundColor: theme.card,
+      borderRadius: 24,
+      padding: 20,
+      borderLeftWidth: 6,
+      marginBottom: 24,
+    },
+    healthTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 16,
+    },
+    scoreCircle: {
+      width: 56,
+      height: 56,
+      borderRadius: 28,
+      borderWidth: 3,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    scoreText: {
+      fontSize: 20,
+      fontWeight: '800',
+    },
+    healthMain: {
+      flex: 1,
+    },
+    healthLabel: {
+      fontSize: 18,
+      fontWeight: '800',
+      marginBottom: 2,
+    },
+    healthSummary: {
+      fontSize: 13,
+      color: theme.textDim,
+      lineHeight: 18,
+    },
+    activityCard: {
+      backgroundColor: theme.card,
+      borderRadius: 24,
+      padding: 12,
+      marginBottom: 24,
+      borderWidth: 1,
+      borderColor: theme.border,
+    },
+    activityItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+      borderTopWidth: 1,
+      borderTopColor: theme.border,
+    },
+    activityIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 12,
+    },
+    activityContent: {
+      flex: 1,
+    },
+    activityMessage: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.text,
+    },
+    activityDate: {
+      fontSize: 11,
+      color: theme.textDim,
+      marginTop: 2,
+    },
+    typeToggle: {
+      flexDirection: 'row',
+      backgroundColor: theme.border,
+      borderRadius: 12,
+      padding: 2,
+    },
+    typePill: {
+      paddingHorizontal: 12,
+      paddingVertical: 4,
+      borderRadius: 10,
+    },
+    typePillActive: {
+      backgroundColor: theme.card,
+    },
+    typePillText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: theme.textDim,
+    },
+    typePillTextActive: {
+      color: theme.primary,
+    },
   }), [theme, isDark]);
 
   // SMART SUGGESTIONS GENERATOR
@@ -671,8 +780,10 @@ export const DashboardScreen = () => {
     if (overdueCount > 0) {
       list.push({
         id: 'overdue',
-        title: 'Masz zaległą płatność',
-        desc: `Płatność za ${overdueCount} subskrypcji wymaga uwagi.`,
+        title: overdueCount === 1 ? 'Jedna płatność wymaga uwagi' : 'Masz zaległe płatności',
+        desc: overdueCount === 1
+          ? 'Sprawdź najbliższą zaległą subskrypcję i oznacz płatność po opłaceniu.'
+          : `${overdueCount} płatności wymagają sprawdzenia na liście subskrypcji.`,
         icon: AlertCircle,
         color: theme.error
       });
@@ -683,17 +794,18 @@ export const DashboardScreen = () => {
       list.push({
         id: 'trial',
         title: 'Trial kończy się wkrótce',
-        desc: `Twój trial ${nextTrial.name} kończy się za ${nextTrial.daysLeft} dni.`,
+        desc: `Trial ${nextTrial.name} kończy się za ${formatDays(nextTrial.daysLeft)}.`,
         icon: Clock,
         color: theme.warning
       });
     }
 
-    if (budgetImpact?.hasIncome && budgetImpact.subscriptionsIncomePercentage > 20) {
+    const subscriptionsIncomePercentage = budgetImpact?.subscriptionsIncomePercentage ?? 0;
+    if (budgetImpact?.hasIncome && subscriptionsIncomePercentage > 20) {
       list.push({
         id: 'budget',
-        title: 'Wysoki wpływ na budżet',
-        desc: `Subskrypcje pochłaniają ${budgetImpact.subscriptionsIncomePercentage}% Twojego dochodu.`,
+        title: 'Wysoki udział subskrypcji',
+        desc: `Subskrypcje odpowiadają za ${subscriptionsIncomePercentage}% miesięcznego dochodu.`,
         icon: TrendingUp,
         color: theme.primary
       });
@@ -703,7 +815,7 @@ export const DashboardScreen = () => {
       list.push({
         id: 'savings',
         title: 'Oszczędzasz środki',
-        desc: `Anulowane subskrypcje oszczędzają Ci ${savingsData.monthlySavings.toFixed(2)} ${baseCurrency} miesięcznie.`,
+        desc: `Anulowane usługi dają ${savingsData.monthlySavings.toFixed(2)} ${baseCurrency} oszczędności miesięcznie.`,
         icon: Activity,
         color: theme.success
       });
@@ -714,12 +826,14 @@ export const DashboardScreen = () => {
 
   const renderBudgetCard = () => {
     if (!budgetImpact || !budgetImpact.hasIncome) return null;
+    const subscriptionsIncomePercentage = budgetImpact.subscriptionsIncomePercentage ?? 0;
+    const monthlyIncome = budgetImpact.monthlyIncome ?? 0;
 
     return (
       <View style={[dynamicStyles.budgetCard, dynamicStyles.shadowSm]}>
         <View style={dynamicStyles.budgetHeader}>
           <Wallet size={20} color={theme.primary} />
-          <Text style={dynamicStyles.budgetTitle}>Wpływ na budżet</Text>
+          <Text style={dynamicStyles.budgetTitle}>Udział subskrypcji</Text>
         </View>
         
         <View style={dynamicStyles.budgetProgressContainer}>
@@ -727,17 +841,17 @@ export const DashboardScreen = () => {
             <View 
               style={[
                 dynamicStyles.budgetProgressBarFill, 
-                { width: `${Math.min(budgetImpact.subscriptionsIncomePercentage, 100)}%` }
+                { width: `${Math.min(subscriptionsIncomePercentage, 100)}%` }
               ]} 
             />
           </View>
           <Text style={dynamicStyles.budgetPercentage}>
-            {budgetImpact.subscriptionsIncomePercentage}%
+            {subscriptionsIncomePercentage}%
           </Text>
         </View>
         
         <Text style={dynamicStyles.budgetDesc}>
-          Subskrypcje pochłaniają {budgetImpact.monthlySubscriptionsTotal.toFixed(2)} {baseCurrency} z Twojego dochodu {budgetImpact.monthlyIncome.toFixed(2)} {budgetImpact.incomeCurrency}.
+          Subskrypcje kosztują {budgetImpact.monthlySubscriptionsTotal.toFixed(2)} {baseCurrency} miesięcznie przy dochodzie {monthlyIncome.toFixed(2)} {budgetImpact.incomeCurrency}.
         </Text>
       </View>
     );
@@ -767,6 +881,74 @@ export const DashboardScreen = () => {
       </View>
     );
   };
+  const renderHealthScore = () => {
+    if (!healthData) return null;
+    
+    const { score, label, status, summary } = healthData;
+    
+    const getStatusColor = () => {
+      switch (status) {
+        case 'excellent': return '#10B981';
+        case 'good': return '#6366F1';
+        case 'needs_attention': return '#F59E0B';
+        case 'risky': return '#EF4444';
+        default: return theme.primary;
+      }
+    };
+
+    return (
+      <View style={dynamicStyles.sectionContainer}>
+        <Text style={dynamicStyles.sectionTitle}>Kondycja subskrypcji</Text>
+        <TouchableOpacity 
+          style={[dynamicStyles.healthCard, dynamicStyles.shadowSm, { borderLeftColor: getStatusColor() }]}
+          activeOpacity={0.9}
+        >
+          <View style={dynamicStyles.healthTop}>
+            <View style={[dynamicStyles.scoreCircle, { borderColor: getStatusColor() }]}>
+              <Text style={[dynamicStyles.scoreText, { color: getStatusColor() }]}>{score}</Text>
+            </View>
+            <View style={dynamicStyles.healthMain}>
+              <Text style={[dynamicStyles.healthLabel, { color: getStatusColor() }]}>{label}</Text>
+              <Text style={dynamicStyles.healthSummary}>{summary}</Text>
+            </View>
+            <ChevronRight size={20} color="#CBD5E1" />
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderRecentActivity = () => {
+    if (!activityData || activityData.items.length === 0) return null;
+
+    return (
+      <View style={dynamicStyles.sectionContainer}>
+        <View style={dynamicStyles.sectionHeader}>
+          <Text style={dynamicStyles.sectionTitle}>Ostatnia aktywność</Text>
+          <TouchableOpacity onPress={() => {/* Navigation for full history could go here */}}>
+            <Text style={{ color: theme.primary, fontWeight: '600', fontSize: 13 }}>Zobacz wszystko</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <View style={[dynamicStyles.activityCard, dynamicStyles.shadowSm]}>
+          {activityData.items.slice(0, 5).map((item, idx) => (
+            <View key={item.id} style={[dynamicStyles.activityItem, idx === 0 && { borderTopWidth: 0 }]}>
+              <View style={[dynamicStyles.activityIcon, { backgroundColor: item.type === 'paid' ? '#F0FDF4' : item.type === 'canceled' ? '#FEF2F2' : '#F1F5F9' }]}>
+                <History size={16} color={item.type === 'paid' ? '#10B981' : item.type === 'canceled' ? '#EF4444' : '#64748B'} />
+              </View>
+              <View style={dynamicStyles.activityContent}>
+                <Text style={dynamicStyles.activityMessage}>{item.message}</Text>
+                <Text style={dynamicStyles.activityDate}>
+                  {new Date(item.createdAt).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const renderHeader = () => {
     const monthlyTotal = Number(summaryData?.monthlyTotal) || 0;
     const yearlyTotal = Number(summaryData?.yearlyTotal) || 0;
@@ -781,6 +963,9 @@ export const DashboardScreen = () => {
             <TouchableOpacity onPress={() => setIsDark(!isDark)}>
               {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
             </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Notifications')}>
+              <Bell size={20} color={theme.textDim} />
+            </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
               <Settings size={20} color={theme.textDim} />
             </TouchableOpacity>
@@ -791,7 +976,7 @@ export const DashboardScreen = () => {
         </View>
 
         <View style={dynamicStyles.summaryMain}>
-          <Text style={dynamicStyles.headerGridLabel}>Twoje wydatki (Miesięcznie)</Text>
+          <Text style={dynamicStyles.headerGridLabel}>Koszt subskrypcji / miesiąc</Text>
           <View style={dynamicStyles.headerAmountRow}>
             <Text style={dynamicStyles.headerAmount}>{monthlyTotal.toFixed(2)}</Text>
             <Text style={dynamicStyles.headerCurrency}>{baseCurrency}</Text>
@@ -1006,7 +1191,7 @@ export const DashboardScreen = () => {
   const renderFinancialTip = () => {
     return (
       <View style={dynamicStyles.sectionContainer}>
-        <Text style={dynamicStyles.sectionTitle}>Finansowa mądrość</Text>
+        <Text style={dynamicStyles.sectionTitle}>Pełen obraz subskrypcji</Text>
         <View style={[dynamicStyles.breakdownCard, dynamicStyles.shadowSm, { marginTop: 8, borderColor: theme.primary, backgroundColor: isDark ? '#1E293B' : '#EEF2FF' }]}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
             <View style={{ backgroundColor: theme.primary, padding: 10, borderRadius: 12 }}>
@@ -1014,10 +1199,10 @@ export const DashboardScreen = () => {
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 4 }}>
-                Widzisz pełen obraz?
+                Widzisz pełen obraz subskrypcji?
               </Text>
               <Text style={{ fontSize: 13, color: theme.textDim, lineHeight: 20 }}>
-                Dodaj nie tylko subskrypcje, ale też stałe opłaty jak czynsz, rachunki czy karnet. Poniżej znajdziesz trend swoich wydatków, gdy tylko uzbierasz min. miesiąc historii.
+                Dodaj wszystkie cykliczne usługi, triale i płatności, aby zobaczyć trend kosztów i łatwiej znaleźć miejsca do oszczędzania.
               </Text>
             </View>
           </View>
@@ -1035,8 +1220,24 @@ export const DashboardScreen = () => {
     return (
       <View style={dynamicStyles.sectionContainer}>
         <View style={dynamicStyles.sectionHeader}>
-          <Text style={dynamicStyles.sectionTitle}>Trend wydatków</Text>
-          <TrendingUp size={18} color={theme.primary} />
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={dynamicStyles.sectionTitle}>Trend kosztów subskrypcji</Text>
+            <TrendingUp size={18} color={theme.primary} />
+          </View>
+          <View style={dynamicStyles.typeToggle}>
+            <TouchableOpacity 
+              onPress={() => setTrendType('planned')}
+              style={[dynamicStyles.typePill, trendType === 'planned' && dynamicStyles.typePillActive]}
+            >
+              <Text style={[dynamicStyles.typePillText, trendType === 'planned' && dynamicStyles.typePillTextActive]}>Plan</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              onPress={() => setTrendType('real')}
+              style={[dynamicStyles.typePill, trendType === 'real' && dynamicStyles.typePillActive]}
+            >
+              <Text style={[dynamicStyles.typePillText, trendType === 'real' && dynamicStyles.typePillTextActive]}>Real</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <View style={[dynamicStyles.trendsCard, dynamicStyles.shadowSm]}>
           <View style={dynamicStyles.chartContainer}>
@@ -1120,6 +1321,8 @@ export const DashboardScreen = () => {
       >
         {renderHeader()}
 
+        {renderHealthScore()}
+
         {renderSmartInsights()}
         {renderBudgetCard()}
 
@@ -1166,6 +1369,7 @@ export const DashboardScreen = () => {
 
         {renderCategoryBreakdown()}
 
+        {renderRecentActivity()}
         {renderFinancialTip()}
         {renderTrendsChart()}
       </ScrollView>

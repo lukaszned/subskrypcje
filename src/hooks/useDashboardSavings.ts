@@ -1,14 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiClient } from '../lib/apiClient';
-import { SavingsResponse } from '../types/api';
+import { getDashboardSavings } from '../api/dashboard';
 
 export const useDashboardSavings = () => {
   return useQuery({
     queryKey: ['dashboard', 'savings'],
-    queryFn: async () => {
-      const { data } = await apiClient.get<SavingsResponse>('/dashboard/savings');
-      return data;
-    },
+    queryFn: getDashboardSavings,
     staleTime: 300000,
   });
 };

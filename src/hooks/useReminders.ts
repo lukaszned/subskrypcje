@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { getReminders } from '../api/dashboard';
-import { ReminderItem } from '../types/api';
+import { RemindersResponse } from '../types/api';
 
 export const REMINDERS_KEY = ['dashboard', 'reminders'];
 
@@ -12,7 +12,7 @@ export const REMINDERS_KEY = ['dashboard', 'reminders'];
  * Pobiera listę przypomnień do synchronizacji z systemem powiadomień.
  */
 export function useReminders() {
-  return useQuery<ReminderItem[]>({
+  return useQuery<RemindersResponse>({
     queryKey: REMINDERS_KEY,
     queryFn: getReminders,
   });

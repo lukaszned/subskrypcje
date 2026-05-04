@@ -31,15 +31,16 @@ export function useCreateSubscription() {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
       queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
       
-      // Schedule notification
-      scheduleSubscriptionReminder(
-        data.id,
-        data.name,
-        data.amount,
-        data.currency,
-        data.nextPaymentDate,
-        data.reminderDaysBefore
-      );
+      if (data.nextPaymentDate) {
+        scheduleSubscriptionReminder(
+          data.id,
+          data.name,
+          data.amount,
+          data.currency,
+          data.nextPaymentDate,
+          data.reminderDaysBefore
+        );
+      }
     },
   });
 }

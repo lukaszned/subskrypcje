@@ -16,6 +16,8 @@ import { useNavigation } from '@react-navigation/native';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
 import { useAuth } from '../context/AuthContext';
 
+const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
+
 export const SettingsScreen = () => {
   const navigation = useNavigation();
   const { user, signOut } = useAuth();
@@ -32,12 +34,13 @@ export const SettingsScreen = () => {
 
   useEffect(() => {
     if (settings) {
-      setCurrency(settings.baseCurrency);
+      setCurrency(USER_SETTING_CURRENCIES.includes(settings.baseCurrency) ? settings.baseCurrency : 'PLN');
       setReminderDays(settings.defaultReminderDaysBefore);
       setNotifsEnabled(settings.notificationsEnabled);
       setEmailsEnabled(settings.emailReportsEnabled);
       setIncome(settings.monthlyIncome?.toString() || '');
-      setIncomeCurrency(settings.incomeCurrency || settings.baseCurrency);
+      const nextIncomeCurrency = settings.incomeCurrency || settings.baseCurrency;
+      setIncomeCurrency(USER_SETTING_CURRENCIES.includes(nextIncomeCurrency) ? nextIncomeCurrency : 'PLN');
     }
   }, [settings]);
 
@@ -121,7 +124,7 @@ export const SettingsScreen = () => {
               </View>
             </View>
             <View style={styles.currencyRow}>
-              {['PLN', 'EUR', 'USD'].map(c => (
+              {USER_SETTING_CURRENCIES.map(c => (
                 <TouchableOpacity 
                   key={c}
                   style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
@@ -140,7 +143,7 @@ export const SettingsScreen = () => {
               </View>
               <View>
                 <Text style={styles.settingTitle}>Miesięczny dochód</Text>
-                <Text style={styles.settingDesc}>Dla analizy wpływu na budżet</Text>
+                <Text style={styles.settingDesc}>Dla udziału subskrypcji w dochodzie</Text>
               </View>
             </View>
             <View style={styles.incomeInputRow}>
@@ -153,7 +156,7 @@ export const SettingsScreen = () => {
                 placeholderTextColor="#94A3B8"
               />
               <View style={styles.incomeCurrencyRow}>
-                {['PLN', 'EUR', 'USD'].map(c => (
+                {USER_SETTING_CURRENCIES.map(c => (
                   <TouchableOpacity 
                     key={c}
                     style={[styles.miniPill, incomeCurrency === c && styles.miniPillActive]}

@@ -4,16 +4,56 @@
 // Centralny klient HTTP do backendu.
 // =============================================================
 
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import { supabase } from './supabase';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
+const ENV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-if (!API_BASE_URL) {
+function getExpoHost(): string | null {
+  const constants = Constants as any;
+  const hostUri =
+    constants.expoConfig?.hostUri ||
+    constants.manifest2?.extra?.expoClient?.hostUri ||
+    constants.manifest?.debuggerHost;
+
+  if (typeof hostUri !== 'string' || !hostUri) {
+    return null;
+  }
+
+  return hostUri.replace(/^https?:\/\//, '').split('/')[0].split(':')[0] || null;
+}
+
+function resolveApiBaseUrl(): string | undefined {
+  if (__DEV__) {
+    const expoHost = getExpoHost();
+
+    if (expoHost && !['localhost', '127.0.0.1', '0.0.0.0'].includes(expoHost)) {
+      return `http://${expoHost}:3000`;
+    }
+
+    if (Platform.OS === 'android') {
+      return 'http://10.0.2.2:3000';
+    }
+
+    return 'http://127.0.0.1:3000';
+  }
+
+  return ENV_API_BASE_URL;
+}
+
+const resolvedApiBaseUrl = resolveApiBaseUrl();
+
+if (!resolvedApiBaseUrl) {
   throw new Error(
     '[apiClient] Brak zmiennej środowiskowej EXPO_PUBLIC_API_BASE_URL.\n' +
     'Uzupełnij plik .env.'
   );
 }
+
+const API_BASE_URL = resolvedApiBaseUrl;
+
+console.log(`[apiClient] API base URL: ${API_BASE_URL}`);
 
 export class ApiError extends Error {
   constructor(

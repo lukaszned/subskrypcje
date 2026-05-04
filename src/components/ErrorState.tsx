@@ -106,6 +106,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
   },
+  buttonSecondary: {
+    justifyContent: 'center',
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,

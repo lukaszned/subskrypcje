@@ -28,7 +28,8 @@ import {
 } from 'lucide-react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { AppStackParamList } from '../../App';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { AppStackParamList } from '../types/navigation';
 
 // Hooks
 import { useCreateSubscription } from '../hooks/useCreateSubscription';
@@ -90,7 +91,7 @@ const POPULAR_SUBSCRIPTIONS: PopularSubscription[] = [
 ];
 
 export const ManualAddScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'AddSubscription'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
   const subscriptionId = route.params?.subscriptionId;
 
@@ -406,8 +407,13 @@ export const ManualAddScreen = () => {
                 <View style={[styles.infoBox, { marginBottom: 20 }]}>
                   <AlertCircle size={16} color="#6366F1" style={{ marginRight: 8 }} />
                   <Text style={styles.infoBoxText}>
-                    Wszystkie koszty zostaną automatycznie przeliczone na Twoją walutę bazową (ustawioną w profilu) w analityce Dashboardu.
+                    Wystarczy nazwa, koszt, cykl i data płatności. Resztę możesz uzupełnić później.
                   </Text>
+                </View>
+
+                <View style={styles.sectionHeaderBlock}>
+                  <Text style={styles.sectionHeaderTitle}>Podstawowe</Text>
+                  <Text style={styles.sectionHeaderHint}>Najważniejsze dane subskrypcji</Text>
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -453,7 +459,7 @@ export const ManualAddScreen = () => {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Dostawca (opcjonalnie)</Text>
+                  <Text style={styles.labelOptional}>Dostawca</Text>
                   <TextInput 
                     style={styles.textInput} 
                     value={provider} 
@@ -479,7 +485,7 @@ export const ManualAddScreen = () => {
                 </View>
 
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Data płatności</Text>
+                  <Text style={styles.label}>Następna płatność</Text>
                   <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
                     <Calendar size={20} color="#6366F1" style={{ marginRight: 8 }} />
                     <Text style={styles.dateText}>{formatDate(date)}</Text>
@@ -512,7 +518,7 @@ export const ManualAddScreen = () => {
 
                 <View style={styles.inputGroup}>
                   <View style={styles.rowBetween}>
-                    <Text style={styles.label}>To jest okres próbny (Trial)</Text>
+                    <Text style={styles.labelOptional}>Trial</Text>
                     <TouchableOpacity 
                       onPress={() => setIsTrial(!isTrial)}
                       style={[styles.toggle, isTrial && styles.toggleActive]}
@@ -524,7 +530,7 @@ export const ManualAddScreen = () => {
 
                 {isTrial && (
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Koniec okresu próbnego</Text>
+                    <Text style={styles.label}>Koniec triala</Text>
                     <TouchableOpacity style={styles.dateButton} onPress={() => setShowTrialPicker(true)}>
                       <Calendar size={20} color="#F59E0B" style={{ marginRight: 8 }} />
                       <Text style={[styles.dateText, { color: '#F59E0B' }]}>{formatDate(trialEndDate)}</Text>
@@ -540,8 +546,13 @@ export const ManualAddScreen = () => {
                   </View>
                 )}
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Link do rezygnacji</Text>
+                <View style={styles.sectionHeaderBlock}>
+                  <Text style={styles.sectionHeaderTitle}>Opcjonalne</Text>
+                  <Text style={styles.sectionHeaderHint}>Ułatwiają anulowanie i dokładniejsze statystyki</Text>
+                </View>
+
+                <View style={styles.optionalGroup}>
+                  <Text style={styles.labelOptional}>Link do anulowania</Text>
                   <TextInput 
                     style={styles.textInput} 
                     value={cancelUrl} 
@@ -551,8 +562,8 @@ export const ManualAddScreen = () => {
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Notatki</Text>
+                <View style={styles.optionalGroup}>
+                  <Text style={styles.labelOptional}>Notatki</Text>
                   <TextInput 
                     style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]} 
                     value={notes} 
@@ -562,9 +573,9 @@ export const ManualAddScreen = () => {
                   />
                 </View>
 
-                <View style={styles.inputGroup}>
+                <View style={styles.optionalGroup}>
                   <View style={styles.rowBetween}>
-                    <Text style={styles.label}>Czy współdzielisz tę subskrypcję?</Text>
+                    <Text style={styles.labelOptional}>Współdzielenie</Text>
                     <TouchableOpacity 
                       onPress={() => {
                         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -578,7 +589,7 @@ export const ManualAddScreen = () => {
                   
                   {isShared && (
                     <View style={{ marginTop: 16, backgroundColor: '#F8FAFC', padding: 16, borderRadius: 16 }}>
-                      <Text style={[styles.label, { marginBottom: 12 }]}>Liczba osób</Text>
+                      <Text style={[styles.labelOptional, { marginBottom: 12 }]}>Liczba osób</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
                         <TouchableOpacity 
                           style={styles.stepperBtn}
@@ -606,9 +617,9 @@ export const ManualAddScreen = () => {
                   )}
                 </View>
 
-                <View style={styles.inputGroup}>
+                <View style={styles.optionalGroup}>
                   <View style={styles.rowBetween}>
-                    <Text style={styles.label}>Statystyki</Text>
+                    <Text style={styles.labelOptional}>Uwzględnij w statystykach</Text>
                     <TouchableOpacity 
                       onPress={() => setIncludeInStats(!includeInStats)}
                       style={[styles.toggle, includeInStats && styles.toggleActive]}
@@ -617,7 +628,7 @@ export const ManualAddScreen = () => {
                     </TouchableOpacity>
                   </View>
                   <Text style={[styles.infoBoxText, { marginTop: 8, color: '#64748B' }]}>
-                    Uwzględniaj w statystykach miesięcznych. Wyłączenie spowoduje, że koszt tej usługi nie będzie doliczany do głównego wykresu wydatków.
+                    Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
                   </Text>
                 </View>
 
@@ -693,7 +704,31 @@ const styles = StyleSheet.create({
   currencyPillTextActive: { color: '#6366F1' },
   formSection: { backgroundColor: '#FFFFFF', margin: 16, borderRadius: 24, padding: 20 },
   inputGroup: { marginBottom: 24 },
+  optionalGroup: {
+    marginBottom: 20,
+    padding: 14,
+    borderRadius: 16,
+    backgroundColor: '#F8FAFC',
+    borderWidth: 1,
+    borderColor: '#F1F5F9',
+  },
+  sectionHeaderBlock: {
+    marginBottom: 18,
+    paddingTop: 4,
+  },
+  sectionHeaderTitle: {
+    fontSize: 15,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  sectionHeaderHint: {
+    marginTop: 3,
+    fontSize: 12,
+    color: '#94A3B8',
+    fontWeight: '600',
+  },
   label: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 12 },
+  labelOptional: { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', marginBottom: 12 },
   textInput: { fontSize: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingVertical: 8 },
   pill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F8FAFC', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
   pillActive: { backgroundColor: '#6366F1', borderColor: '#6366F1' },

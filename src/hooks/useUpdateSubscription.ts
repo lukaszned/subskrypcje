@@ -28,15 +28,16 @@ export function useUpdateSubscription() {
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'upcoming'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'category-breakdown'] });
 
-      // Update/Reschedule notification
-      scheduleSubscriptionReminder(
-        data.id,
-        data.name,
-        data.amount,
-        data.currency,
-        data.nextPaymentDate,
-        data.reminderDaysBefore
-      );
+      if (data.nextPaymentDate) {
+        scheduleSubscriptionReminder(
+          data.id,
+          data.name,
+          data.amount,
+          data.currency,
+          data.nextPaymentDate,
+          data.reminderDaysBefore
+        );
+      }
     },
   });
 }

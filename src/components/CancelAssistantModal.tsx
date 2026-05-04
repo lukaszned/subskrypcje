@@ -46,6 +46,9 @@ export const CancelAssistantModal: React.FC<Props> = ({
     }
   };
 
+  const difficulty = guide?.difficulty ?? 'medium';
+  const estimatedTimeMinutes = guide?.estimatedTimeMinutes ?? 5;
+
   return (
     <Modal visible={isVisible} transparent animationType="slide">
       <View style={styles.overlay}>
@@ -80,19 +83,19 @@ export const CancelAssistantModal: React.FC<Props> = ({
             <ScrollView contentContainerStyle={styles.content}>
               <View style={styles.badgeContainer}>
                 <View style={[styles.badge, 
-                  guide.difficulty === 'hard' ? styles.hard : 
-                  guide.difficulty === 'medium' ? styles.medium : styles.easy
+                  difficulty === 'hard' ? styles.hard : 
+                  difficulty === 'medium' ? styles.medium : styles.easy
                 ]}>
                   <Text style={[styles.badgeText, 
-                    guide.difficulty === 'hard' ? styles.hardText : 
-                    guide.difficulty === 'medium' ? styles.mediumText : styles.easyText
+                    difficulty === 'hard' ? styles.hardText : 
+                    difficulty === 'medium' ? styles.mediumText : styles.easyText
                   ]}>
-                    Trudność: {guide.difficulty === 'hard' ? 'Wysoka' : guide.difficulty === 'medium' ? 'Średnia' : 'Niska'}
+                    Trudność: {difficulty === 'hard' ? 'Wysoka' : difficulty === 'medium' ? 'Średnia' : 'Niska'}
                   </Text>
                 </View>
                 <View style={styles.badge}>
                   <Clock size={14} color="#64748B" />
-                  <Text style={styles.badgeText}>~{guide.estimatedTimeMinutes} min</Text>
+                  <Text style={styles.badgeText}>~{estimatedTimeMinutes} min</Text>
                 </View>
               </View>
 

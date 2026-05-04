@@ -13,6 +13,8 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Context
 import { AuthProvider, useAuth } from './src/context/AuthContext';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
 
 // Ekrany — Auth Stack
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -24,27 +26,12 @@ import { DashboardScreen } from './src/screens/DashboardScreen';
 import { SubscriptionListScreen } from './src/screens/SubscriptionListScreen';
 import { ManualAddScreen } from './src/screens/ManualAddScreen';
 import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
 // ─────────────────────────────────────────────────────────────
-
-export type AuthStackParamList = {
-  Onboarding: undefined;
-  Login: undefined;
-  Register: undefined;
-};
-
-export type AppStackParamList = {
-  Dashboard: undefined;
-  SubscriptionList: undefined;
-  AddSubscription: { subscriptionId?: string } | undefined;
-  SubscriptionDetail: { id: string };
-  Settings: undefined;
-};
-
-export type RootStackParamList = AuthStackParamList & AppStackParamList;
 
 // ─────────────────────────────────────────────────────────────
 // Klient React Query
@@ -72,23 +59,22 @@ const queryClient = new QueryClient({
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 
-function AuthNavigator() {
+const authScreenOptions = { headerShown: false, animation: 'fade' } as const;
+const appScreenOptions = { headerShown: false, animation: 'slide_from_right' } as const;
+
+const AuthNavigator = React.memo(function AuthNavigator() {
   return (
-    <AuthStack.Navigator
-      screenOptions={{ headerShown: false, animation: 'fade' }}
-    >
+    <AuthStack.Navigator id="AuthStack" screenOptions={authScreenOptions}>
       <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
     </AuthStack.Navigator>
   );
-}
+});
 
-function AppNavigator() {
+const AppNavigator = React.memo(function AppNavigator() {
   return (
-    <AppStack.Navigator
-      screenOptions={{ headerShown: false, animation: 'slide_from_right' }}
-    >
+    <AppStack.Navigator id="AppStack" screenOptions={appScreenOptions}>
       <AppStack.Screen
         name="Dashboard"
         component={DashboardScreen}
@@ -101,10 +87,11 @@ function AppNavigator() {
         component={ManualAddScreen}
         options={{ presentation: 'modal' }}
       />
+      <AppStack.Screen name="Notifications" component={NotificationsScreen} />
       <AppStack.Screen name="Settings" component={SettingsScreen} />
     </AppStack.Navigator>
   );
-}
+});
 
 function RootNavigator() {
   const { session, isLoading } = useAuth();
@@ -138,11 +125,13 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <AuthProvider>
-        <QueryClientProvider client={queryClient}>
-          <RootNavigator />
-        </QueryClientProvider>
-      </AuthProvider>
+      <ErrorBoundary>
+        <AuthProvider>
+          <QueryClientProvider client={queryClient}>
+            <RootNavigator />
+          </QueryClientProvider>
+        </AuthProvider>
+      </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }

@@ -10,6 +10,8 @@ import { Platform } from 'react-native';
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
     shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
     shouldPlaySound: true,
     shouldSetBadge: true,
   }),
@@ -97,7 +99,10 @@ export async function scheduleSubscriptionReminder(
       data: { subscriptionId: id },
       sound: true,
     },
-    trigger: triggerDate,
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: triggerDate,
+    },
     identifier: id, // Używamy ID subskrypcji jako identyfikatora
   });
 
@@ -137,7 +142,10 @@ export async function scheduleReminderItem(item: any) {
       data: { subscriptionId: item.id },
       sound: true,
     },
-    trigger: triggerDate,
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: triggerDate,
+    },
     identifier: item.id,
   });
 }
