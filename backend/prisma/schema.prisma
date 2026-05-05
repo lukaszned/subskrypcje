@@ -54,6 +54,17 @@ enum CancelGuideRequestStatus {
   ignored
 }
 
+enum EmailProvider {
+  gmail
+}
+
+enum DetectedSubscriptionStatus {
+  pending
+  accepted
+  ignored
+  duplicate
+}
+
 model User {
   id                  String                 @id @default(cuid())
   email               String                 @unique
@@ -66,6 +77,8 @@ model User {
   payments            SubscriptionPayment[]
   events              SubscriptionEvent[]
   cancelGuideRequests CancelGuideRequest[]
+  emailConnections    EmailConnection[]
+  detectedSubscriptions DetectedSubscription[]
 }
 
 model UserSettings {
@@ -111,10 +124,73 @@ model Subscription {
   payments           SubscriptionPayment[]
   events             SubscriptionEvent[]
   cancelGuideRequests CancelGuideRequest[]
+  detectedSources    DetectedSubscription[]
 
   @@index([userId])
   @@index([nextPaymentDate])
   @@index([provider])
+}
+
+model EmailConnection {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider              EmailProvider
+  email                 String
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String?
+  scope                 String
+  connectedAt           DateTime @default(now())
+  lastScanAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  detectedSubscriptions DetectedSubscription[]
+
+  @@unique([userId, provider, email])
+  @@index([userId])
+  @@index([provider])
+  @@index([lastScanAt])
+}
+
+model DetectedSubscription {
+  id                     String                     @id @default(cuid())
+  userId                 String
+  user                   User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  emailConnectionId      String?
+  emailConnection        EmailConnection?           @relation(fields: [emailConnectionId], references: [id], onDelete: SetNull)
+
+  sourceProvider         EmailProvider
+  sourceMessageId        String?
+
+  provider               String?
+  name                   String
+  amount                 Decimal?                   @db.Decimal(10, 2)
+  currency               String?
+  billingCycle           BillingCycle?
+  nextPaymentDate        DateTime?
+  trialEndDate           DateTime?
+  isTrial                Boolean                    @default(false)
+  category               SubscriptionCategory?
+  confidence             Decimal                    @db.Decimal(4, 3)
+
+  status                 DetectedSubscriptionStatus @default(pending)
+  evidenceSnippet        String?
+
+  acceptedSubscriptionId String?
+  acceptedSubscription   Subscription?              @relation(fields: [acceptedSubscriptionId], references: [id], onDelete: SetNull)
+
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  @@unique([userId, sourceProvider, sourceMessageId])
+  @@index([userId, status])
+  @@index([emailConnectionId])
+  @@index([provider])
+  @@index([createdAt])
+  @@index([acceptedSubscriptionId])
 }
 
 model SubscriptionPayment {
