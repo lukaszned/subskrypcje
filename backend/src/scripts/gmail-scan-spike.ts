@@ -1,11 +1,14 @@
 import "dotenv/config";
 import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
+import { DetectedSubscriptionStatus, EmailProvider } from "@prisma/client";
 import { google } from "googleapis";
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 const GMAIL_MAX_RESULTS = 25;
 const GMAIL_SPIKE_VERBOSE = process.env.GMAIL_SPIKE_VERBOSE === "true";
+const GMAIL_SPIKE_SAVE_CANDIDATES =
+    process.env.GMAIL_SPIKE_SAVE_CANDIDATES === "true";
 const GMAIL_QUERY_VARIANTS = [
     {
         name: "broad_current",
@@ -79,6 +82,23 @@ type QuerySummary = {
     queryName: string;
     gmailResults: number;
     analyzed: AnalyzedMessage[];
+};
+
+type ParsedAmount = {
+    amount: number;
+    currency?: string;
+};
+
+type SaveCandidatesResult = {
+    userEmail: string;
+    created: {
+        id: string;
+        label: string;
+        confidence: number;
+        sourceMessageId: string;
+    }[];
+    skippedExisting: number;
+    notSaved: number;
 };
 
 const PROVIDER_CATALOG = [
@@ -219,6 +239,62 @@ function detectCurrency(amountText: string | undefined) {
 
     const currencyMatch = amountText.match(/\b(PLN|USD|EUR|GBP)\b/i);
     return currencyMatch?.[1]?.toUpperCase();
+}
+
+function parseAmountText(amountText: string | undefined): ParsedAmount | null {
+    if (!amountText) {
+        return null;
+    }
+
+    const cleanedAmountText = cleanText(amountText);
+    const symbolCurrency = cleanedAmountText.match(/^([$\u20ac\u00a3])\s?(\d+(?:[.,]\d{2})?)$/);
+    const suffixCurrency = cleanedAmountText.match(
+        /^(\d+(?:[.,]\d{2})?)\s?(PLN|USD|EUR|GBP)$/i
+    );
+    const prefixCurrency = cleanedAmountText.match(
+        /^(PLN|USD|EUR|GBP)\s?(\d+(?:[.,]\d{2})?)$/i
+    );
+
+    if (symbolCurrency) {
+        return {
+            amount: Number(symbolCurrency[2].replace(",", ".")),
+            currency: detectCurrency(symbolCurrency[1]),
+        };
+    }
+
+    if (suffixCurrency) {
+        return {
+            amount: Number(suffixCurrency[1].replace(",", ".")),
+            currency: suffixCurrency[2].toUpperCase(),
+        };
+    }
+
+    if (prefixCurrency) {
+        return {
+            amount: Number(prefixCurrency[2].replace(",", ".")),
+            currency: prefixCurrency[1].toUpperCase(),
+        };
+    }
+
+    return null;
+}
+
+function parseTrialEndDateText(trialEndDateText: string | undefined) {
+    if (!trialEndDateText) {
+        return null;
+    }
+
+    const parsed = Date.parse(cleanText(trialEndDateText));
+
+    if (Number.isNaN(parsed)) {
+        return null;
+    }
+
+    return new Date(parsed);
+}
+
+function truncateEvidenceSnippet(snippet: string) {
+    return cleanText(snippet).slice(0, 500);
 }
 
 function detectBillingCycle(text: string): BillingCycle | undefined {
@@ -495,6 +571,142 @@ function printGlobalSummary(analyzedMessages: AnalyzedMessage[]) {
     }
 }
 
+function printSaveCandidatesResult(result: SaveCandidatesResult) {
+    console.log("");
+    console.log("Save candidates:");
+    console.log(`user: ${result.userEmail}`);
+    console.log(`created: ${result.created.length}`);
+    console.log(`skippedExisting: ${result.skippedExisting}`);
+    console.log(`notSaved: ${result.notSaved}`);
+
+    if (result.created.length === 0) {
+        return;
+    }
+
+    console.log("");
+    console.log("Created detections:");
+
+    for (const createdDetection of result.created) {
+        console.log(
+            `- id: ${createdDetection.id}, ${createdDetection.label}, confidence ${createdDetection.confidence.toFixed(
+                2
+            )}, sourceMessageId: ${createdDetection.sourceMessageId}`
+        );
+    }
+}
+
+async function saveCandidatesToDb(
+    analyzedMessages: AnalyzedMessage[]
+): Promise<SaveCandidatesResult> {
+    const testUserEmail = process.env.TEST_USER_EMAIL;
+
+    if (!testUserEmail) {
+        throw new Error(
+            "TEST_USER_EMAIL is required when GMAIL_SPIKE_SAVE_CANDIDATES=true"
+        );
+    }
+
+    const { prisma } = await import("../lib/prisma");
+    const user = await prisma.user.findUnique({
+        where: {
+            email: testUserEmail,
+        },
+    });
+
+    if (!user) {
+        throw new Error(`No user found for TEST_USER_EMAIL=${testUserEmail}`);
+    }
+
+    const candidates = getCandidates(analyzedMessages);
+    const created: SaveCandidatesResult["created"] = [];
+    let skippedExisting = 0;
+    let notSaved = 0;
+
+    try {
+        for (const candidate of candidates) {
+            const existingDetection = await prisma.detectedSubscription.findFirst({
+                where: {
+                    userId: user.id,
+                    sourceProvider: EmailProvider.gmail,
+                    sourceMessageId: candidate.id,
+                },
+                select: {
+                    id: true,
+                },
+            });
+
+            if (existingDetection) {
+                skippedExisting += 1;
+                continue;
+            }
+
+            const parsedAmount = parseAmountText(
+                candidate.analysis.detected.amountText
+            );
+            const amount =
+                parsedAmount && Number.isFinite(parsedAmount.amount)
+                    ? parsedAmount.amount
+                    : null;
+            const currency =
+                candidate.analysis.detected.currency ?? parsedAmount?.currency ?? null;
+            const provider =
+                candidate.analysis.detected.provider ??
+                candidate.analysis.detected.name ??
+                null;
+            const name =
+                candidate.analysis.detected.name ??
+                candidate.analysis.detected.provider ??
+                "Detected subscription";
+
+            try {
+                const detection = await prisma.detectedSubscription.create({
+                    data: {
+                        userId: user.id,
+                        sourceProvider: EmailProvider.gmail,
+                        sourceMessageId: candidate.id,
+                        provider,
+                        name,
+                        amount,
+                        currency,
+                        billingCycle: candidate.analysis.detected.billingCycle ?? null,
+                        nextPaymentDate: null,
+                        trialEndDate: parseTrialEndDateText(
+                            candidate.analysis.detected.trialEndDateText
+                        ),
+                        isTrial: candidate.analysis.detected.isTrial ?? false,
+                        category: null,
+                        confidence: candidate.analysis.confidence,
+                        status: DetectedSubscriptionStatus.pending,
+                        evidenceSnippet: truncateEvidenceSnippet(candidate.snippet),
+                    },
+                });
+
+                created.push({
+                    id: detection.id,
+                    label: provider ?? name,
+                    confidence: Number(detection.confidence.toString()),
+                    sourceMessageId: candidate.id,
+                });
+            } catch (error) {
+                notSaved += 1;
+                const message = error instanceof Error ? error.message : String(error);
+                console.error(
+                    `Failed to save candidate ${candidate.id}: ${message}`
+                );
+            }
+        }
+
+        return {
+            userEmail: user.email,
+            created,
+            skippedExisting,
+            notSaved,
+        };
+    } finally {
+        await prisma.$disconnect();
+    }
+}
+
 async function analyzeGmailMessage(
     gmail: ReturnType<typeof google.gmail>,
     messageId: string,
@@ -614,6 +826,9 @@ async function main() {
             `Running ${GMAIL_QUERY_VARIANTS.length} Gmail query variant(s), max ${GMAIL_MAX_RESULTS} results each.`
         );
         console.log(`Verbose: ${GMAIL_SPIKE_VERBOSE ? "true" : "false"}`);
+        console.log(
+            `Save candidates: ${GMAIL_SPIKE_SAVE_CANDIDATES ? "true" : "false"}`
+        );
         console.log("");
 
         for (const variant of GMAIL_QUERY_VARIANTS) {
@@ -632,7 +847,13 @@ async function main() {
             printQuerySummary(summary);
         }
 
-        printGlobalSummary(Array.from(globalMessagesById.values()));
+        const uniqueAnalyzedMessages = Array.from(globalMessagesById.values());
+        printGlobalSummary(uniqueAnalyzedMessages);
+
+        if (GMAIL_SPIKE_SAVE_CANDIDATES) {
+            const saveResult = await saveCandidatesToDb(uniqueAnalyzedMessages);
+            printSaveCandidatesResult(saveResult);
+        }
     } finally {
         readline.close();
     }
