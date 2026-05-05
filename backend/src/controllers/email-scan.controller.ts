@@ -1,10 +1,14 @@
 import { DetectedSubscriptionStatus } from "@prisma/client";
 import { Response } from "express";
+import { ZodError } from "zod";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
+    acceptDetectedSubscriptionForUser,
     getDetectedSubscriptionsForUser,
     getEmailScanStatus,
+    ignoreDetectedSubscriptionForUser,
 } from "../services/email-scan.service";
+import { acceptDetectedSubscriptionSchema } from "../validators/email-scan";
 
 const detectionStatusValues = Object.values(DetectedSubscriptionStatus);
 
@@ -118,6 +122,139 @@ export async function getDetectedSubscriptionsHandler(
         return res.json(detections);
     } catch (error) {
         console.error("Error fetching detected subscriptions:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+function getParamId(req: AuthenticatedRequest): string {
+    return String(req.params.id);
+}
+
+function sendValidationError(res: Response, error: ZodError) {
+    return res.status(400).json({
+        message: "Validation error",
+        code: "VALIDATION_ERROR",
+        errors: error.issues.map((issue) => ({
+            field: issue.path.join("."),
+            message: issue.message,
+        })),
+    });
+}
+
+export async function ignoreDetectedSubscriptionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const result = await ignoreDetectedSubscriptionForUser(
+            req.appUser.id,
+            getParamId(req)
+        );
+
+        switch (result.status) {
+            case "not_found":
+                return res.status(404).json({
+                    message: "Detected subscription not found.",
+                    code: "DETECTION_NOT_FOUND",
+                });
+            case "already_accepted":
+                return res.status(409).json({
+                    message: "Accepted detection cannot be ignored.",
+                    code: "DETECTION_ALREADY_ACCEPTED",
+                });
+            case "ignored":
+                return res.json({
+                    id: result.id,
+                    status: "ignored",
+                    message: "Detected subscription ignored.",
+                });
+        }
+    } catch (error) {
+        console.error("Error ignoring detected subscription:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function acceptDetectedSubscriptionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const parsedData = acceptDetectedSubscriptionSchema.parse(req.body ?? {});
+        const result = await acceptDetectedSubscriptionForUser(
+            req.appUser.id,
+            getParamId(req),
+            parsedData
+        );
+
+        switch (result.status) {
+            case "not_found":
+                return res.status(404).json({
+                    message: "Detected subscription not found.",
+                    code: "DETECTION_NOT_FOUND",
+                });
+            case "already_accepted":
+                return res.status(409).json({
+                    message: "Detected subscription has already been accepted.",
+                    code: "DETECTION_ALREADY_ACCEPTED",
+                });
+            case "already_ignored":
+                return res.status(409).json({
+                    message: "Ignored detection cannot be accepted.",
+                    code: "DETECTION_ALREADY_IGNORED",
+                });
+            case "marked_duplicate":
+                return res.status(409).json({
+                    message: "Duplicate detection cannot be accepted.",
+                    code: "DETECTION_MARKED_DUPLICATE",
+                });
+            case "needs_review":
+                return res.status(400).json({
+                    message:
+                        "Detected subscription needs review before it can be accepted.",
+                    code: "DETECTION_NEEDS_REVIEW",
+                    missingFields: result.missingFields ?? [],
+                });
+            case "duplicate_subscription":
+                return res.status(409).json({
+                    message: "A similar subscription already exists",
+                    code: "DUPLICATE_SUBSCRIPTION",
+                    duplicate: result.duplicate,
+                });
+            case "accepted":
+                return res.json({
+                    detection: result.detection,
+                    subscription: result.subscription,
+                    message: "Detected subscription accepted.",
+                });
+        }
+    } catch (error) {
+        console.error("Error accepting detected subscription:", error);
+
+        if (error instanceof ZodError) {
+            return sendValidationError(res, error);
+        }
+
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
