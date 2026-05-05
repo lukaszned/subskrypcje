@@ -60,3 +60,23 @@ export const acceptDetectedSubscriptionSchema = z
 export type AcceptDetectedSubscriptionInput = z.infer<
     typeof acceptDetectedSubscriptionSchema
 >;
+
+export const scanGmailSchema = z.object({
+    connectionId: z.string().trim().min(1).optional(),
+    limit: z.coerce
+        .number()
+        .int("limit must be an integer")
+        .min(1, "limit cannot be less than 1")
+        .max(50, "limit cannot be greater than 50")
+        .optional()
+        .default(25),
+    sinceDays: z.coerce
+        .number()
+        .int("sinceDays must be an integer")
+        .min(7, "sinceDays cannot be less than 7")
+        .max(730, "sinceDays cannot be greater than 730")
+        .optional()
+        .default(365),
+});
+
+export type ScanGmailInput = z.infer<typeof scanGmailSchema>;

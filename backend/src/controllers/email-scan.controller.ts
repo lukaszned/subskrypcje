@@ -13,7 +13,14 @@ import {
     GmailOAuthServiceError,
     handleGmailOAuthCallback,
 } from "../services/gmail-oauth.service";
-import { acceptDetectedSubscriptionSchema } from "../validators/email-scan";
+import {
+    GmailScanServiceError,
+    scanGmailForUser,
+} from "../services/gmail-scan.service";
+import {
+    acceptDetectedSubscriptionSchema,
+    scanGmailSchema,
+} from "../validators/email-scan";
 
 const detectionStatusValues = Object.values(DetectedSubscriptionStatus);
 
@@ -95,6 +102,27 @@ function sendGmailOAuthError(res: Response, error: GmailOAuthServiceError) {
     }
 }
 
+function sendGmailScanError(res: Response, error: GmailScanServiceError) {
+    switch (error.code) {
+        case "GMAIL_CONNECTION_NOT_FOUND":
+            return res.status(404).json({
+                message: "Gmail connection not found.",
+                code: "GMAIL_CONNECTION_NOT_FOUND",
+            });
+        case "GMAIL_REAUTH_REQUIRED":
+            return res.status(409).json({
+                message: "Gmail connection requires reauthorization.",
+                code: "GMAIL_REAUTH_REQUIRED",
+            });
+        case "GMAIL_SCAN_FAILED":
+        default:
+            return res.status(500).json({
+                message: "Gmail scan failed.",
+                code: "GMAIL_SCAN_FAILED",
+            });
+    }
+}
+
 export async function getGmailAuthUrlHandler(
     req: AuthenticatedRequest,
     res: Response
@@ -157,6 +185,43 @@ export async function handleGmailOAuthCallbackHandler(
 
         if (error instanceof GmailOAuthServiceError) {
             return sendGmailOAuthError(res, error);
+        }
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function scanGmailHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const parsedData = scanGmailSchema.parse(req.body ?? {});
+        const result = await scanGmailForUser(req.appUser.id, parsedData);
+
+        return res.json({
+            ...result,
+            message: "Gmail scan completed.",
+        });
+    } catch (error) {
+        console.error("Error scanning Gmail:", error);
+
+        if (error instanceof ZodError) {
+            return sendValidationError(res, error);
+        }
+
+        if (error instanceof GmailScanServiceError) {
+            return sendGmailScanError(res, error);
         }
 
         return res.status(500).json({
