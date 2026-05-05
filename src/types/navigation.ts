@@ -12,6 +12,7 @@ export type AppStackParamList = {
   Notifications: undefined;
   Settings: undefined;
   EmailScan: undefined;
+  Statistics: undefined;
 };
 
 export type RootStackParamList = AuthStackParamList & AppStackParamList;

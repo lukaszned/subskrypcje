@@ -45,7 +45,7 @@ const CATEGORIES: Array<{
   textColor: string;
   icon: any;
 }> = [
-  { id: 'entertainment', label: 'Rozrywka',      color: '#E0E7FF', textColor: '#4F46E5', icon: Film },
+  { id: 'entertainment', label: 'Rozrywka',      color: '#E8F3EC', textColor: '#0B6B3A', icon: Film },
   { id: 'utilities',     label: 'Narzędzia',     color: '#DBEAFE', textColor: '#2563EB', icon: Wifi },
   { id: 'health',        label: 'Zdrowie',        color: '#DCFCE7', textColor: '#16A34A', icon: Heart },
   { id: 'education',     label: 'Edukacja',       color: '#FEF9C3', textColor: '#CA8A04', icon: GraduationCap },
@@ -296,9 +296,9 @@ export const ManualAddScreen = () => {
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.inner}>
               <View style={styles.header}>
-                <TouchableOpacity onPress={() => navigation.goBack()}><X size={24} color="#64748B" /></TouchableOpacity>
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}><X size={22} color="#14251B" /></TouchableOpacity>
                 <Text style={styles.headerTitle}>{subscriptionId ? 'Edytuj' : 'Nowa'}</Text>
-                <View style={{ width: 24 }} />
+                <View style={styles.headerIconButton} />
               </View>
   
               <ScrollView 
@@ -370,7 +370,7 @@ export const ManualAddScreen = () => {
                         }}
                       >
                         <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
-                        <ArrowRight size={16} color="#6366F1" />
+                        <ArrowRight size={16} color="#0B6B3A" />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -405,22 +405,23 @@ export const ManualAddScreen = () => {
 
               <View style={styles.formSection}>
                 <View style={[styles.infoBox, { marginBottom: 20 }]}>
-                  <AlertCircle size={16} color="#6366F1" style={{ marginRight: 8 }} />
+                  <AlertCircle size={16} color="#0B6B3A" style={{ marginRight: 8 }} />
                   <Text style={styles.infoBoxText}>
                     Wystarczy nazwa, koszt, cykl i data płatności. Resztę możesz uzupełnić później.
                   </Text>
                 </View>
 
-                <View style={styles.sectionHeaderBlock}>
-                  <Text style={styles.sectionHeaderTitle}>Podstawowe</Text>
-                  <Text style={styles.sectionHeaderHint}>Najważniejsze dane subskrypcji</Text>
-                </View>
+                <View style={styles.formCard}>
+                  <View style={styles.sectionHeaderBlock}>
+                    <Text style={styles.sectionHeaderTitle}>Wybór usługi</Text>
+                    <Text style={styles.sectionHeaderHint}>Kafelki marek i podstawowe dane</Text>
+                  </View>
 
                 <View style={styles.inputGroup}>
                   <View style={styles.rowBetween}>
                     <Text style={styles.label}>Nazwa</Text>
                     {filteredSuggestions.length > 0 && (
-                      <Text style={[styles.label, { color: '#6366F1' }]}>Sugestie</Text>
+                      <Text style={[styles.label, { color: '#0B6B3A' }]}>Sugestie</Text>
                     )}
                   </View>
                   
@@ -469,6 +470,14 @@ export const ManualAddScreen = () => {
                   />
                 </View>
 
+                </View>
+
+                <View style={styles.formCard}>
+                  <View style={styles.sectionHeaderBlock}>
+                    <Text style={styles.sectionHeaderTitle}>Szczegóły kosztów</Text>
+                    <Text style={styles.sectionHeaderHint}>Plan, cykl, data, kategoria i współdzielenie</Text>
+                  </View>
+
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Cykl</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -487,7 +496,7 @@ export const ManualAddScreen = () => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Następna płatność</Text>
                   <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
-                    <Calendar size={20} color="#6366F1" style={{ marginRight: 8 }} />
+                    <Calendar size={20} color="#0B6B3A" style={{ marginRight: 8 }} />
                     <Text style={styles.dateText}>{formatDate(date)}</Text>
                   </TouchableOpacity>
                   {showDatePicker && (
@@ -546,33 +555,6 @@ export const ManualAddScreen = () => {
                   </View>
                 )}
 
-                <View style={styles.sectionHeaderBlock}>
-                  <Text style={styles.sectionHeaderTitle}>Opcjonalne</Text>
-                  <Text style={styles.sectionHeaderHint}>Ułatwiają anulowanie i dokładniejsze statystyki</Text>
-                </View>
-
-                <View style={styles.optionalGroup}>
-                  <Text style={styles.labelOptional}>Link do anulowania</Text>
-                  <TextInput 
-                    style={styles.textInput} 
-                    value={cancelUrl} 
-                    onChangeText={setCancelUrl} 
-                    placeholder="https://..." 
-                    autoCapitalize="none"
-                  />
-                </View>
-
-                <View style={styles.optionalGroup}>
-                  <Text style={styles.labelOptional}>Notatki</Text>
-                  <TextInput 
-                    style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]} 
-                    value={notes} 
-                    onChangeText={setNotes} 
-                    placeholder="Wpisz dodatkowe informacje..." 
-                    multiline
-                  />
-                </View>
-
                 <View style={styles.optionalGroup}>
                   <View style={styles.rowBetween}>
                     <Text style={styles.labelOptional}>Współdzielenie</Text>
@@ -588,7 +570,7 @@ export const ManualAddScreen = () => {
                   </View>
                   
                   {isShared && (
-                    <View style={{ marginTop: 16, backgroundColor: '#F8FAFC', padding: 16, borderRadius: 16 }}>
+                    <View style={{ marginTop: 16, backgroundColor: '#F6F8F4', padding: 16, borderRadius: 16 }}>
                       <Text style={[styles.labelOptional, { marginBottom: 12 }]}>Liczba osób</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
                         <TouchableOpacity 
@@ -597,7 +579,7 @@ export const ManualAddScreen = () => {
                         >
                           <Text style={styles.stepperBtnText}>-</Text>
                         </TouchableOpacity>
-                        <Text style={{ fontSize: 24, fontWeight: '700', color: '#0F172A', minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
+                        <Text style={{ fontSize: 24, fontWeight: '700', color: '#14251B', minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
                         <TouchableOpacity 
                           style={styles.stepperBtn}
                           onPress={() => setPeopleCount(peopleCount + 1)}
@@ -610,11 +592,41 @@ export const ManualAddScreen = () => {
                   
                   {isShared && parsedAmount > 0 && (
                     <View style={{ marginTop: 12, alignItems: 'center' }}>
-                      <Text style={{ fontSize: 16, fontWeight: '600', color: '#10B981' }}>
+                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#0B6B3A' }}>
                         Twój koszt: {finalCalculatedCost.toFixed(2)} {currency}
                       </Text>
                     </View>
                   )}
+                </View>
+
+                </View>
+
+                <View style={styles.formCard}>
+                  <View style={styles.sectionHeaderBlock}>
+                    <Text style={styles.sectionHeaderTitle}>Opcje dodatkowe</Text>
+                    <Text style={styles.sectionHeaderHint}>Anulowanie, notatki i statystyki</Text>
+                  </View>
+
+                <View style={styles.optionalGroup}>
+                  <Text style={styles.labelOptional}>Link do anulowania</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    value={cancelUrl}
+                    onChangeText={setCancelUrl}
+                    placeholder="https://..."
+                    autoCapitalize="none"
+                  />
+                </View>
+
+                <View style={styles.optionalGroup}>
+                  <Text style={styles.labelOptional}>Notatki</Text>
+                  <TextInput
+                    style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                    value={notes}
+                    onChangeText={setNotes}
+                    placeholder="Wpisz dodatkowe informacje..."
+                    multiline
+                  />
                 </View>
 
                 <View style={styles.optionalGroup}>
@@ -630,6 +642,7 @@ export const ManualAddScreen = () => {
                   <Text style={[styles.infoBoxText, { marginTop: 8, color: '#64748B' }]}>
                     Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
                   </Text>
+                </View>
                 </View>
 
                 <TouchableOpacity
@@ -657,19 +670,26 @@ export const ManualAddScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
   container: { flex: 1 },
   inner: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
-  scrollContent: { paddingBottom: 40, flexGrow: 1 },
+  headerIconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
+  scrollContent: { paddingBottom: 44, flexGrow: 1, paddingHorizontal: 16 },
   amountHeader: {
-    backgroundColor: '#6366F1',
-    paddingTop: 20,
+    backgroundColor: '#0B6B3A',
+    paddingTop: 22,
     paddingBottom: 24,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    borderBottomLeftRadius: 32,
-    borderBottomRightRadius: 32,
+    borderRadius: 28,
+    marginBottom: 16,
+    shadowColor: '#0B6B3A',
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.16,
+    shadowRadius: 22,
+    elevation: 5,
   },
   amountLabel: {
     color: 'rgba(255,255,255,0.7)',
@@ -701,25 +721,35 @@ const styles = StyleSheet.create({
   currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
   currencyPillActive: { backgroundColor: '#FFFFFF' },
   currencyPillText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
-  currencyPillTextActive: { color: '#6366F1' },
-  formSection: { backgroundColor: '#FFFFFF', margin: 16, borderRadius: 24, padding: 20 },
-  inputGroup: { marginBottom: 24 },
+  currencyPillTextActive: { color: '#0B6B3A' },
+  formSection: { margin: 0 },
+  formCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 16,
+    shadowColor: '#1C3025',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
+  },
+  inputGroup: {
+    marginBottom: 14,
+    backgroundColor: 'transparent',
+  },
   optionalGroup: {
-    marginBottom: 20,
-    padding: 14,
-    borderRadius: 16,
-    backgroundColor: '#F8FAFC',
-    borderWidth: 1,
-    borderColor: '#F1F5F9',
+    marginBottom: 14,
+    backgroundColor: 'transparent',
   },
   sectionHeaderBlock: {
     marginBottom: 18,
-    paddingTop: 4,
+    paddingHorizontal: 2,
   },
   sectionHeaderTitle: {
-    fontSize: 15,
+    fontSize: 17,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#14251B',
   },
   sectionHeaderHint: {
     marginTop: 3,
@@ -727,38 +757,38 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontWeight: '600',
   },
-  label: { fontSize: 12, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', marginBottom: 12 },
-  labelOptional: { fontSize: 12, fontWeight: '700', color: '#64748B', textTransform: 'uppercase', marginBottom: 12 },
-  textInput: { fontSize: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', paddingVertical: 8 },
-  pill: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: 20, backgroundColor: '#F8FAFC', marginRight: 8, borderWidth: 1, borderColor: '#E2E8F0' },
-  pillActive: { backgroundColor: '#6366F1', borderColor: '#6366F1' },
-  pillText: { color: '#64748B', fontWeight: '600' },
-  pillTextActive: { color: '#FFFFFF' },
-  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', padding: 12, borderRadius: 12 },
-  dateText: { fontSize: 16, fontWeight: '600', color: '#4F46E5' },
-  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, marginRight: 8, backgroundColor: '#F8FAFC' },
+  label: { fontSize: 12, fontWeight: '800', color: '#7B8A80', textTransform: 'uppercase', marginBottom: 12 },
+  labelOptional: { fontSize: 12, fontWeight: '800', color: '#66756A', textTransform: 'uppercase', marginBottom: 12 },
+  textInput: { fontSize: 16, backgroundColor: '#F6F8F4', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, color: '#14251B', fontWeight: '600' },
+  pill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: '#F6F8F4', marginRight: 8, borderWidth: 1, borderColor: '#E6ECE4' },
+  pillActive: { backgroundColor: '#E8F3EC', borderColor: '#0B6B3A' },
+  pillText: { color: '#66756A', fontWeight: '700' },
+  pillTextActive: { color: '#0B6B3A' },
+  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F6F8F4', padding: 14, borderRadius: 14 },
+  dateText: { fontSize: 16, fontWeight: '700', color: '#0B6B3A' },
+  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: '#F6F8F4' },
   catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  toggle: { width: 44, height: 24, borderRadius: 12, backgroundColor: '#E2E8F0', padding: 2 },
-  toggleActive: { backgroundColor: '#10B981' },
-  toggleDot: { width: 20, height: 20, borderRadius: 10, backgroundColor: '#FFFFFF' },
-  toggleDotActive: { transform: [{ translateX: 20 }] },
+  toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: '#DDE6DF', padding: 3 },
+  toggleActive: { backgroundColor: '#0B6B3A' },
+  toggleDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
+  toggleDotActive: { transform: [{ translateX: 22 }] },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#E8F3EC',
     padding: 12,
-    borderRadius: 12,
+    borderRadius: 16,
     alignItems: 'center',
   },
   infoBoxText: {
     flex: 1,
     fontSize: 12,
-    color: '#4F46E5',
+    color: '#0B6B3A',
     fontWeight: '500',
     lineHeight: 16,
   },
   saveButton: {
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0B6B3A',
     borderRadius: 18,
     paddingVertical: 18,
     flexDirection: 'row',
@@ -766,7 +796,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     marginTop: 20,
-    shadowColor: '#0F172A',
+    shadowColor: '#0B6B3A',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -790,13 +820,13 @@ const styles = StyleSheet.create({
   suggestionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 12,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#E2E8F0',
+    borderColor: '#E6ECE4',
   },
   suggestionIcon: {
     width: 20,
@@ -814,7 +844,7 @@ const styles = StyleSheet.create({
   suggestionText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#334155',
+    color: '#14251B',
   },
   planSelectionContainer: {
     width: '100%',
@@ -873,7 +903,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   planCardPriceActive: {
-    color: '#6366F1',
+    color: '#0B6B3A',
   },
   planCardCurrency: {
     color: 'rgba(255,255,255,0.8)',
@@ -882,7 +912,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   planCardCurrencyActive: {
-    color: '#6366F1',
+    color: '#0B6B3A',
     opacity: 0.7,
   },
   planCardCycle: {
@@ -911,7 +941,7 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   planConfirmButtonText: {
-    color: '#6366F1',
+    color: '#0B6B3A',
     fontSize: 14,
     fontWeight: '700',
   },

@@ -44,7 +44,7 @@ export async function requestNotificationPermissions() {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#6366F1',
+      lightColor: '#0B6B3A',
     });
   }
 

@@ -30,7 +30,10 @@ import {
   Wallet,
   List,
   Lightbulb,
-  History
+  History,
+  BarChart3,
+  CalendarDays,
+  Sparkles,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -65,6 +68,76 @@ const formatDays = (days: number) => {
   if (days === 1) return '1 dzień';
   return `${days} dni`;
 };
+
+type BrandToken = {
+  bg: string;
+  fg: string;
+  label: string;
+  weight?: '700' | '800' | '900';
+};
+
+const getBrandToken = (name?: string | null, provider?: string | null): BrandToken => {
+  const source = `${name || ''} ${provider || ''}`.toLowerCase();
+
+  if (source.includes('netflix')) return { bg: '#050505', fg: '#E50914', label: 'N', weight: '900' };
+  if (source.includes('spotify')) return { bg: '#1DB954', fg: '#FFFFFF', label: 'S', weight: '900' };
+  if (source.includes('hbo') || source.includes('max')) return { bg: '#1B0B3B', fg: '#FFFFFF', label: 'max', weight: '900' };
+  if (source.includes('youtube')) return { bg: '#FF0000', fg: '#FFFFFF', label: '▶', weight: '900' };
+  if (source.includes('disney')) return { bg: '#123C69', fg: '#FFFFFF', label: 'D+', weight: '900' };
+  if (source.includes('amazon') || source.includes('prime')) return { bg: '#0F172A', fg: '#FF9900', label: 'a', weight: '900' };
+  if (source.includes('apple') || source.includes('icloud')) return { bg: '#111827', fg: '#FFFFFF', label: 'A', weight: '900' };
+  if (source.includes('chatgpt') || source.includes('openai')) return { bg: '#10A37F', fg: '#FFFFFF', label: 'AI', weight: '900' };
+  if (source.includes('google') || source.includes('play')) return { bg: '#FFFFFF', fg: '#4285F4', label: 'G', weight: '900' };
+  if (source.includes('canva')) return { bg: '#00C4CC', fg: '#FFFFFF', label: 'C', weight: '900' };
+  if (source.includes('xbox')) return { bg: '#107C10', fg: '#FFFFFF', label: 'X', weight: '900' };
+  if (source.includes('allegro')) return { bg: '#FF5A00', fg: '#FFFFFF', label: 'A', weight: '900' };
+  if (source.includes('strava')) return { bg: '#FC4C02', fg: '#FFFFFF', label: 'S', weight: '900' };
+
+  return {
+    bg: '#E8F3EC',
+    fg: '#0B6B3A',
+    label: (name || provider || '?').charAt(0).toUpperCase(),
+    weight: '900',
+  };
+};
+
+const BrandMark = React.memo(({
+  name,
+  provider,
+  size = 42,
+}: {
+  name?: string | null;
+  provider?: string | null;
+  size?: number;
+}) => {
+  const brand = getBrandToken(name, provider);
+
+  return (
+    <View
+      style={{
+        width: size,
+        height: size,
+        borderRadius: Math.round(size * 0.32),
+        backgroundColor: brand.bg,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderWidth: brand.bg === '#FFFFFF' ? 1 : 0,
+        borderColor: '#E2E8F0',
+      }}
+    >
+      <Text
+        style={{
+          color: brand.fg,
+          fontSize: brand.label.length > 1 ? Math.round(size * 0.28) : Math.round(size * 0.48),
+          fontWeight: brand.weight || '900',
+          letterSpacing: 0,
+        }}
+      >
+        {brand.label}
+      </Text>
+    </View>
+  );
+});
 
 // ─────────────────────────────────────────────────────────────
 // SKELETON
@@ -224,15 +297,15 @@ export const DashboardScreen = () => {
 
   // THEME COLORS (inline simple theme for now)
   const theme = useMemo(() => ({
-    background: isDark ? '#0F172A' : '#F8FAFC',
+    background: isDark ? '#0F172A' : '#F6F8F4',
     card: isDark ? '#1E293B' : '#FFFFFF',
     text: isDark ? '#F8FAFC' : '#1E293B',
-    textDim: isDark ? '#94A3B8' : '#64748B',
-    border: isDark ? '#334155' : '#E2E8F0',
-    primary: '#6366F1',
-    success: '#10B981',
-    warning: '#F59E0B',
-    error: '#EF4444',
+    textDim: isDark ? '#94A3B8' : '#66756A',
+    border: isDark ? '#334155' : '#E6ECE4',
+    primary: '#0B6B3A',
+    success: '#0E8F58',
+    warning: '#C97A12',
+    error: '#DC2626',
   }), [isDark]);
 
   const dynamicStyles = useMemo(() => StyleSheet.create({
@@ -773,6 +846,212 @@ export const DashboardScreen = () => {
     typePillTextActive: {
       color: theme.primary,
     },
+    menuHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 18,
+    },
+    menuTitle: {
+      fontSize: 28,
+      fontWeight: '800',
+      color: theme.text,
+      letterSpacing: 0,
+    },
+    menuSubtitle: {
+      fontSize: 13,
+      color: theme.textDim,
+      marginTop: 3,
+    },
+    topIconButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      backgroundColor: theme.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: '#0F2A1B',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.06,
+      shadowRadius: 16,
+      elevation: 2,
+    },
+    topActions: {
+      flexDirection: 'row',
+      gap: 10,
+    },
+    heroDashboardCard: {
+      backgroundColor: '#0B6B3A',
+      borderRadius: 28,
+      padding: 24,
+      marginBottom: 18,
+      shadowColor: '#0B6B3A',
+      shadowOffset: { width: 0, height: 16 },
+      shadowOpacity: 0.18,
+      shadowRadius: 24,
+      elevation: 6,
+    },
+    heroEyebrow: {
+      color: '#BFEAD2',
+      fontSize: 13,
+      fontWeight: '700',
+      marginBottom: 8,
+    },
+    heroAmountRow: {
+      flexDirection: 'row',
+      alignItems: 'baseline',
+    },
+    heroAmount: {
+      color: '#FFFFFF',
+      fontSize: 42,
+      fontWeight: '900',
+      letterSpacing: 0,
+    },
+    heroCurrency: {
+      color: '#D8F5E5',
+      fontSize: 16,
+      fontWeight: '800',
+      marginLeft: 8,
+    },
+    heroMetaRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 20,
+    },
+    heroMetaPill: {
+      flex: 1,
+      backgroundColor: 'rgba(255,255,255,0.12)',
+      borderRadius: 16,
+      padding: 12,
+    },
+    heroMetaValue: {
+      color: '#FFFFFF',
+      fontSize: 16,
+      fontWeight: '800',
+    },
+    heroMetaLabel: {
+      color: '#BFEAD2',
+      fontSize: 11,
+      fontWeight: '700',
+      marginTop: 3,
+    },
+    widgetGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 14,
+      marginBottom: 18,
+    },
+    widgetCard: {
+      backgroundColor: theme.card,
+      borderRadius: 22,
+      padding: 18,
+      shadowColor: '#1C3025',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.07,
+      shadowRadius: 18,
+      elevation: 3,
+    },
+    wideWidget: {
+      width: '100%',
+    },
+    halfWidget: {
+      width: (width - 54) / 2,
+      minHeight: 168,
+    },
+    widgetTop: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 14,
+    },
+    widgetIcon: {
+      width: 42,
+      height: 42,
+      borderRadius: 15,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: '#E8F3EC',
+    },
+    widgetTitle: {
+      fontSize: 16,
+      fontWeight: '800',
+      color: theme.text,
+      letterSpacing: 0,
+    },
+    widgetCaption: {
+      fontSize: 12,
+      color: theme.textDim,
+      lineHeight: 17,
+      marginTop: 4,
+    },
+    paymentRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 10,
+      gap: 12,
+    },
+    paymentText: {
+      flex: 1,
+    },
+    paymentName: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    paymentDate: {
+      color: theme.textDim,
+      fontSize: 12,
+      marginTop: 2,
+    },
+    paymentAmount: {
+      color: theme.text,
+      fontSize: 14,
+      fontWeight: '800',
+    },
+    mutedEmptyText: {
+      color: theme.textDim,
+      fontSize: 13,
+      lineHeight: 18,
+    },
+    subscriptionMetric: {
+      fontSize: 32,
+      fontWeight: '900',
+      color: theme.text,
+      marginTop: 8,
+    },
+    miniChart: {
+      flexDirection: 'row',
+      alignItems: 'flex-end',
+      gap: 5,
+      height: 54,
+      marginTop: 14,
+    },
+    miniChartBar: {
+      flex: 1,
+      borderRadius: 6,
+      backgroundColor: theme.primary,
+      opacity: 0.22,
+    },
+    insightStrip: {
+      backgroundColor: theme.card,
+      borderRadius: 22,
+      padding: 18,
+      marginBottom: 18,
+      shadowColor: '#1C3025',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.06,
+      shadowRadius: 18,
+      elevation: 2,
+    },
+    insightRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingVertical: 9,
+    },
+    insightTextBlock: {
+      flex: 1,
+    },
     fab: {
       position: 'absolute',
       bottom: Math.max(insets.bottom + 20, 30),
@@ -1306,6 +1585,192 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderMenuHeader = () => (
+    <View style={dynamicStyles.menuHeader}>
+      <View>
+        <Text style={dynamicStyles.menuTitle}>Menu główne</Text>
+        <Text style={dynamicStyles.menuSubtitle}>Subskrypcje pod kontrolą</Text>
+      </View>
+      <View style={dynamicStyles.topActions}>
+        <TouchableOpacity style={dynamicStyles.topIconButton} onPress={() => navigation.navigate('Notifications')}>
+          <Bell size={19} color={theme.primary} />
+        </TouchableOpacity>
+        <TouchableOpacity style={dynamicStyles.topIconButton} onPress={() => navigation.navigate('Settings')}>
+          <Settings size={19} color={theme.primary} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderHeroWidget = () => {
+    const activeCount = summaryData?.activeSubscriptionsCount ?? 0;
+    const average = activeCount > 0 ? monthlyTotal / activeCount : 0;
+
+    return (
+      <View style={dynamicStyles.heroDashboardCard}>
+        <Text style={dynamicStyles.heroEyebrow}>Całkowity koszt miesięczny</Text>
+        <View style={dynamicStyles.heroAmountRow}>
+          <Text style={dynamicStyles.heroAmount}>{monthlyTotal.toFixed(2)}</Text>
+          <Text style={dynamicStyles.heroCurrency}>{baseCurrency}</Text>
+        </View>
+        <View style={dynamicStyles.heroMetaRow}>
+          <View style={dynamicStyles.heroMetaPill}>
+            <Text style={dynamicStyles.heroMetaValue}>{yearlyTotal.toFixed(0)} {baseCurrency}</Text>
+            <Text style={dynamicStyles.heroMetaLabel}>Rocznie</Text>
+          </View>
+          <View style={dynamicStyles.heroMetaPill}>
+            <Text style={dynamicStyles.heroMetaValue}>{average.toFixed(2)} {baseCurrency}</Text>
+            <Text style={dynamicStyles.heroMetaLabel}>Średnio / usługa</Text>
+          </View>
+        </View>
+      </View>
+    );
+  };
+
+  const renderUpcomingWidget = () => {
+    const items = (upcomingData?.items ?? []).slice(0, 2);
+
+    return (
+      <TouchableOpacity
+        style={[dynamicStyles.widgetCard, dynamicStyles.wideWidget]}
+        activeOpacity={0.86}
+        onPress={() => navigation.navigate('SubscriptionList')}
+      >
+        <View style={dynamicStyles.widgetTop}>
+          <View>
+            <Text style={dynamicStyles.widgetTitle}>Nadchodzące płatności</Text>
+            <Text style={dynamicStyles.widgetCaption}>Najbliższe 2 terminy</Text>
+          </View>
+          <View style={dynamicStyles.widgetIcon}>
+            <CalendarDays size={20} color={theme.primary} />
+          </View>
+        </View>
+
+        {items.length === 0 ? (
+          <Text style={dynamicStyles.mutedEmptyText}>Brak płatności w najbliższym okresie.</Text>
+        ) : (
+          items.map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={dynamicStyles.paymentRow}
+              activeOpacity={0.78}
+              onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
+            >
+              <BrandMark name={item.name} provider={item.provider} />
+              <View style={dynamicStyles.paymentText}>
+                <Text style={dynamicStyles.paymentName} numberOfLines={1}>{item.name}</Text>
+                <Text style={dynamicStyles.paymentDate}>
+                  {new Date(item.nextPaymentDate).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short' })}
+                </Text>
+              </View>
+              <Text style={dynamicStyles.paymentAmount}>{item.amount.toFixed(2)} {item.currency}</Text>
+            </TouchableOpacity>
+          ))
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderSubscriptionsWidget = () => (
+    <TouchableOpacity
+      style={[dynamicStyles.widgetCard, dynamicStyles.halfWidget]}
+      activeOpacity={0.86}
+      onPress={() => navigation.navigate('SubscriptionList')}
+    >
+      <View style={dynamicStyles.widgetTop}>
+        <View style={dynamicStyles.widgetIcon}>
+          <List size={20} color={theme.primary} />
+        </View>
+        <ChevronRight size={18} color="#B6C4BA" />
+      </View>
+      <Text style={dynamicStyles.widgetTitle}>Twoje Subskrypcje</Text>
+      <Text style={dynamicStyles.subscriptionMetric}>{summaryData?.activeSubscriptionsCount ?? 0}</Text>
+      <Text style={dynamicStyles.widgetCaption}>
+        {summaryData?.trialsCount ?? 0} triali · {overdueCount} zaległych
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const renderStatsWidget = () => {
+    const bars = memoizedTrends.items.length > 0
+      ? memoizedTrends.items.slice(-6).map(item => Math.max(0.18, item.amount / memoizedTrends.maxAmount))
+      : [0.35, 0.54, 0.42, 0.7, 0.58, 0.82];
+
+    return (
+      <TouchableOpacity
+        style={[dynamicStyles.widgetCard, dynamicStyles.halfWidget]}
+        activeOpacity={0.86}
+        onPress={() => navigation.navigate('Statistics')}
+      >
+        <View style={dynamicStyles.widgetTop}>
+          <View style={dynamicStyles.widgetIcon}>
+            <BarChart3 size={20} color={theme.primary} />
+          </View>
+          <TrendingUp size={18} color={theme.primary} />
+        </View>
+        <Text style={dynamicStyles.widgetTitle}>Statystyki</Text>
+        <View style={dynamicStyles.miniChart}>
+          {bars.map((height, index) => (
+            <View
+              key={`${height}-${index}`}
+              style={[
+                dynamicStyles.miniChartBar,
+                { height: `${Math.min(1, height) * 100}%`, opacity: index === bars.length - 1 ? 1 : 0.28 + index * 0.08 },
+              ]}
+            />
+          ))}
+        </View>
+        <Text style={dynamicStyles.widgetCaption}>{hasHistory ? 'Trend kosztów' : 'Zbieramy historię'}</Text>
+      </TouchableOpacity>
+    );
+  };
+
+  const renderPremiumInsights = () => {
+    const healthLabel = healthData ? `${healthData.label} · ${healthData.score}/100` : 'Analiza w toku';
+    const savingsLabel = savingsData && savingsData.monthlySavings > 0
+      ? `Oszczędzasz ok. ${savingsData.monthlySavings.toFixed(2)} ${savingsData.baseCurrency} / mc`
+      : 'Brak anulowanych kosztów do pokazania';
+    const incomePercentage = budgetImpact?.subscriptionsIncomePercentage ?? null;
+
+    return (
+      <View style={dynamicStyles.insightStrip}>
+        <View style={dynamicStyles.insightRow}>
+          <View style={dynamicStyles.widgetIcon}>
+            <Sparkles size={18} color={theme.primary} />
+          </View>
+          <View style={dynamicStyles.insightTextBlock}>
+            <Text style={dynamicStyles.insightTitle}>Kondycja subskrypcji</Text>
+            <Text style={dynamicStyles.insightDesc}>{healthLabel}</Text>
+          </View>
+        </View>
+
+        <View style={dynamicStyles.insightRow}>
+          <View style={dynamicStyles.widgetIcon}>
+            <Activity size={18} color={theme.primary} />
+          </View>
+          <View style={dynamicStyles.insightTextBlock}>
+            <Text style={dynamicStyles.insightTitle}>Oszczędności</Text>
+            <Text style={dynamicStyles.insightDesc}>{savingsLabel}</Text>
+          </View>
+        </View>
+
+        {budgetImpact?.hasIncome && (
+          <View style={dynamicStyles.insightRow}>
+            <View style={dynamicStyles.widgetIcon}>
+              <Wallet size={18} color={theme.primary} />
+            </View>
+            <View style={dynamicStyles.insightTextBlock}>
+              <Text style={dynamicStyles.insightTitle}>Wpływ na budżet</Text>
+              <Text style={dynamicStyles.insightDesc}>
+                Subskrypcje to {incomePercentage ?? 0}% miesięcznego dochodu.
+              </Text>
+            </View>
+          </View>
+        )}
+      </View>
+    );
+  };
+
   // MAIN RENDER
   if (isLoading && !hasData) {
     return (
@@ -1369,6 +1834,16 @@ export const DashboardScreen = () => {
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
         }
       >
+        {renderMenuHeader()}
+        {renderHeroWidget()}
+        <View style={dynamicStyles.widgetGrid}>
+          {renderUpcomingWidget()}
+          {renderSubscriptionsWidget()}
+          {renderStatsWidget()}
+        </View>
+        {renderPremiumInsights()}
+
+        {false && (<>
         {renderHeader()}
 
         {renderHealthScore()}
@@ -1401,16 +1876,16 @@ export const DashboardScreen = () => {
           </View>
         )}
 
-        {trialsData && trialsData.items.length > 0 && (
+        {(trialsData?.items?.length ?? 0) > 0 && (
           <View style={dynamicStyles.sectionContainer}>
             <View style={dynamicStyles.sectionHeader}>
               <Text style={dynamicStyles.sectionTitle}>Kończące się okresy próbne</Text>
             </View>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dynamicStyles.horizontalListPadding}>
-              {trialsData.items.map((item, idx) => (
+              {(trialsData?.items ?? []).map((item, idx) => (
                 <React.Fragment key={item.id}>
                   {renderTrialItem({ item })}
-                  {idx < trialsData.items.length - 1 && <View style={{ width: 16 }} />}
+                  {idx < (trialsData?.items.length ?? 0) - 1 && <View style={{ width: 16 }} />}
                 </React.Fragment>
               ))}
             </ScrollView>
@@ -1422,6 +1897,7 @@ export const DashboardScreen = () => {
         {renderRecentActivity()}
         {renderFinancialTip()}
         {renderTrendsChart()}
+        </>)}
       </ScrollView>
 
       <TouchableOpacity 

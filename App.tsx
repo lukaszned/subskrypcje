@@ -29,6 +29,7 @@ import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { EmailScanScreen } from './src/screens/EmailScanScreen';
+import { StatisticsScreen } from './src/screens/StatisticsScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -91,6 +92,7 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen name="Notifications" component={NotificationsScreen} />
       <AppStack.Screen name="Settings" component={SettingsScreen} />
       <AppStack.Screen name="EmailScan" component={EmailScanScreen} />
+      <AppStack.Screen name="Statistics" component={StatisticsScreen} />
     </AppStack.Navigator>
   );
 });
@@ -100,8 +102,8 @@ function RootNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#0B1120' }}>
-        <ActivityIndicator size="large" color="#6366F1" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F6F8F4' }}>
+        <ActivityIndicator size="large" color="#0B6B3A" />
       </View>
     );
   }

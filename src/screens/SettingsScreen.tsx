@@ -87,7 +87,7 @@ export const SettingsScreen = () => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#6366F1" />
+          <ActivityIndicator size="large" color="#0B6B3A" />
         </View>
       </SafeAreaView>
     );
@@ -97,7 +97,7 @@ export const SettingsScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={24} color="#0F172A" />
+          <ArrowLeft size={24} color="#14251B" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ustawienia</Text>
         <TouchableOpacity 
@@ -105,7 +105,7 @@ export const SettingsScreen = () => {
           disabled={updateMutation.isPending}
         >
           {updateMutation.isPending ? (
-            <ActivityIndicator size="small" color="#6366F1" />
+            <ActivityIndicator size="small" color="#0B6B3A" />
           ) : (
             <Text style={styles.saveBtnText}>Zapisz</Text>
           )}
@@ -119,8 +119,8 @@ export const SettingsScreen = () => {
           
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#EEF2FF' }]}>
-                <CreditCard size={20} color="#6366F1" />
+              <View style={[styles.iconContainer, { backgroundColor: '#E8F3EC' }]}>
+                <CreditCard size={20} color="#0B6B3A" />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Waluta bazowa</Text>
@@ -180,7 +180,7 @@ export const SettingsScreen = () => {
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={[styles.iconContainer, { backgroundColor: '#F0FDF4' }]}>
-                <Bell size={20} color="#10B981" />
+                <Bell size={20} color="#0B6B3A" />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Powiadomienia Push</Text>
@@ -190,7 +190,7 @@ export const SettingsScreen = () => {
             <Switch 
               value={notifsEnabled} 
               onValueChange={setNotifsEnabled}
-              trackColor={{ false: '#E2E8F0', true: '#10B981' }}
+              trackColor={{ false: '#DDE6DF', true: '#0B6B3A' }}
             />
           </View>
 
@@ -244,8 +244,8 @@ export const SettingsScreen = () => {
             onPress={() => navigation.navigate('EmailScan')}
           >
             <View style={[styles.settingInfo, { marginBottom: 0 }]}>
-              <View style={[styles.iconContainer, { backgroundColor: '#EEF2FF' }]}>
-                <Mail size={20} color="#6366F1" />
+              <View style={[styles.iconContainer, { backgroundColor: '#E8F3EC' }]}>
+                <Mail size={20} color="#0B6B3A" />
               </View>
               <View style={styles.settingTextBlock}>
                 <View style={styles.settingTitleRow}>
@@ -292,7 +292,7 @@ export const SettingsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { 
     flexDirection: 'row', 
@@ -302,11 +302,11 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9'
+    borderBottomColor: '#E6ECE4'
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  saveBtnText: { color: '#6366F1', fontWeight: '700', fontSize: 16 },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
+  saveBtnText: { color: '#0B6B3A', fontWeight: '800', fontSize: 16 },
   content: { padding: 20 },
   section: { marginBottom: 32 },
   sectionLabel: { 
@@ -319,14 +319,14 @@ const styles = StyleSheet.create({
   },
   settingItem: { 
     backgroundColor: '#FFFFFF', 
-    borderRadius: 20, 
+    borderRadius: 22,
     padding: 16, 
     marginBottom: 12,
     flexDirection: 'column', // Changed to column for better responsiveness with pills
-    shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 2 },
+    shadowColor: '#1C3025',
+    shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.05,
-    shadowRadius: 4,
+    shadowRadius: 16,
     elevation: 2,
   },
   settingInfo: { 
@@ -342,7 +342,7 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginRight: 16 
   },
-  settingTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
+  settingTitle: { fontSize: 15, fontWeight: '800', color: '#14251B' },
   settingDesc: { fontSize: 12, color: '#64748B', marginTop: 2 },
   settingTextBlock: { flex: 1 },
   settingTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -350,7 +350,7 @@ const styles = StyleSheet.create({
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#0B6B3A',
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
@@ -366,11 +366,11 @@ const styles = StyleSheet.create({
     borderColor: 'transparent'
   },
   currencyPillActive: { 
-    backgroundColor: '#EEF2FF', 
-    borderColor: '#6366F1' 
+    backgroundColor: '#E8F3EC',
+    borderColor: '#0B6B3A'
   },
   currencyPillText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
-  currencyPillTextActive: { color: '#6366F1' },
+  currencyPillTextActive: { color: '#0B6B3A' },
   reminderRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   reminderPill: { 
     paddingHorizontal: 12, 
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     borderRadius: 10, 
     backgroundColor: '#F1F5F9' 
   },
-  reminderPillActive: { backgroundColor: '#0F172A' },
+  reminderPillActive: { backgroundColor: '#0B6B3A' },
   reminderPillText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
   reminderPillTextActive: { color: '#FFFFFF' },
   incomeInputRow: {
@@ -389,12 +389,12 @@ const styles = StyleSheet.create({
   incomeInput: {
     flex: 1,
     height: 48,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: '#FFFFFF',
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
     fontWeight: '600',
-    color: '#0F172A',
+    color: '#14251B',
   },
   incomeCurrencyRow: {
     flexDirection: 'row',
@@ -409,8 +409,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   miniPillActive: {
-    backgroundColor: '#EEF2FF',
-    borderColor: '#6366F1',
+    backgroundColor: '#E8F3EC',
+    borderColor: '#0B6B3A',
   },
   miniPillText: {
     fontSize: 11,
@@ -418,7 +418,7 @@ const styles = StyleSheet.create({
     color: '#64748B',
   },
   miniPillTextActive: {
-    color: '#6366F1',
+    color: '#0B6B3A',
   },
   profileHeader: {
     flexDirection: 'row',
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#0B6B3A',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -448,7 +448,7 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#0F172A',
+    color: '#14251B',
   },
   profileEmail: {
     fontSize: 14,
@@ -457,18 +457,18 @@ const styles = StyleSheet.create({
   },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#E8F3EC',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#6366F1',
+    borderColor: '#0B6B3A',
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#6366F1',
+    color: '#0B6B3A',
     textTransform: 'uppercase',
   },
   footer: { marginTop: 20, marginBottom: 40, alignItems: 'center' },

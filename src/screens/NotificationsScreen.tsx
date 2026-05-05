@@ -29,7 +29,7 @@ export const NotificationsScreen = React.memo(() => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
-          <ArrowLeft size={24} color="#0F172A" />
+          <ArrowLeft size={24} color="#14251B" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Powiadomienia</Text>
         <View style={styles.iconButton} />
@@ -37,7 +37,7 @@ export const NotificationsScreen = React.memo(() => {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#6366F1" />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0B6B3A" />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.summaryCard}>
@@ -57,7 +57,7 @@ export const NotificationsScreen = React.memo(() => {
 
         {isLoading ? (
           <View style={styles.centerState}>
-            <ActivityIndicator size="large" color="#6366F1" />
+            <ActivityIndicator size="large" color="#0B6B3A" />
           </View>
         ) : isError ? (
           <View style={styles.centerState}>
@@ -87,14 +87,14 @@ export const NotificationsScreen = React.memo(() => {
             <Text style={styles.sectionLabel}>Kolejka</Text>
             {items.length === 0 ? (
               <View style={styles.emptyCard}>
-                <CheckCircle2 size={28} color="#10B981" />
+                <CheckCircle2 size={28} color="#0B6B3A" />
                 <Text style={styles.emptyTitle}>Brak zaplanowanych alertów</Text>
               </View>
             ) : (
               items.map((item) => (
                 <View key={item.id} style={styles.itemCard}>
                   <View style={styles.itemIcon}>
-                    <CalendarClock size={18} color="#6366F1" />
+                    <CalendarClock size={18} color="#0B6B3A" />
                   </View>
                   <View style={styles.itemBody}>
                     <Text style={styles.itemTitle}>{item.name}</Text>
@@ -118,7 +118,7 @@ export const NotificationsScreen = React.memo(() => {
 });
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -127,10 +127,10 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
+    borderBottomColor: '#E6ECE4',
   },
   iconButton: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
   content: { padding: 20, paddingBottom: 40 },
   summaryCard: {
     flexDirection: 'row',
@@ -138,10 +138,10 @@ const styles = StyleSheet.create({
     borderRadius: 24,
     backgroundColor: '#FFFFFF',
     marginBottom: 24,
-    shadowColor: '#64748B',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
+    shadowColor: '#1C3025',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
     elevation: 3,
   },
   summaryIcon: {
@@ -150,27 +150,27 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#6366F1',
+    backgroundColor: '#0B6B3A',
     marginRight: 16,
   },
   summaryText: { flex: 1 },
   summaryLabel: { fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase' },
-  summaryTitle: { marginTop: 4, color: '#0F172A', fontSize: 22, fontWeight: '800' },
+  summaryTitle: { marginTop: 4, color: '#14251B', fontSize: 22, fontWeight: '800' },
   summaryDescription: { marginTop: 4, color: '#64748B', fontSize: 13, lineHeight: 18 },
   centerState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  retryButton: { marginTop: 16, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, backgroundColor: '#6366F1' },
+  retryButton: { marginTop: 16, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, backgroundColor: '#0B6B3A' },
   retryText: { color: '#FFFFFF', fontWeight: '800' },
   sectionLabel: { marginBottom: 12, color: '#94A3B8', fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
-  nextCard: { padding: 20, borderRadius: 24, backgroundColor: '#EEF2FF', marginBottom: 24, borderWidth: 1, borderColor: '#E0E7FF' },
-  nextTitle: { color: '#0F172A', fontSize: 20, fontWeight: '800' },
+  nextCard: { padding: 20, borderRadius: 24, backgroundColor: '#E8F3EC', marginBottom: 24, borderWidth: 1, borderColor: '#D7E8DD' },
+  nextTitle: { color: '#14251B', fontSize: 20, fontWeight: '800' },
   nextDescription: { marginTop: 8, color: '#475569', fontSize: 14, lineHeight: 20 },
-  nextDate: { marginTop: 14, color: '#6366F1', fontSize: 14, fontWeight: '800' },
+  nextDate: { marginTop: 14, color: '#0B6B3A', fontSize: 14, fontWeight: '800' },
   emptyCard: { alignItems: 'center', padding: 24, borderRadius: 24, backgroundColor: '#FFFFFF' },
-  emptyTitle: { color: '#0F172A', fontSize: 16, fontWeight: '800', textAlign: 'center' },
-  itemCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 18, backgroundColor: '#FFFFFF', marginBottom: 10 },
-  itemIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#EEF2FF', marginRight: 12 },
+  emptyTitle: { color: '#14251B', fontSize: 16, fontWeight: '800', textAlign: 'center' },
+  itemCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, backgroundColor: '#FFFFFF', marginBottom: 10 },
+  itemIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F3EC', marginRight: 12 },
   itemBody: { flex: 1 },
-  itemTitle: { color: '#0F172A', fontSize: 15, fontWeight: '800' },
+  itemTitle: { color: '#14251B', fontSize: 15, fontWeight: '800' },
   itemDate: { marginTop: 4, color: '#64748B', fontSize: 12, fontWeight: '600' },
 });
 
