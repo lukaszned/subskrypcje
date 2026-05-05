@@ -13,15 +13,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet, User, LogOut } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
+import { useEmailScanStatus } from '../hooks/useEmailScan';
 import { useAuth } from '../context/AuthContext';
+import type { AppStackParamList } from '../types/navigation';
 
 const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
 export const SettingsScreen = () => {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Settings'>>();
   const { user, signOut } = useAuth();
   const { data: settings, isLoading } = useUserSettings();
+  const { data: emailScanStatus } = useEmailScanStatus();
   const updateMutation = useUpdateUserSettings();
 
   // Local state for the form
@@ -231,6 +235,36 @@ export const SettingsScreen = () => {
           </View>
         </View>
 
+        <View style={styles.section}>
+          <Text style={styles.sectionLabel}>Automatyzacja</Text>
+
+          <TouchableOpacity
+            style={styles.settingItem}
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('EmailScan')}
+          >
+            <View style={[styles.settingInfo, { marginBottom: 0 }]}>
+              <View style={[styles.iconContainer, { backgroundColor: '#EEF2FF' }]}>
+                <Mail size={20} color="#6366F1" />
+              </View>
+              <View style={styles.settingTextBlock}>
+                <View style={styles.settingTitleRow}>
+                  <Text style={styles.settingTitle}>Wykrywanie z Gmaila</Text>
+                  {emailScanStatus?.pendingDetectionsCount ? (
+                    <View style={styles.pendingBadge}>
+                      <Text style={styles.pendingBadgeText}>{emailScanStatus.pendingDetectionsCount}</Text>
+                    </View>
+                  ) : null}
+                </View>
+                <Text style={styles.settingDesc}>
+                  Privacy-first review kandydatur z rachunków i triali
+                </Text>
+              </View>
+              <ChevronRight size={20} color="#CBD5E1" />
+            </View>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.footer}>
           <Text style={styles.versionText}>Sub-Sentry v1.0.0 (MVP)</Text>
           <Text style={styles.footerInfo}>Twoje dane są bezpieczne i szyfrowane.</Text>
@@ -310,6 +344,18 @@ const styles = StyleSheet.create({
   },
   settingTitle: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
   settingDesc: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  settingTextBlock: { flex: 1 },
+  settingTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  pendingBadge: {
+    minWidth: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: '#6366F1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 6,
+  },
+  pendingBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   currencyRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   currencyPill: { 
     paddingHorizontal: 16, 

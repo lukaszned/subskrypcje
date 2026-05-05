@@ -9,7 +9,7 @@ import {
   Linking,
   ScrollView,
 } from 'react-native';
-import { X, ExternalLink, Clock, AlertTriangle, CheckCircle, ShieldAlert } from 'lucide-react-native';
+import { X, ExternalLink, Clock, AlertTriangle, CheckCircle, ShieldAlert, AlertCircle } from 'lucide-react-native';
 import { useCancelGuide } from '../hooks/useCancelGuide';
 
 interface Props {
@@ -18,6 +18,8 @@ interface Props {
   subscriptionId: string;
   onConfirmCancel: () => void;
   subscriptionName: string;
+  onRequestGuide?: () => void;
+  isRequestingGuide?: boolean;
 }
 
 export const CancelAssistantModal: React.FC<Props> = ({
@@ -26,6 +28,8 @@ export const CancelAssistantModal: React.FC<Props> = ({
   subscriptionId,
   onConfirmCancel,
   subscriptionName,
+  onRequestGuide,
+  isRequestingGuide = false,
 }) => {
   const { data: guide, isLoading } = useCancelGuide(subscriptionId);
   const [step, setStep] = useState<'info' | 'confirm'>('info');
@@ -38,16 +42,15 @@ export const CancelAssistantModal: React.FC<Props> = ({
   if (!isVisible) return null;
 
   const handleOpenProvider = () => {
-    if (guide?.cancelUrl) {
-      Linking.openURL(guide.cancelUrl).catch(() => {});
-      setStep('confirm');
-    } else {
-      setStep('confirm');
-    }
+    if (!guide?.cancelUrl) return;
+
+    Linking.openURL(guide.cancelUrl).catch(() => {});
+    setStep('confirm');
   };
 
   const difficulty = guide?.difficulty ?? 'medium';
   const estimatedTimeMinutes = guide?.estimatedTimeMinutes ?? 5;
+  const hasInstructions = !!guide?.instructions?.length;
 
   return (
     <Modal visible={isVisible} transparent animationType="slide">
@@ -62,15 +65,29 @@ export const CancelAssistantModal: React.FC<Props> = ({
               <ActivityIndicator size="large" color="#6366F1" />
               <Text style={styles.loadingText}>Szukam poradnika dla {subscriptionName}...</Text>
             </View>
-          ) : !guide ? (
+          ) : !guide || !hasInstructions ? (
             <View style={styles.center}>
               <AlertTriangle size={48} color="#F59E0B" style={styles.iconSpaced} />
-              <Text style={styles.title}>Brak asystenta</Text>
+              <Text style={styles.title}>Brak instrukcji anulowania</Text>
               <Text style={styles.desc}>
-                Nie znaleźliśmy automatycznej instrukcji dla {subscriptionName}. Musisz anulować tę usługę samodzielnie na stronie dostawcy.
+                Nie znaleźliśmy jeszcze gotowego poradnika dla {subscriptionName}. Możesz zgłosić brak instrukcji, a subskrypcję anulować samodzielnie u dostawcy.
               </Text>
-              <TouchableOpacity 
-                style={[styles.btn, { backgroundColor: '#EF4444' }]} 
+              {onRequestGuide && (
+                <TouchableOpacity
+                  style={styles.btn}
+                  onPress={onRequestGuide}
+                  disabled={isRequestingGuide}
+                >
+                  {isRequestingGuide ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <AlertCircle size={20} color="#FFFFFF" />
+                  )}
+                  <Text style={styles.btnText}>Zgłoś brak instrukcji anulowania</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity
+                style={[styles.btn, styles.dangerBtn]}
                 onPress={() => { onConfirmCancel(); onClose(); }}
               >
                 <Text style={styles.btnText}>Oznacz jako anulowaną</Text>
@@ -117,12 +134,17 @@ export const CancelAssistantModal: React.FC<Props> = ({
                 </View>
               )}
 
-              <TouchableOpacity style={styles.btn} onPress={handleOpenProvider}>
-                <ExternalLink size={20} color="#FFFFFF" />
-                <Text style={styles.btnText}>
-                  {guide.cancelUrl ? "Przejdź do strony anulowania" : "Rozumiem, oznacz jako anulowaną"}
-                </Text>
-              </TouchableOpacity>
+              {guide.cancelUrl ? (
+                <TouchableOpacity style={styles.btn} onPress={handleOpenProvider}>
+                  <ExternalLink size={20} color="#FFFFFF" />
+                  <Text style={styles.btnText}>Przejdź do strony anulowania</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity style={styles.btn} onPress={() => setStep('confirm')}>
+                  <CheckCircle size={20} color="#FFFFFF" />
+                  <Text style={styles.btnText}>Przejdź do potwierdzenia</Text>
+                </TouchableOpacity>
+              )}
             </ScrollView>
           ) : (
             <View style={styles.center}>
@@ -288,6 +310,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 10,
     marginTop: 32,
+  },
+  dangerBtn: {
+    backgroundColor: '#EF4444',
+    marginTop: 12,
   },
   btnText: {
     color: '#FFFFFF',

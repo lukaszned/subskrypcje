@@ -28,6 +28,7 @@ import { ManualAddScreen } from './src/screens/ManualAddScreen';
 import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
+import { EmailScanScreen } from './src/screens/EmailScanScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -89,6 +90,7 @@ const AppNavigator = React.memo(function AppNavigator() {
       />
       <AppStack.Screen name="Notifications" component={NotificationsScreen} />
       <AppStack.Screen name="Settings" component={SettingsScreen} />
+      <AppStack.Screen name="EmailScan" component={EmailScanScreen} />
     </AppStack.Navigator>
   );
 });

@@ -10,21 +10,31 @@ import { supabase } from './supabase';
 
 const ENV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
 
-function getExpoHost(): string | null {
-  const constants = Constants as any;
-  const hostUri =
-    constants.expoConfig?.hostUri ||
-    constants.manifest2?.extra?.expoClient?.hostUri ||
-    constants.manifest?.debuggerHost;
-
-  if (typeof hostUri !== 'string' || !hostUri) {
+function extractHost(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) {
     return null;
   }
 
-  return hostUri.replace(/^https?:\/\//, '').split('/')[0].split(':')[0] || null;
+  return value.replace(/^[a-z]+:\/\//i, '').split('/')[0].split(':')[0] || null;
+}
+
+function getExpoHost(): string | null {
+  const constants = Constants as any;
+
+  return extractHost(
+    constants.expoConfig?.hostUri ||
+    constants.expoGoConfig?.debuggerHost ||
+    constants.manifest2?.extra?.expoClient?.hostUri ||
+    constants.manifest?.debuggerHost ||
+    constants.linkingUri
+  );
 }
 
 function resolveApiBaseUrl(): string | undefined {
+  if (ENV_API_BASE_URL) {
+    return ENV_API_BASE_URL.trim();
+  }
+
   if (__DEV__) {
     const expoHost = getExpoHost();
 
@@ -77,7 +87,8 @@ async function getAccessToken(): Promise<string> {
 async function request<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
-  body?: unknown
+  body?: unknown,
+  timeoutMs: number = 15000
 ): Promise<T> {
   const token = await getAccessToken();
 
@@ -90,9 +101,9 @@ async function request<T>(
   const url = `${baseUrl}${path}`;
   
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15000);
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  console.log(`[API Request] ${method} ${url} (Timeout: 15s)`);
+  console.log(`[API Request] ${method} ${url} (Timeout: ${Math.round(timeoutMs / 1000)}s)`);
   try {
     const config: RequestInit = {
       method,
@@ -127,7 +138,7 @@ async function request<T>(
   } catch (error: any) {
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
-      throw new Error('Connection timeout - serwer nie odpowiedział w ciągu 15s.');
+      throw new Error(`Connection timeout - server did not respond within ${Math.round(timeoutMs / 1000)}s.`);
     }
     throw error;
   }
@@ -135,5 +146,7 @@ async function request<T>(
 
 export const apiGet = <T>(path: string): Promise<T> => request<T>('GET', path);
 export const apiPost = <T>(path: string, body: unknown): Promise<T> => request<T>('POST', path, body);
+export const apiPostWithTimeout = <T>(path: string, body: unknown, timeoutMs: number): Promise<T> =>
+  request<T>('POST', path, body, timeoutMs);
 export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => request<T>('PATCH', path, body);
 export const apiDelete = <T = void>(path: string): Promise<T> => request<T>('DELETE', path);

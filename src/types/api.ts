@@ -405,6 +405,113 @@ export interface NotificationPreviewResponse {
   items: NotificationPreviewItem[];
 }
 
+export type EmailScanProvider = 'gmail';
+export type DetectedSubscriptionStatus = 'pending' | 'accepted' | 'ignored' | 'duplicate';
+
+export interface EmailScanStatusResponse {
+  gmailConnected: boolean;
+  connectionsCount: number;
+  lastScanAt: string | null;
+  pendingDetectionsCount: number;
+  acceptedDetectionsCount: number;
+  ignoredDetectionsCount: number;
+  duplicateDetectionsCount: number;
+}
+
+export interface GmailAuthUrlResponse {
+  authUrl: string;
+}
+
+export interface GmailScanRequest {
+  connectionId?: string;
+  limit?: number;
+  sinceDays?: number;
+}
+
+export interface GmailScanQuerySummary {
+  name: string;
+  gmailResults: number;
+  analyzed: number;
+  candidates: number;
+}
+
+export interface GmailScanResponse {
+  connection: {
+    id: string;
+    email: string;
+    provider: EmailScanProvider;
+    lastScanAt: string | null;
+  };
+  scannedMessages: number;
+  candidatesFound: number;
+  createdDetections: number;
+  skippedExisting: number;
+  rejectedMessages: number;
+  querySummaries: GmailScanQuerySummary[];
+  created: DetectedSubscription[];
+  message: string;
+}
+
+export interface DetectedSubscription {
+  id: string;
+  sourceProvider: EmailScanProvider;
+  sourceMessageId: string;
+  provider: string | null;
+  name: string | null;
+  amount: number | null;
+  currency: string | null;
+  billingCycle: BillingCycle | null;
+  nextPaymentDate: string | null;
+  trialEndDate: string | null;
+  isTrial: boolean;
+  category: SubscriptionCategory | null;
+  confidence: number;
+  status: DetectedSubscriptionStatus;
+  evidenceSnippet: string | null;
+  acceptedSubscriptionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmailDetectionsResponse {
+  count: number;
+  limit: number;
+  offset: number;
+  items: DetectedSubscription[];
+}
+
+export interface GetEmailDetectionsParams {
+  status?: DetectedSubscriptionStatus;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AcceptDetectedSubscriptionPayload {
+  amount?: number;
+  currency?: string;
+  category?: SubscriptionCategory;
+  billingCycle?: BillingCycle;
+  nextPaymentDate?: string;
+  paymentMethodLabel?: string;
+  notes?: string;
+}
+
+export interface AcceptDetectedSubscriptionResponse {
+  detection: {
+    id: string;
+    status: DetectedSubscriptionStatus;
+    acceptedSubscriptionId: string | null;
+  };
+  subscription: Subscription;
+  message: string;
+}
+
+export interface IgnoreDetectedSubscriptionResponse {
+  id: string;
+  status: DetectedSubscriptionStatus;
+  message: string;
+}
+
 export interface CancelGuide {
   id: string | null;
   providerName: string;

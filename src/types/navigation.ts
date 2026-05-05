@@ -11,6 +11,7 @@ export type AppStackParamList = {
   SubscriptionDetail: { id: string };
   Notifications: undefined;
   Settings: undefined;
+  EmailScan: undefined;
 };
 
 export type RootStackParamList = AuthStackParamList & AppStackParamList;

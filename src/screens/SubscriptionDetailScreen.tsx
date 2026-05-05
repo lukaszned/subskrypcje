@@ -347,6 +347,8 @@ export const SubscriptionDetailScreen = () => {
         subscriptionId={id}
         subscriptionName={sub.name}
         onConfirmCancel={() => cancelMutation.mutate(id)}
+        onRequestGuide={handleRequestGuide}
+        isRequestingGuide={requestGuideMutation.isPending}
       />
     </SafeAreaView>
   );

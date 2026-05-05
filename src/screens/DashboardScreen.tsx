@@ -12,7 +12,7 @@ import {
   FlatList,
   Alert,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { 
   Plus, 
   Bell, 
@@ -55,7 +55,8 @@ import { useDashboardActivity } from '../hooks/useDashboardActivity';
 import { 
   UpcomingPaymentItem, 
   CategoryBreakdownItem,
-  SubscriptionCategory
+  SubscriptionCategory,
+  DashboardActivityItem
 } from '../types/api';
 
 const { width } = Dimensions.get('window');
@@ -91,6 +92,7 @@ const Skeleton = React.memo(({ width, height, style, borderRadius = 8 }: any) =>
 // ─────────────────────────────────────────────────────────────
 export const DashboardScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Dashboard'>>();
+  const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
   
   const [isDark, setIsDark] = useState(false);
@@ -236,7 +238,7 @@ export const DashboardScreen = () => {
   const dynamicStyles = useMemo(() => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.background },
     container: { flex: 1 },
-    content: { padding: 20, paddingBottom: 40 },
+    content: { padding: 20, paddingBottom: 132 + insets.bottom },
     headerCard: {
       backgroundColor: theme.card,
       borderRadius: 24,
@@ -771,7 +773,23 @@ export const DashboardScreen = () => {
     typePillTextActive: {
       color: theme.primary,
     },
-  }), [theme, isDark]);
+    fab: {
+      position: 'absolute',
+      bottom: Math.max(insets.bottom + 20, 30),
+      right: 24,
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: theme.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      shadowColor: theme.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.3,
+      shadowRadius: 10,
+      elevation: 8,
+    },
+  }), [theme, isDark, insets.bottom]);
 
   // SMART SUGGESTIONS GENERATOR
   const smartSuggestions = useMemo(() => {
@@ -814,7 +832,7 @@ export const DashboardScreen = () => {
     if (savingsData && savingsData.monthlySavings > 0) {
       list.push({
         id: 'savings',
-        title: 'Oszczędzasz środki',
+        title: 'Oszczędzasz miesięcznie',
         desc: `Anulowane usługi dają ${savingsData.monthlySavings.toFixed(2)} ${baseCurrency} oszczędności miesięcznie.`,
         icon: Activity,
         color: theme.success
@@ -921,6 +939,33 @@ export const DashboardScreen = () => {
   const renderRecentActivity = () => {
     if (!activityData || activityData.items.length === 0) return null;
 
+    const getActivityTitle = (item: DashboardActivityItem) => {
+      const name = item.subscription.name;
+      switch (item.type) {
+        case 'canceled':
+          return `Anulowano ${name}`;
+        case 'paid':
+          return `Opłacono ${name}`;
+        case 'created':
+          return `Dodano ${name}`;
+        case 'updated':
+          return `Zaktualizowano ${name}`;
+        default:
+          return item.message;
+      }
+    };
+
+    const getActivityMeta = (item: DashboardActivityItem) => {
+      const date = new Date(item.createdAt).toLocaleDateString('pl-PL', {
+        day: '2-digit',
+        month: 'short',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
+      return item.subscription.provider ? `${item.subscription.provider} · ${date}` : date;
+    };
+
     return (
       <View style={dynamicStyles.sectionContainer}>
         <View style={dynamicStyles.sectionHeader}>
@@ -937,9 +982,11 @@ export const DashboardScreen = () => {
                 <History size={16} color={item.type === 'paid' ? '#10B981' : item.type === 'canceled' ? '#EF4444' : '#64748B'} />
               </View>
               <View style={dynamicStyles.activityContent}>
-                <Text style={dynamicStyles.activityMessage}>{item.message}</Text>
-                <Text style={dynamicStyles.activityDate}>
-                  {new Date(item.createdAt).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                <Text style={dynamicStyles.activityMessage} numberOfLines={1}>
+                  {getActivityTitle(item)}
+                </Text>
+                <Text style={dynamicStyles.activityDate} numberOfLines={1}>
+                  {getActivityMeta(item)}
                 </Text>
               </View>
             </View>
@@ -1070,15 +1117,15 @@ export const DashboardScreen = () => {
             <Activity size={20} color="#10B981" />
           </View>
           <View>
-            <Text style={dynamicStyles.savingsTitle}>Zaoszczędziłeś już</Text>
+            <Text style={dynamicStyles.savingsTitle}>Szacowana oszczędność</Text>
             <Text style={dynamicStyles.savingsAmount}>
-              {data.monthlySavings.toFixed(2)} {data.baseCurrency} <Text style={{ fontSize: 12, fontWeight: '500' }}>/ mc</Text>
+              ok. {data.monthlySavings.toFixed(2)} {data.baseCurrency} <Text style={{ fontSize: 12, fontWeight: '500' }}>/ mc</Text>
             </Text>
           </View>
         </View>
         <View style={dynamicStyles.savingsFooter}>
           <Text style={dynamicStyles.savingsFooterText}>
-            To {data.yearlySavings.toFixed(0)} {data.baseCurrency} oszczędności w skali roku dzięki {data.canceledSubscriptionsCount} anulowanym subskrypcjom! 🚀
+            To około {data.yearlySavings.toFixed(0)} {data.baseCurrency} mniej kosztów w skali roku dzięki {data.canceledSubscriptionsCount} anulowanym subskrypcjom.
           </Text>
         </View>
       </View>
@@ -1189,6 +1236,9 @@ export const DashboardScreen = () => {
   };
 
   const renderFinancialTip = () => {
+    const activeSubscriptionsCount = summaryData?.activeSubscriptionsCount ?? 0;
+    if (activeSubscriptionsCount >= 3 && hasHistory) return null;
+
     return (
       <View style={dynamicStyles.sectionContainer}>
         <Text style={dynamicStyles.sectionTitle}>Pełen obraz subskrypcji</Text>
@@ -1375,24 +1425,7 @@ export const DashboardScreen = () => {
       </ScrollView>
 
       <TouchableOpacity 
-        style={[
-          {
-            position: 'absolute',
-            bottom: 30,
-            right: 30,
-            width: 60,
-            height: 60,
-            borderRadius: 30,
-            backgroundColor: theme.primary,
-            alignItems: 'center',
-            justifyContent: 'center',
-            shadowColor: theme.primary,
-            shadowOffset: { width: 0, height: 4 },
-            shadowOpacity: 0.3,
-            shadowRadius: 10,
-            elevation: 8,
-          }
-        ]}
+        style={dynamicStyles.fab}
         onPress={() => navigation.navigate('AddSubscription')}
       >
         <Plus size={30} color="#FFFFFF" />
