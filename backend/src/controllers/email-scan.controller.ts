@@ -8,6 +8,11 @@ import {
     getEmailScanStatus,
     ignoreDetectedSubscriptionForUser,
 } from "../services/email-scan.service";
+import {
+    getGmailAuthUrl,
+    GmailOAuthServiceError,
+    handleGmailOAuthCallback,
+} from "../services/gmail-oauth.service";
 import { acceptDetectedSubscriptionSchema } from "../validators/email-scan";
 
 const detectionStatusValues = Object.values(DetectedSubscriptionStatus);
@@ -51,6 +56,114 @@ function parsePaginationValue(
     }
 
     return parsed;
+}
+
+function getOAuthQueryParam(value: unknown) {
+    return typeof value === "string" && value.trim().length > 0
+        ? value.trim()
+        : null;
+}
+
+function sendGmailOAuthError(res: Response, error: GmailOAuthServiceError) {
+    switch (error.code) {
+        case "MISSING_GOOGLE_OAUTH_CONFIG":
+            return res.status(500).json({
+                message: "Missing Google OAuth configuration.",
+                code: "MISSING_GOOGLE_OAUTH_CONFIG",
+            });
+        case "INVALID_OAUTH_STATE":
+            return res.status(400).json({
+                message: "Invalid OAuth state.",
+                code: "INVALID_OAUTH_STATE",
+            });
+        case "GOOGLE_OAUTH_ERROR":
+            return res.status(400).json({
+                message: "Google OAuth error.",
+                code: "GOOGLE_OAUTH_ERROR",
+            });
+        case "GMAIL_PROFILE_EMAIL_MISSING":
+            return res.status(400).json({
+                message: "Gmail profile email is missing.",
+                code: "GMAIL_PROFILE_EMAIL_MISSING",
+            });
+        case "GMAIL_CONNECTION_FAILED":
+        default:
+            return res.status(500).json({
+                message: "Gmail connection failed.",
+                code: "GMAIL_CONNECTION_FAILED",
+            });
+    }
+}
+
+export async function getGmailAuthUrlHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const authUrl = getGmailAuthUrl(req.appUser.id);
+
+        return res.json({ authUrl });
+    } catch (error) {
+        console.error("Error creating Gmail auth URL:", error);
+
+        if (error instanceof GmailOAuthServiceError) {
+            return sendGmailOAuthError(res, error);
+        }
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function handleGmailOAuthCallbackHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (req.query.error) {
+            return res.status(400).json({
+                message: "Google OAuth error.",
+                code: "GOOGLE_OAUTH_ERROR",
+            });
+        }
+
+        const code = getOAuthQueryParam(req.query.code);
+        const state = getOAuthQueryParam(req.query.state);
+
+        if (!code || !state) {
+            return res.status(400).json({
+                message: "Missing OAuth code or state.",
+                code: "MISSING_OAUTH_PARAMS",
+            });
+        }
+
+        const connection = await handleGmailOAuthCallback(code, state);
+
+        return res.json({
+            connection,
+            message: "Gmail connected successfully.",
+        });
+    } catch (error) {
+        console.error("Error handling Gmail OAuth callback:", error);
+
+        if (error instanceof GmailOAuthServiceError) {
+            return sendGmailOAuthError(res, error);
+        }
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
 }
 
 export async function getEmailScanStatusHandler(

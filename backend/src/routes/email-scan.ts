@@ -3,12 +3,16 @@ import {
     acceptDetectedSubscriptionHandler,
     getDetectedSubscriptionsHandler,
     getEmailScanStatusHandler,
+    getGmailAuthUrlHandler,
+    handleGmailOAuthCallbackHandler,
     ignoreDetectedSubscriptionHandler,
 } from "../controllers/email-scan.controller";
 import { requireAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
+router.get("/gmail/auth-url", requireAuth, getGmailAuthUrlHandler);
+router.get("/gmail/callback", handleGmailOAuthCallbackHandler);
 router.get("/status", requireAuth, getEmailScanStatusHandler);
 router.get("/detections", requireAuth, getDetectedSubscriptionsHandler);
 router.patch(
