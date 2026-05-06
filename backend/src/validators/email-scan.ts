@@ -80,3 +80,11 @@ export const scanGmailSchema = z.object({
 });
 
 export type ScanGmailInput = z.infer<typeof scanGmailSchema>;
+
+export const disconnectEmailConnectionSchema = z.object({
+    deleteDetections: z.coerce.boolean().optional().default(false),
+});
+
+export type DisconnectEmailConnectionInput = z.infer<
+    typeof disconnectEmailConnectionSchema
+>;

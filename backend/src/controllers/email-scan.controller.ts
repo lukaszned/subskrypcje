@@ -4,7 +4,9 @@ import { ZodError } from "zod";
 import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
     acceptDetectedSubscriptionForUser,
+    disconnectEmailConnectionForUser,
     getDetectedSubscriptionsForUser,
+    getEmailConnectionsForUser,
     getEmailScanStatus,
     ignoreDetectedSubscriptionForUser,
 } from "../services/email-scan.service";
@@ -19,6 +21,7 @@ import {
 } from "../services/gmail-scan.service";
 import {
     acceptDetectedSubscriptionSchema,
+    disconnectEmailConnectionSchema,
     scanGmailSchema,
 } from "../validators/email-scan";
 
@@ -248,6 +251,74 @@ export async function getEmailScanStatusHandler(
         return res.json(status);
     } catch (error) {
         console.error("Error fetching email scan status:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function getEmailConnectionsHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const connections = await getEmailConnectionsForUser(req.appUser.id);
+
+        return res.json(connections);
+    } catch (error) {
+        console.error("Error fetching email connections:", error);
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+}
+
+export async function disconnectEmailConnectionHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const parsedData = disconnectEmailConnectionSchema.parse(req.body ?? {});
+        const result = await disconnectEmailConnectionForUser(
+            req.appUser.id,
+            getParamId(req),
+            parsedData
+        );
+
+        if (result.status === "not_found") {
+            return res.status(404).json({
+                message: "Email connection not found.",
+                code: "EMAIL_CONNECTION_NOT_FOUND",
+            });
+        }
+
+        return res.json({
+            message: "Gmail connection disconnected.",
+            deletedDetections: result.deletedDetections,
+        });
+    } catch (error) {
+        console.error("Error disconnecting email connection:", error);
+
+        if (error instanceof ZodError) {
+            return sendValidationError(res, error);
+        }
+
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",

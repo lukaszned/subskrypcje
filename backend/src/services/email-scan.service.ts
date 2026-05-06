@@ -18,6 +18,10 @@ export type DetectionListParams = {
     offset: number;
 };
 
+export type DisconnectEmailConnectionOptions = {
+    deleteDetections: boolean;
+};
+
 type DetectionActionResult =
     | "not_found"
     | "already_accepted"
@@ -67,6 +71,7 @@ export type AcceptDetectedSubscriptionResult =
 export async function getEmailScanStatus(userId: string) {
     const [
         connectionsCount,
+        latestScannedGmailConnection,
         latestGmailConnection,
         pendingDetectionsCount,
         acceptedDetectionsCount,
@@ -91,6 +96,22 @@ export async function getEmailScanStatus(userId: string) {
                 lastScanAt: "desc",
             },
             select: {
+                lastScanAt: true,
+            },
+        }),
+        prisma.emailConnection.findFirst({
+            where: {
+                userId,
+                provider: EmailProvider.gmail,
+            },
+            orderBy: {
+                updatedAt: "desc",
+            },
+            select: {
+                id: true,
+                email: true,
+                provider: true,
+                connectedAt: true,
                 lastScanAt: true,
             },
         }),
@@ -123,11 +144,91 @@ export async function getEmailScanStatus(userId: string) {
     return {
         gmailConnected: connectionsCount > 0,
         connectionsCount,
-        lastScanAt: latestGmailConnection?.lastScanAt ?? null,
+        lastScanAt: latestScannedGmailConnection?.lastScanAt ?? null,
+        gmailConnection: latestGmailConnection,
         pendingDetectionsCount,
         acceptedDetectionsCount,
         ignoredDetectionsCount,
         duplicateDetectionsCount,
+    };
+}
+
+export async function getEmailConnectionsForUser(userId: string) {
+    const connections = await prisma.emailConnection.findMany({
+        where: {
+            userId,
+        },
+        orderBy: {
+            updatedAt: "desc",
+        },
+        select: {
+            id: true,
+            provider: true,
+            email: true,
+            connectedAt: true,
+            lastScanAt: true,
+            createdAt: true,
+            updatedAt: true,
+        },
+    });
+
+    return {
+        count: connections.length,
+        items: connections,
+    };
+}
+
+export async function disconnectEmailConnectionForUser(
+    userId: string,
+    connectionId: string,
+    options: DisconnectEmailConnectionOptions
+) {
+    const connection = await prisma.emailConnection.findFirst({
+        where: {
+            id: connectionId,
+            userId,
+        },
+        select: {
+            id: true,
+        },
+    });
+
+    if (!connection) {
+        return {
+            status: "not_found" as const,
+        };
+    }
+
+    const result = await prisma.$transaction(async (tx) => {
+        let deletedDetections = 0;
+
+        if (options.deleteDetections) {
+            const deleted = await tx.detectedSubscription.deleteMany({
+                where: {
+                    emailConnectionId: connection.id,
+                    status: {
+                        not: DetectedSubscriptionStatus.accepted,
+                    },
+                },
+            });
+
+            deletedDetections = deleted.count;
+        }
+
+        await tx.emailConnection.delete({
+            where: {
+                id: connection.id,
+            },
+        });
+
+        return {
+            deletedDetections,
+        };
+    });
+
+    return {
+        status: "disconnected" as const,
+        deletedDetections: result.deletedDetections,
     };
 }
 
