@@ -11,9 +11,10 @@ export const REMINDERS_KEY = ['dashboard', 'reminders'];
 /**
  * Pobiera listę przypomnień do synchronizacji z systemem powiadomień.
  */
-export function useReminders() {
+export function useReminders(enabled: boolean = true) {
   return useQuery<RemindersResponse>({
     queryKey: REMINDERS_KEY,
     queryFn: getReminders,
+    enabled,
   });
 }

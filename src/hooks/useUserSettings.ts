@@ -2,11 +2,12 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUserSettings, updateUserSettings } from '../api/dashboard';
 import { UserSettings } from '../types/api';
 
-export const useUserSettings = () => {
+export const useUserSettings = (enabled: boolean = true) => {
   return useQuery({
     queryKey: ['user', 'settings'],
     queryFn: getUserSettings,
     staleTime: 300000, // Ustawienia rzadko się zmieniają, 5 minut cache
+    enabled,
   });
 };
 

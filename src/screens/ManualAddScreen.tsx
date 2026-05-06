@@ -69,25 +69,80 @@ interface PopularSubscription {
   category: SubscriptionCategory;
   color: string;
   provider: string;
-  availablePlans?: number[];
+  availablePlans?: Array<{
+    name: string;
+    price: number;
+    billingCycle?: BillingCycle;
+  }>;
 }
 
 const POPULAR_SUBSCRIPTIONS: PopularSubscription[] = [
-  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix', availablePlans: [29, 43, 60] },
-  { name: 'Spotify', defaultPrice: '24.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify', availablePlans: [24.99, 32.99] },
-  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [25.99, 46.99] },
-  { name: 'Disney+', defaultPrice: '37.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [37.99, 379.90] },
-  { name: 'HBO Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros' },
-  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon', availablePlans: [10.99, 49.00] },
-  { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple' },
-  { name: 'Apple TV+', defaultPrice: '34.99', category: 'entertainment', color: '#000000', provider: 'Apple', availablePlans: [34.99, 349.90] },
-  { name: 'Canva', defaultPrice: '49.99', category: 'productivity', color: '#00C4CC', provider: 'Canva', availablePlans: [49.99, 64.99] },
-  { name: 'Xbox Game Pass', defaultPrice: '42.99', category: 'entertainment', color: '#107C10', provider: 'Microsoft', availablePlans: [40.00, 42.99, 62.99] },
-  { name: 'Allegro Smart!', defaultPrice: '10.99', category: 'shopping', color: '#FF5A00', provider: 'Allegro', availablePlans: [10.99, 59.90] },
-  { name: 'Strava', defaultPrice: '32.99', category: 'health', color: '#FC4C02', provider: 'Strava', availablePlans: [32.99, 249.99] },
-  { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple', availablePlans: [3.99, 14.99, 49.99] },
+  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix', availablePlans: [
+    { name: 'Podstawowy', price: 29.00 },
+    { name: 'Standard', price: 43.00 },
+    { name: 'Premium', price: 60.00 },
+  ] },
+  { name: 'Spotify', defaultPrice: '23.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify', availablePlans: [
+    { name: 'Student', price: 12.99 },
+    { name: 'Individual', price: 23.99 },
+    { name: 'Duo', price: 30.99 },
+    { name: 'Family', price: 37.99 },
+  ] },
+  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [
+    { name: 'Student', price: 14.99 },
+    { name: 'Individual', price: 25.99 },
+    { name: 'Family', price: 46.99 },
+  ] },
+  { name: 'Disney+', defaultPrice: '29.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [
+    { name: 'Standard', price: 29.99 },
+    { name: 'Premium', price: 37.99 },
+  ] },
+  { name: 'Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros', availablePlans: [
+    { name: 'Podstawowy', price: 19.99 },
+    { name: 'Standard', price: 29.99 },
+    { name: 'Premium', price: 49.99 },
+  ] },
+  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon', availablePlans: [
+    { name: 'Miesięcznie', price: 10.99, billingCycle: 'monthly' },
+    { name: 'Rocznie', price: 49.00, billingCycle: 'yearly' },
+  ] },
+  { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple', availablePlans: [
+    { name: 'Student', price: 11.99 },
+    { name: 'Individual', price: 21.99 },
+    { name: 'Family', price: 34.99 },
+  ] },
+  { name: 'Apple TV+', defaultPrice: '34.99', category: 'entertainment', color: '#000000', provider: 'Apple', availablePlans: [
+    { name: 'Miesięcznie', price: 34.99, billingCycle: 'monthly' },
+    { name: 'Rocznie', price: 349.90, billingCycle: 'yearly' },
+  ] },
+  { name: 'Canva', defaultPrice: '49.99', category: 'productivity', color: '#00C4CC', provider: 'Canva', availablePlans: [
+    { name: 'Pro', price: 49.99 },
+    { name: 'Teams', price: 64.99 },
+  ] },
+  { name: 'Xbox Game Pass', defaultPrice: '42.99', category: 'entertainment', color: '#107C10', provider: 'Microsoft', availablePlans: [
+    { name: 'Core', price: 40.00 },
+    { name: 'PC', price: 42.99 },
+    { name: 'Ultimate', price: 62.99 },
+  ] },
+  { name: 'Allegro Smart!', defaultPrice: '10.99', category: 'shopping', color: '#FF5A00', provider: 'Allegro', availablePlans: [
+    { name: 'Miesięcznie', price: 10.99, billingCycle: 'monthly' },
+    { name: 'Rocznie', price: 59.90, billingCycle: 'yearly' },
+  ] },
+  { name: 'Strava', defaultPrice: '32.99', category: 'health', color: '#FC4C02', provider: 'Strava', availablePlans: [
+    { name: 'Miesięcznie', price: 32.99, billingCycle: 'monthly' },
+    { name: 'Rocznie', price: 249.99, billingCycle: 'yearly' },
+  ] },
+  { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple', availablePlans: [
+    { name: '50 GB', price: 3.99 },
+    { name: '200 GB', price: 14.99 },
+    { name: '2 TB', price: 49.99 },
+  ] },
   { name: 'ChatGPT Plus', defaultPrice: '20.00', category: 'productivity', color: '#10A37F', provider: 'OpenAI' },
-  { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony', availablePlans: [37, 58, 70] },
+  { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony', availablePlans: [
+    { name: 'Essential', price: 37.00 },
+    { name: 'Extra', price: 58.00 },
+    { name: 'Premium', price: 70.00 },
+  ] },
 ];
 
 export const ManualAddScreen = () => {
@@ -104,6 +159,7 @@ export const ManualAddScreen = () => {
   const [amount, setAmount] = useState('');
   const [name, setName] = useState('');
   const [provider, setProvider] = useState('');
+  const [planName, setPlanName] = useState('');
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [category, setCategory] = useState<SubscriptionCategory>('entertainment');
   const [date, setDate] = useState(new Date());
@@ -150,12 +206,14 @@ export const ManualAddScreen = () => {
       setCategory('entertainment');
       setProvider('');
       setCurrency('PLN');
+      setPlanName('');
     } else {
       setSelectedService(service);
       setName(service.name);
       setAmount(service.defaultPrice);
       setCategory(service.category);
       setProvider(service.provider);
+      setPlanName(service.availablePlans?.find((plan) => plan.price.toFixed(2) === Number(service.defaultPrice).toFixed(2))?.name || '');
       if (service.name.includes('ChatGPT')) setCurrency('USD');
       else setCurrency('PLN');
     }
@@ -170,6 +228,7 @@ export const ManualAddScreen = () => {
       setAmount(existingSub.amount.toString());
       setName(existingSub.name);
       setProvider(existingSub.provider || '');
+      setPlanName(existingSub.planName || '');
       setCycle(existingSub.billingCycle);
       setCategory(existingSub.category);
       setCurrency(existingSub.currency || 'PLN');
@@ -235,6 +294,7 @@ export const ManualAddScreen = () => {
       category,
       billingCycle: cycle,
       provider: provider.trim() || undefined,
+      planName: planName.trim() || undefined,
       nextPaymentDate: date.toISOString().split('T')[0],
       isTrial,
       trialEndDate: isTrial ? trialEndDate.toISOString().split('T')[0] : undefined,
@@ -320,6 +380,7 @@ export const ManualAddScreen = () => {
                           LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                           setSelectedService(null);
                           setAmount('');
+                          setPlanName('');
                         }}
                       >
                         <Text style={styles.planBackButtonText}>Wpisz ręcznie</Text>
@@ -331,33 +392,40 @@ export const ManualAddScreen = () => {
                       showsHorizontalScrollIndicator={false} 
                       contentContainerStyle={styles.plansScrollContent}
                     >
-                      {selectedService.availablePlans.map((planPrice) => (
+                      {selectedService.availablePlans.map((plan) => {
+                        const isActivePlan = planName === plan.name && parsedAmount === plan.price;
+                        return (
                         <TouchableOpacity
-                          key={planPrice}
+                          key={`${plan.name}-${plan.price}`}
                           style={[
                             styles.planCard,
-                            parsedAmount === planPrice && styles.planCardActive
+                            isActivePlan && styles.planCardActive
                           ]}
                           onPress={() => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                            setAmount(planPrice.toString());
-                            // Proceed further: scroll to form
+                            setAmount(plan.price.toString());
+                            setPlanName(plan.name);
+                            if (plan.billingCycle) setCycle(plan.billingCycle);
                             scrollToForm();
                           }}
                         >
+                          <Text style={[styles.planCardName, isActivePlan && styles.planCardNameActive]} numberOfLines={1}>
+                            {plan.name}
+                          </Text>
                           <View style={styles.planCardPriceRow}>
-                            <Text style={[styles.planCardPrice, parsedAmount === planPrice && styles.planCardPriceActive]}>
-                              {planPrice.toFixed(2)}
+                            <Text style={[styles.planCardPrice, isActivePlan && styles.planCardPriceActive]}>
+                              {plan.price.toFixed(2)}
                             </Text>
-                            <Text style={[styles.planCardCurrency, parsedAmount === planPrice && styles.planCardCurrencyActive]}>
+                            <Text style={[styles.planCardCurrency, isActivePlan && styles.planCardCurrencyActive]}>
                               {currency}
                             </Text>
                           </View>
-                          <Text style={[styles.planCardCycle, parsedAmount === planPrice && styles.planCardCycleActive]}>
-                            Miesięcznie
+                          <Text style={[styles.planCardCycle, isActivePlan && styles.planCardCycleActive]}>
+                            {plan.billingCycle === 'yearly' ? 'Rocznie' : 'Miesięcznie'}
                           </Text>
                         </TouchableOpacity>
-                      ))}
+                        );
+                      })}
                     </ScrollView>
                     
                     {parsedAmount > 0 && (
@@ -379,7 +447,10 @@ export const ManualAddScreen = () => {
                     <TextInput
                       style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: '#FECACA' }]}
                       value={amount}
-                      onChangeText={setAmount}
+                      onChangeText={(value) => {
+                        setAmount(value);
+                        setPlanName('');
+                      }}
                       keyboardType="decimal-pad"
                       placeholder="0.00"
                       placeholderTextColor="rgba(255,255,255,0.4)"
@@ -891,6 +962,16 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderColor: '#FFFFFF',
     transform: [{ scale: 1.05 }],
+  },
+  planCardName: {
+    color: 'rgba(255,255,255,0.78)',
+    fontSize: 12,
+    fontWeight: '800',
+    marginBottom: 8,
+    maxWidth: 100,
+  },
+  planCardNameActive: {
+    color: '#0B6B3A',
   },
   planCardPriceRow: {
     flexDirection: 'row',

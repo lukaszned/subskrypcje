@@ -367,7 +367,7 @@ export const EmailScanScreen = () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Następna płatność</Text>
               <TouchableOpacity style={styles.dateButton} onPress={() => setShowNextPicker(true)}>
-                <Clock size={18} color="#6366F1" />
+                <Clock size={18} color="#0B6B3A" />
                 <Text style={styles.dateButtonText}>{formatDate(nextPaymentDate.toISOString())}</Text>
               </TouchableOpacity>
               {showNextPicker && (
@@ -441,18 +441,18 @@ export const EmailScanScreen = () => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={24} color="#0F172A" />
+          <ArrowLeft size={24} color="#14251B" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Email Scan</Text>
         <TouchableOpacity onPress={refresh} style={styles.iconBtn}>
-          <RefreshCw size={20} color="#6366F1" />
+          <RefreshCw size={20} color="#0B6B3A" />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#6366F1" />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#0B6B3A" />}
       >
         <View style={styles.heroCard}>
           <View style={styles.heroIcon}>
@@ -477,7 +477,7 @@ export const EmailScanScreen = () => {
           </View>
 
           {statusQuery.isLoading ? (
-            <ActivityIndicator color="#6366F1" style={{ marginVertical: 20 }} />
+            <ActivityIndicator color="#0B6B3A" style={{ marginVertical: 20 }} />
           ) : (
             <>
               <View style={styles.statGrid}>
@@ -510,16 +510,29 @@ export const EmailScanScreen = () => {
               )}
             </TouchableOpacity>
           ) : (
-            <TouchableOpacity style={styles.scanBtn} onPress={handleScan} disabled={scanMutation.isPending}>
-              {scanMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" />
-              ) : (
-                <>
-                  <Search size={20} color="#FFFFFF" />
-                  <Text style={styles.connectBtnText}>Skanuj Gmaila</Text>
-                </>
+            <>
+              {scanMutation.isPending && (
+              <View style={styles.scanningState}>
+                <View style={styles.scanningIcon}>
+                  <ActivityIndicator color="#0B6B3A" />
+                </View>
+                <View style={styles.scanningCopy}>
+                  <Text style={styles.scanningTitle}>Szukam Twoich subskrypcji...</Text>
+                  <Text style={styles.scanningText}>Analizuję tylko metadane i fragmenty wiadomości.</Text>
+                </View>
+              </View>
               )}
-            </TouchableOpacity>
+              <TouchableOpacity style={styles.scanBtn} onPress={handleScan} disabled={scanMutation.isPending}>
+                {scanMutation.isPending ? (
+                  <ActivityIndicator color="#FFFFFF" />
+                ) : (
+                  <>
+                    <Search size={20} color="#FFFFFF" />
+                    <Text style={styles.connectBtnText}>Skanuj Gmaila</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -530,7 +543,7 @@ export const EmailScanScreen = () => {
 
         {detectionsQuery.isLoading ? (
           <View style={styles.emptyState}>
-            <ActivityIndicator color="#6366F1" />
+            <ActivityIndicator color="#0B6B3A" />
           </View>
         ) : detections.length === 0 ? (
           <View style={styles.emptyState}>
@@ -551,7 +564,7 @@ export const EmailScanScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -564,9 +577,9 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   iconBtn: { width: 40, height: 40, alignItems: 'flex-end', justifyContent: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  headerTitle: { fontSize: 18, fontWeight: '800', color: '#14251B' },
   content: { padding: 20, paddingBottom: 48 },
-  heroCard: { backgroundColor: '#4338CA', borderRadius: 24, padding: 22, marginBottom: 16 },
+  heroCard: { backgroundColor: '#0B6B3A', borderRadius: 28, padding: 22, marginBottom: 16 },
   heroIcon: {
     width: 48,
     height: 48,
@@ -577,7 +590,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   heroTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', marginBottom: 8 },
-  heroText: { fontSize: 14, color: '#E0E7FF', lineHeight: 20 },
+  heroText: { fontSize: 14, color: '#D8F5E5', lineHeight: 20 },
   privacyBox: {
     backgroundColor: '#ECFDF5',
     borderRadius: 20,
@@ -589,9 +602,19 @@ const styles = StyleSheet.create({
   privacyHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   privacyTitle: { fontSize: 15, fontWeight: '800', color: '#065F46' },
   privacyText: { fontSize: 13, color: '#047857', lineHeight: 19, marginTop: 4 },
-  statusCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 18, marginBottom: 24 },
+  statusCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 24,
+    shadowColor: '#1C3025',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.06,
+    shadowRadius: 18,
+    elevation: 2,
+  },
   statusHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  cardTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A' },
+  cardTitle: { fontSize: 17, fontWeight: '800', color: '#14251B' },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
   statusBadgeOk: { backgroundColor: '#ECFDF5' },
   statusBadgeMuted: { backgroundColor: '#F1F5F9' },
@@ -599,14 +622,14 @@ const styles = StyleSheet.create({
   statusBadgeTextOk: { color: '#059669' },
   statusBadgeTextMuted: { color: '#64748B' },
   statGrid: { flexDirection: 'row', gap: 10, marginBottom: 14 },
-  statItem: { flex: 1, backgroundColor: '#F8FAFC', borderRadius: 14, padding: 12, alignItems: 'center' },
-  statValue: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
+  statItem: { flex: 1, backgroundColor: '#F6F8F4', borderRadius: 14, padding: 12, alignItems: 'center' },
+  statValue: { fontSize: 20, fontWeight: '800', color: '#14251B' },
   statLabel: { fontSize: 11, fontWeight: '700', color: '#64748B', marginTop: 2 },
   lastScan: { fontSize: 13, color: '#64748B', marginBottom: 16 },
   connectBtn: {
     height: 50,
     borderRadius: 16,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#0B6B3A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -615,16 +638,38 @@ const styles = StyleSheet.create({
   scanBtn: {
     height: 50,
     borderRadius: 16,
-    backgroundColor: '#0F172A',
+    backgroundColor: '#0B6B3A',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
+  scanningState: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F3EC',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#CFE5D6',
+  },
+  scanningIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: '#FFFFFF',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  scanningCopy: { flex: 1 },
+  scanningTitle: { color: '#14251B', fontSize: 14, fontWeight: '900' },
+  scanningText: { color: '#66756A', fontSize: 12, fontWeight: '600', marginTop: 2 },
   connectBtnText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
-  sectionCounter: { fontSize: 13, fontWeight: '800', color: '#6366F1' },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#14251B' },
+  sectionCounter: { fontSize: 13, fontWeight: '800', color: '#0B6B3A' },
   emptyState: {
     backgroundColor: '#FFFFFF',
     borderRadius: 20,
@@ -633,26 +678,36 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     minHeight: 150,
   },
-  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#0F172A', marginTop: 12 },
+  emptyTitle: { fontSize: 16, fontWeight: '800', color: '#14251B', marginTop: 12 },
   emptyText: { fontSize: 13, color: '#64748B', textAlign: 'center', lineHeight: 19, marginTop: 6 },
-  detectionCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginBottom: 14 },
+  detectionCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 14,
+    shadowColor: '#1C3025',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.05,
+    shadowRadius: 16,
+    elevation: 2,
+  },
   detectionTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
   providerIcon: {
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: '#E8F3EC',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
   },
-  providerIconText: { color: '#6366F1', fontSize: 18, fontWeight: '800' },
+  providerIconText: { color: '#0B6B3A', fontSize: 18, fontWeight: '800' },
   detectionMain: { flex: 1 },
-  detectionName: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
+  detectionName: { fontSize: 16, fontWeight: '800', color: '#14251B' },
   detectionMeta: { fontSize: 12, color: '#64748B', marginTop: 2 },
   dateRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   dateRowText: { fontSize: 13, fontWeight: '700', color: '#B45309' },
-  snippet: { fontSize: 13, color: '#475569', lineHeight: 19, backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12 },
+  snippet: { fontSize: 13, color: '#475569', lineHeight: 19, backgroundColor: '#F6F8F4', borderRadius: 12, padding: 12 },
   actionsRow: { flexDirection: 'row', gap: 10, marginTop: 14 },
   secondaryBtn: {
     flex: 1,
@@ -669,7 +724,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 44,
     borderRadius: 14,
-    backgroundColor: '#6366F1',
+    backgroundColor: '#0B6B3A',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
@@ -685,21 +740,21 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
-  modalTitle: { fontSize: 19, fontWeight: '800', color: '#0F172A' },
+  modalTitle: { fontSize: 19, fontWeight: '800', color: '#14251B' },
   modalSubtitle: { fontSize: 13, color: '#64748B', marginTop: 2 },
   closeBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
-  evidenceBox: { backgroundColor: '#F8FAFC', borderRadius: 16, padding: 14, marginBottom: 18 },
+  evidenceBox: { backgroundColor: '#F6F8F4', borderRadius: 16, padding: 14, marginBottom: 18 },
   evidenceLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '800', textTransform: 'uppercase', marginBottom: 6 },
   evidenceText: { fontSize: 13, color: '#475569', lineHeight: 19 },
   inputGroup: { marginBottom: 18 },
-  label: { fontSize: 13, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
+  label: { fontSize: 13, fontWeight: '800', color: '#14251B', marginBottom: 8 },
   labelOptional: { fontSize: 13, fontWeight: '800', color: '#64748B', marginBottom: 8 },
   textInput: {
     minHeight: 48,
     borderRadius: 14,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F6F8F4',
     paddingHorizontal: 14,
-    color: '#0F172A',
+    color: '#14251B',
     fontSize: 15,
     fontWeight: '600',
   },
@@ -707,19 +762,19 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 78, paddingTop: 12, textAlignVertical: 'top' },
   pillRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
   pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, backgroundColor: '#F1F5F9' },
-  pillActive: { backgroundColor: '#EEF2FF', borderWidth: 1, borderColor: '#6366F1' },
+  pillActive: { backgroundColor: '#E8F3EC', borderWidth: 1, borderColor: '#0B6B3A' },
   pillText: { fontSize: 13, fontWeight: '800', color: '#64748B' },
-  pillTextActive: { color: '#6366F1' },
+  pillTextActive: { color: '#0B6B3A' },
   dateButton: {
     height: 48,
     borderRadius: 14,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: '#F6F8F4',
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
   },
-  dateButtonText: { color: '#0F172A', fontSize: 15, fontWeight: '700' },
+  dateButtonText: { color: '#14251B', fontSize: 15, fontWeight: '700' },
   trialInfo: { flexDirection: 'row', gap: 8, backgroundColor: '#FFFBEB', borderRadius: 14, padding: 12, marginBottom: 18 },
   trialInfoText: { flex: 1, color: '#B45309', fontSize: 13, fontWeight: '700' },
   acceptBtn: {

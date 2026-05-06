@@ -12,10 +12,11 @@ export const UPCOMING_PAYMENTS_KEY = (days: number) =>
 /**
  * @param days - liczba dni do przodu (domyślnie 7)
  */
-export function useUpcomingPayments(days: number = 7) {
+export function useUpcomingPayments(days: number = 7, enabled: boolean = true) {
   return useQuery<UpcomingPaymentsResponse, Error>({
     queryKey: UPCOMING_PAYMENTS_KEY(days),
     queryFn: () => getUpcomingPayments(days),
     staleTime: 30000,
+    enabled,
   });
 }

@@ -12,10 +12,11 @@ export const TRIALS_KEY = (days: number) =>
 /**
  * @param days - liczba dni do przodu (domyślnie 30)
  */
-export function useTrials(days: number = 30) {
+export function useTrials(days: number = 30, enabled: boolean = true) {
   return useQuery<TrialsResponse, Error>({
     queryKey: TRIALS_KEY(days),
     queryFn: () => getTrials(days),
     staleTime: 30000,
+    enabled,
   });
 }

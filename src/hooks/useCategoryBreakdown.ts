@@ -11,10 +11,11 @@ export const CATEGORY_BREAKDOWN_KEY = ['dashboard', 'category-breakdown'];
 /**
  * Pobiera rozbicie wydatków na kategorie dla dashboardu.
  */
-export function useCategoryBreakdown() {
+export function useCategoryBreakdown(enabled: boolean = true) {
   return useQuery<CategoryBreakdownResponse>({
     queryKey: CATEGORY_BREAKDOWN_KEY,
     queryFn: getCategoryBreakdown,
     staleTime: 30000,
+    enabled,
   });
 }

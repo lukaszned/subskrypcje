@@ -172,21 +172,23 @@ export const DashboardScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notifPermission, setNotifPermission] = useState<string>('granted');
   const [trendType, setTrendType] = useState<'planned' | 'real'>('planned');
+  const [loadSecondaryData, setLoadSecondaryData] = useState(false);
 
   // Data
   const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useDashboardSummary();
-  const { data: upcomingData, refetch: refetchUpcoming } = useUpcomingPayments(30);
-  const { data: breakdownData, refetch: refetchBreakdown } = useCategoryBreakdown();
-  const { data: trialsData, refetch: refetchTrials } = useTrials(30);
-  const { data: savingsData, refetch: refetchSavings } = useDashboardSavings();
-  const { data: trendsData, refetch: refetchTrends } = useDashboardTrends(6, trendType);
-  const { data: remindersData, refetch: refetchReminders } = useReminders();
-  const { data: healthData, refetch: refetchHealth } = useHealthScore();
-  const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10);
+  const secondaryEnabled = loadSecondaryData && !!summaryData && !isSummaryError;
+  const { data: upcomingData, refetch: refetchUpcoming } = useUpcomingPayments(30, !!summaryData);
+  const { data: breakdownData, refetch: refetchBreakdown } = useCategoryBreakdown(secondaryEnabled);
+  const { data: trialsData, refetch: refetchTrials } = useTrials(30, secondaryEnabled);
+  const { data: savingsData, refetch: refetchSavings } = useDashboardSavings(secondaryEnabled);
+  const { data: trendsData, refetch: refetchTrends } = useDashboardTrends(6, trendType, secondaryEnabled);
+  const { data: remindersData, refetch: refetchReminders } = useReminders(secondaryEnabled);
+  const { data: healthData, refetch: refetchHealth } = useHealthScore(secondaryEnabled);
+  const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10, secondaryEnabled);
 
-  const { data: settings, isError: isSettingsError, error: settingsError, refetch: refetchSettings } = useUserSettings();
-  const { data: budgetImpact } = useBudgetImpact();
-  const { data: notifPreview } = useNotificationPreview();
+  const { isError: isSettingsError, error: settingsError } = useUserSettings(false);
+  const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(secondaryEnabled);
+  useNotificationPreview(false);
 
   const isLoading = isSummaryLoading;
   const isError = isSummaryError || isSettingsError;
@@ -196,6 +198,19 @@ export const DashboardScreen = () => {
   console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
   if (isSummaryError) console.error('[DashboardScreen] Summary Error');
   if (isSettingsError) console.error('[DashboardScreen] Settings Error:', settingsError);
+
+  useEffect(() => {
+    if (!summaryData || isSummaryError) {
+      setLoadSecondaryData(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setLoadSecondaryData(true);
+    }, 900);
+
+    return () => clearTimeout(timeoutId);
+  }, [summaryData, isSummaryError]);
 
   const monthlyTotal = summaryData?.monthlyTotal ?? 0;
   const yearlyTotal = summaryData?.yearlyTotal ?? 0;
@@ -272,18 +287,23 @@ export const DashboardScreen = () => {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([
+      await Promise.allSettled([
         refetchSummary(),
         refetchUpcoming(),
-        refetchBreakdown(),
-        refetchTrials(),
-        refetchSavings(),
-        refetchTrends(),
-        refetchReminders(),
-        refetchSettings(),
-        refetchHealth(),
-        refetchActivity(),
       ]);
+
+      if (secondaryEnabled) {
+        await Promise.allSettled([
+          refetchBreakdown(),
+          refetchTrials(),
+          refetchSavings(),
+          refetchTrends(),
+          refetchReminders(),
+          refetchHealth(),
+          refetchActivity(),
+          refetchBudgetImpact(),
+        ]);
+      }
     } catch (e) {
       console.warn('Refresh failed', e);
     } finally {
@@ -312,6 +332,28 @@ export const DashboardScreen = () => {
     safeArea: { flex: 1, backgroundColor: theme.background },
     container: { flex: 1 },
     content: { padding: 20, paddingBottom: 132 + insets.bottom },
+    dashboardNotice: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: '#E8F3EC',
+      borderRadius: 18,
+      padding: 14,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: '#CFE5D6',
+      gap: 10,
+    },
+    dashboardNoticeError: {
+      backgroundColor: '#FEF2F2',
+      borderColor: '#FECACA',
+    },
+    dashboardNoticeText: {
+      flex: 1,
+      color: theme.text,
+      fontSize: 13,
+      fontWeight: '700',
+      lineHeight: 18,
+    },
     headerCard: {
       backgroundColor: theme.card,
       borderRadius: 24,
@@ -1771,8 +1813,36 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderDashboardNotice = () => {
+    if (isError) {
+      return (
+        <TouchableOpacity
+          style={[dynamicStyles.dashboardNotice, dynamicStyles.dashboardNoticeError]}
+          activeOpacity={0.8}
+          onPress={handleRefresh}
+        >
+          <AlertCircle size={18} color={theme.error} />
+          <Text style={dynamicStyles.dashboardNoticeText}>
+            Nie udało się odświeżyć części danych. Dotknij, aby spróbować ponownie.
+          </Text>
+        </TouchableOpacity>
+      );
+    }
+
+    if (isLoading && !hasData) {
+      return (
+        <View style={dynamicStyles.dashboardNotice}>
+          <ActivityIndicator size="small" color={theme.primary} />
+          <Text style={dynamicStyles.dashboardNoticeText}>Ładuję dane dashboardu...</Text>
+        </View>
+      );
+    }
+
+    return null;
+  };
+
   // MAIN RENDER
-  if (isLoading && !hasData) {
+  if (false && isLoading && !hasData) {
     return (
       <SafeAreaView style={dynamicStyles.safeArea}>
         <View style={dynamicStyles.content}>
@@ -1787,7 +1857,7 @@ export const DashboardScreen = () => {
     );
   }
 
-  if (isError && !hasData) {
+  if (false && isError && !hasData) {
     const errorDetails = isSummaryError
       ? `Summary Error: ${summaryError?.message || JSON.stringify(summaryError)}`
       : isSettingsError ? `Settings Error: ${settingsError?.message || JSON.stringify(settingsError)}` : 'Unknown error';
@@ -1835,6 +1905,7 @@ export const DashboardScreen = () => {
         }
       >
         {renderMenuHeader()}
+        {renderDashboardNotice()}
         {renderHeroWidget()}
         <View style={dynamicStyles.widgetGrid}>
           {renderUpcomingWidget()}

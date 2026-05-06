@@ -88,7 +88,7 @@ async function request<T>(
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   path: string,
   body?: unknown,
-  timeoutMs: number = 15000
+  timeoutMs: number = 30000
 ): Promise<T> {
   const token = await getAccessToken();
 
