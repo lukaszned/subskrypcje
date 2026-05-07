@@ -45,7 +45,12 @@ const queryClient = new QueryClient({
       staleTime: 60 * 1000,
       retry: (failureCount, error: any) => {
         if (error?.status === 401 || error?.status === 403) return false;
-        return failureCount < 2;
+        const message = error?.message || '';
+        const isConnectivityIssue = /timeout|network request failed|failed to fetch|offline|load failed/i.test(message);
+
+        if (isConnectivityIssue) return false;
+        if (error?.status >= 500) return failureCount < 1;
+        return failureCount < 1;
       },
     },
     mutations: {

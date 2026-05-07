@@ -21,7 +21,8 @@ export const StatisticsScreen = () => {
   const { data: trends } = useDashboardTrends(6, 'planned');
   const { data: budget } = useBudgetImpact();
 
-  const maxAmount = Math.max(...(trends?.items ?? []).map((item) => item.amount), 1);
+  const trendItems = (trends?.items ?? []).slice(-6);
+  const maxAmount = Math.max(...trendItems.map((item) => item.amount), 1);
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -50,13 +51,44 @@ export const StatisticsScreen = () => {
             <Text style={styles.cardTitle}>Trend kosztów</Text>
             <TrendingUp size={20} color="#0B6B3A" />
           </View>
-          <View style={styles.chart}>
-            {(trends?.items ?? []).map((item) => (
-              <View key={item.month} style={styles.chartColumn}>
-                <View style={[styles.chartBar, { height: `${Math.max(12, (item.amount / maxAmount) * 100)}%` }]} />
-                <Text style={styles.chartLabel}>{item.month}</Text>
-              </View>
-            ))}
+          <View style={styles.chartShell}>
+            <View style={styles.chartGridLine} />
+            <View style={[styles.chartGridLine, styles.chartGridLineMiddle]} />
+            <View style={styles.chartPlot}>
+              {trendItems.length > 0 ? (
+                trendItems.map((item, index) => {
+                  const ratio = Math.max(0.14, Math.min(1, item.amount / maxAmount));
+                  const isLast = index === trendItems.length - 1;
+
+                  return (
+                    <View key={`${item.month}-${index}`} style={styles.chartColumn}>
+                      <View style={styles.chartBarTrack}>
+                        <View
+                          style={[
+                            styles.chartBar,
+                            {
+                              height: `${ratio * 100}%`,
+                              backgroundColor: isLast ? '#0B6B3A' : '#BFEAD2',
+                            },
+                          ]}
+                        />
+                      </View>
+                      <Text style={[styles.chartValue, isLast && styles.chartValueActive]}>
+                        {Math.round(item.amount)}
+                      </Text>
+                      <Text style={styles.chartLabel} numberOfLines={1}>
+                        {String(item.label || item.month).slice(0, 3)}
+                      </Text>
+                    </View>
+                  );
+                })
+              ) : (
+                <View style={styles.emptyChart}>
+                  <BarChart3 size={22} color="#9AA8A0" />
+                  <Text style={styles.emptyChartText}>Trend pojawi siÄ™ po dodaniu historii pĹ‚atnoĹ›ci.</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -127,10 +159,77 @@ const styles = StyleSheet.create({
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
   cardTitle: { color: '#14251B', fontSize: 16, fontWeight: '800' },
-  chart: { height: 160, flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  chartColumn: { flex: 1, alignItems: 'center', height: '100%' },
-  chartBar: { width: '100%', borderRadius: 8, backgroundColor: '#0B6B3A' },
-  chartLabel: { color: '#66756A', fontSize: 10, fontWeight: '700', marginTop: 8 },
+  chartShell: {
+    height: 190,
+    borderRadius: 22,
+    backgroundColor: '#F7FAF6',
+    paddingHorizontal: 12,
+    paddingTop: 16,
+    paddingBottom: 10,
+    overflow: 'hidden',
+  },
+  chartGridLine: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    top: 32,
+    height: 1,
+    backgroundColor: '#E2EAE4',
+  },
+  chartGridLineMiddle: {
+    top: 92,
+  },
+  chartPlot: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 9,
+  },
+  chartColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  chartBarTrack: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  chartBar: {
+    width: '72%',
+    minHeight: 12,
+    borderTopLeftRadius: 10,
+    borderTopRightRadius: 10,
+    borderBottomLeftRadius: 5,
+    borderBottomRightRadius: 5,
+  },
+  chartValue: {
+    color: '#8B9A91',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 7,
+  },
+  chartValueActive: {
+    color: '#0B6B3A',
+  },
+  chartLabel: {
+    color: '#66756A',
+    fontSize: 10,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  emptyChart: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  emptyChartText: {
+    color: '#66756A',
+    fontSize: 12,
+    fontWeight: '700',
+    textAlign: 'center',
+  },
   metricValue: { color: '#0B6B3A', fontSize: 34, fontWeight: '900' },
   metricHint: { color: '#66756A', fontSize: 13, lineHeight: 19, marginTop: 8 },
 });

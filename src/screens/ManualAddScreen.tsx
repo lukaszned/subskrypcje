@@ -35,6 +35,8 @@ import type { AppStackParamList } from '../types/navigation';
 import { useCreateSubscription } from '../hooks/useCreateSubscription';
 import { useUpdateSubscription } from '../hooks/useUpdateSubscription';
 import { useSubscription } from '../hooks/useSubscription';
+import { useSubscriptionPlans } from '../hooks/useSubscriptionPlans';
+import type { PopularSubscription } from '../data/subscriptionPlans';
 import { SubscriptionCategory, BillingCycle } from '../types/api';
 import { ApiError } from '../lib/apiClient';
 
@@ -63,88 +65,6 @@ const CYCLES: Array<{ id: BillingCycle; label: string }> = [
   { id: 'one_time', label: 'Jednorazowo'},
 ];
 
-interface PopularSubscription {
-  name: string;
-  defaultPrice: string;
-  category: SubscriptionCategory;
-  color: string;
-  provider: string;
-  availablePlans?: Array<{
-    name: string;
-    price: number;
-    billingCycle?: BillingCycle;
-  }>;
-}
-
-const POPULAR_SUBSCRIPTIONS: PopularSubscription[] = [
-  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix', availablePlans: [
-    { name: 'Podstawowy', price: 29.00 },
-    { name: 'Standard', price: 43.00 },
-    { name: 'Premium', price: 60.00 },
-  ] },
-  { name: 'Spotify', defaultPrice: '23.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify', availablePlans: [
-    { name: 'Student', price: 12.99 },
-    { name: 'Individual', price: 23.99 },
-    { name: 'Duo', price: 30.99 },
-    { name: 'Family', price: 37.99 },
-  ] },
-  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [
-    { name: 'Student', price: 14.99 },
-    { name: 'Individual', price: 25.99 },
-    { name: 'Family', price: 46.99 },
-  ] },
-  { name: 'Disney+', defaultPrice: '29.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [
-    { name: 'Standard', price: 29.99 },
-    { name: 'Premium', price: 37.99 },
-  ] },
-  { name: 'Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros', availablePlans: [
-    { name: 'Podstawowy', price: 19.99 },
-    { name: 'Standard', price: 29.99 },
-    { name: 'Premium', price: 49.99 },
-  ] },
-  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon', availablePlans: [
-    { name: 'Miesięcznie', price: 10.99, billingCycle: 'monthly' },
-    { name: 'Rocznie', price: 49.00, billingCycle: 'yearly' },
-  ] },
-  { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple', availablePlans: [
-    { name: 'Student', price: 11.99 },
-    { name: 'Individual', price: 21.99 },
-    { name: 'Family', price: 34.99 },
-  ] },
-  { name: 'Apple TV+', defaultPrice: '34.99', category: 'entertainment', color: '#000000', provider: 'Apple', availablePlans: [
-    { name: 'Miesięcznie', price: 34.99, billingCycle: 'monthly' },
-    { name: 'Rocznie', price: 349.90, billingCycle: 'yearly' },
-  ] },
-  { name: 'Canva', defaultPrice: '49.99', category: 'productivity', color: '#00C4CC', provider: 'Canva', availablePlans: [
-    { name: 'Pro', price: 49.99 },
-    { name: 'Teams', price: 64.99 },
-  ] },
-  { name: 'Xbox Game Pass', defaultPrice: '42.99', category: 'entertainment', color: '#107C10', provider: 'Microsoft', availablePlans: [
-    { name: 'Core', price: 40.00 },
-    { name: 'PC', price: 42.99 },
-    { name: 'Ultimate', price: 62.99 },
-  ] },
-  { name: 'Allegro Smart!', defaultPrice: '10.99', category: 'shopping', color: '#FF5A00', provider: 'Allegro', availablePlans: [
-    { name: 'Miesięcznie', price: 10.99, billingCycle: 'monthly' },
-    { name: 'Rocznie', price: 59.90, billingCycle: 'yearly' },
-  ] },
-  { name: 'Strava', defaultPrice: '32.99', category: 'health', color: '#FC4C02', provider: 'Strava', availablePlans: [
-    { name: 'Miesięcznie', price: 32.99, billingCycle: 'monthly' },
-    { name: 'Rocznie', price: 249.99, billingCycle: 'yearly' },
-  ] },
-  { name: 'iCloud+', defaultPrice: '3.99', category: 'utilities', color: '#007AFF', provider: 'Apple', availablePlans: [
-    { name: '50 GB', price: 3.99 },
-    { name: '200 GB', price: 14.99 },
-    { name: '2 TB', price: 49.99 },
-  ] },
-  { name: 'ChatGPT Plus', defaultPrice: '20.00', category: 'productivity', color: '#10A37F', provider: 'OpenAI' },
-  { name: 'PlayStation Plus', defaultPrice: '37.00', category: 'entertainment', color: '#003087', provider: 'Sony', availablePlans: [
-    { name: 'Essential', price: 37.00 },
-    { name: 'Extra', price: 58.00 },
-    { name: 'Premium', price: 70.00 },
-  ] },
-];
-
 export const ManualAddScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'AddSubscription'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
@@ -154,6 +74,7 @@ export const ManualAddScreen = () => {
   const createMutation = useCreateSubscription();
   const updateMutation = useUpdateSubscription();
   const { data: existingSub, isLoading: isLoadingSub } = useSubscription(subscriptionId || '');
+  const { data: subscriptionPlans = [], isFetching: isPlansRefreshing } = useSubscriptionPlans();
 
   // Form State
   const [amount, setAmount] = useState('');
@@ -187,15 +108,15 @@ export const ManualAddScreen = () => {
 
   // Suggestions logic
   const filteredSuggestions = useMemo(() => {
-    let list = POPULAR_SUBSCRIPTIONS;
+    let list = subscriptionPlans;
     if (name.trim()) {
-      list = POPULAR_SUBSCRIPTIONS.filter(s => 
+      list = subscriptionPlans.filter(s =>
         s.name.toLowerCase().includes(name.toLowerCase())
       );
     }
     // Sort alphabetically
     return [...list].sort((a, b) => a.name.localeCompare(b.name));
-  }, [name]);
+  }, [name, subscriptionPlans]);
 
   const handleSelectPopular = (service: PopularSubscription) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -485,7 +406,9 @@ export const ManualAddScreen = () => {
                 <View style={styles.formCard}>
                   <View style={styles.sectionHeaderBlock}>
                     <Text style={styles.sectionHeaderTitle}>Wybór usługi</Text>
-                    <Text style={styles.sectionHeaderHint}>Kafelki marek i podstawowe dane</Text>
+                    <Text style={styles.sectionHeaderHint}>
+                      {isPlansRefreshing ? 'Odświeżam katalog planów...' : 'Kafelki marek i podstawowe dane'}
+                    </Text>
                   </View>
 
                 <View style={styles.inputGroup}>

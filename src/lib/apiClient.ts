@@ -6,6 +6,7 @@
 
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
+import { reportRequestFailure, reportRequestStart, reportRequestSuccess } from './networkStatus';
 import { supabase } from './supabase';
 
 const ENV_API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL;
@@ -102,8 +103,10 @@ async function request<T>(
   
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  const startedAt = Date.now();
 
   console.log(`[API Request] ${method} ${url} (Timeout: ${Math.round(timeoutMs / 1000)}s)`);
+  reportRequestStart();
   try {
     const config: RequestInit = {
       method,
@@ -117,6 +120,7 @@ async function request<T>(
 
     const response = await fetch(url, config);
     clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startedAt;
 
     if (!response.ok) {
       let errorBody: any;
@@ -131,20 +135,29 @@ async function request<T>(
     }
 
     if (response.status === 204) {
+      reportRequestSuccess(latencyMs);
       return undefined as any;
     }
 
-    return await response.json();
+    const responseBody = await response.json();
+    reportRequestSuccess(latencyMs);
+    return responseBody;
   } catch (error: any) {
     clearTimeout(timeoutId);
+    const latencyMs = Date.now() - startedAt;
     if (error.name === 'AbortError') {
-      throw new Error(`Connection timeout - server did not respond within ${Math.round(timeoutMs / 1000)}s.`);
+      const timeoutError = new Error(`Connection timeout - backend did not respond within ${Math.round(timeoutMs / 1000)}s.`);
+      reportRequestFailure(timeoutError, latencyMs);
+      throw timeoutError;
     }
+    reportRequestFailure(error, latencyMs);
     throw error;
   }
 }
 
 export const apiGet = <T>(path: string): Promise<T> => request<T>('GET', path);
+export const apiGetWithTimeout = <T>(path: string, timeoutMs: number): Promise<T> =>
+  request<T>('GET', path, undefined, timeoutMs);
 export const apiPost = <T>(path: string, body: unknown): Promise<T> => request<T>('POST', path, body);
 export const apiPostWithTimeout = <T>(path: string, body: unknown, timeoutMs: number): Promise<T> =>
   request<T>('POST', path, body, timeoutMs);

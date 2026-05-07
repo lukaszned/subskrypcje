@@ -6,7 +6,7 @@
 // Wywoływane przez hooki w src/hooks/.
 // =============================================================
 
-import { apiGet, apiPatch } from '../lib/apiClient';
+import { apiGet, apiGetWithTimeout, apiPatch } from '../lib/apiClient';
 import {
   DashboardSummary,
   UpcomingPaymentsResponse,
@@ -19,7 +19,13 @@ import {
   DashboardActivityResponse,
   HealthScoreResponse,
   SavingsResponse,
+  Subscription,
+  SubscriptionCategory,
+  CategoryBreakdownResponse,
 } from '../types/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 
 function normalizeItemsResponse<T>(
   raw: any,
@@ -42,6 +48,221 @@ function normalizeTrendItem(item: any) {
     month: item?.label ?? item?.month ?? '',
     label: item?.label,
     amount: Number(amount || 0),
+  };
+}
+
+async function cacheDashboardSummary(summary: DashboardSummary) {
+  try {
+    await AsyncStorage.setItem(DASHBOARD_SUMMARY_CACHE_KEY, JSON.stringify(summary));
+  } catch (error) {
+    console.log('[dashboard] Could not cache summary.', error);
+  }
+}
+
+async function getCachedDashboardSummary(): Promise<DashboardSummary | null> {
+  try {
+    const raw = await AsyncStorage.getItem(DASHBOARD_SUMMARY_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return {
+      monthlyTotal: Number(parsed.monthlyTotal || 0),
+      yearlyTotal: Number(parsed.yearlyTotal || 0),
+      activeSubscriptionsCount: Number(parsed.activeSubscriptionsCount || 0),
+      trialsCount: Number(parsed.trialsCount || 0),
+      upcomingPaymentsCount: Number(parsed.upcomingPaymentsCount || 0),
+      overdueCount: Number(parsed.overdueCount || 0),
+      baseCurrency: parsed.baseCurrency || 'PLN',
+    };
+  } catch (error) {
+    console.log('[dashboard] Could not read cached summary.', error);
+    return null;
+  }
+}
+
+function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCycle'>): number {
+  const amount = Number(subscription.amount || 0);
+
+  switch (subscription.billingCycle) {
+    case 'yearly':
+      return amount / 12;
+    case 'weekly':
+      return amount * 4.345;
+    case 'one_time':
+      return 0;
+    default:
+      return amount;
+  }
+}
+
+function buildSummaryFromSubscriptions(rawSubscriptions: any[]): DashboardSummary {
+  const subscriptions = rawSubscriptions.map((subscription) => ({
+    ...subscription,
+    amount: Number(subscription?.amount || 0),
+  })) as Subscription[];
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const upcomingLimit = new Date(today);
+  upcomingLimit.setDate(upcomingLimit.getDate() + 30);
+
+  const countedSubscriptions = subscriptions.filter((subscription) => {
+    if (subscription.status === 'canceled') return false;
+    return subscription.includeInStats !== false;
+  });
+
+  const monthlyTotal = countedSubscriptions.reduce(
+    (sum, subscription) => sum + toMonthlyAmount(subscription),
+    0
+  );
+
+  const upcomingPaymentsCount = countedSubscriptions.filter((subscription) => {
+    if (!subscription.nextPaymentDate) return false;
+    const paymentDate = new Date(subscription.nextPaymentDate);
+    return paymentDate >= today && paymentDate <= upcomingLimit;
+  }).length;
+
+  const overdueCount = countedSubscriptions.filter((subscription) => {
+    if (subscription.status === 'overdue') return true;
+    if (!subscription.nextPaymentDate) return false;
+    return new Date(subscription.nextPaymentDate) < today;
+  }).length;
+
+  return {
+    monthlyTotal,
+    yearlyTotal: monthlyTotal * 12,
+    activeSubscriptionsCount: countedSubscriptions.length,
+    trialsCount: countedSubscriptions.filter((subscription) => subscription.isTrial).length,
+    upcomingPaymentsCount,
+    overdueCount,
+    baseCurrency: countedSubscriptions[0]?.currency || 'PLN',
+  };
+}
+
+function normalizeSubscriptions(rawSubscriptions: any[]): Subscription[] {
+  return rawSubscriptions.map((subscription) => ({
+    ...subscription,
+    amount: Number(subscription?.amount || 0),
+  })) as Subscription[];
+}
+
+async function getSubscriptionsFallback(): Promise<Subscription[]> {
+  const subscriptions = await apiGetWithTimeout<any[]>('/subscriptions', 12000);
+  return normalizeSubscriptions(Array.isArray(subscriptions) ? subscriptions : []);
+}
+
+function getDateOnly(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function buildUpcomingFromSubscriptions(subscriptions: Subscription[], days: number): UpcomingPaymentsResponse {
+  const today = getDateOnly(new Date());
+  const limit = new Date(today);
+  limit.setDate(limit.getDate() + days);
+
+  const items = subscriptions
+    .filter((subscription) => {
+      if (subscription.status === 'canceled' || !subscription.nextPaymentDate) return false;
+      const paymentDate = new Date(subscription.nextPaymentDate);
+      return paymentDate >= today && paymentDate <= limit;
+    })
+    .sort((a, b) => {
+      const first = new Date(a.nextPaymentDate || 0).getTime();
+      const second = new Date(b.nextPaymentDate || 0).getTime();
+      return first - second;
+    })
+    .map((subscription) => ({
+      id: subscription.id,
+      name: subscription.name,
+      provider: subscription.provider,
+      planName: subscription.planName,
+      amount: Number(subscription.amount || 0),
+      currency: subscription.currency,
+      nextPaymentDate: subscription.nextPaymentDate || '',
+      status: subscription.status,
+      isTrial: subscription.isTrial,
+      reminderDaysBefore: subscription.reminderDaysBefore,
+    }));
+
+  return {
+    days,
+    count: items.length,
+    items,
+  };
+}
+
+function buildTrialsFromSubscriptions(subscriptions: Subscription[], days: number): TrialsResponse {
+  const today = getDateOnly(new Date());
+  const limit = new Date(today);
+  limit.setDate(limit.getDate() + days);
+
+  const items = subscriptions
+    .filter((subscription) => {
+      if (subscription.status === 'canceled' || !subscription.isTrial || !subscription.trialEndDate) {
+        return false;
+      }
+      const trialEndDate = new Date(subscription.trialEndDate);
+      return trialEndDate >= today && trialEndDate <= limit;
+    })
+    .sort((a, b) => {
+      const first = new Date(a.trialEndDate || 0).getTime();
+      const second = new Date(b.trialEndDate || 0).getTime();
+      return first - second;
+    })
+    .map((subscription) => {
+      const trialEndDate = new Date(subscription.trialEndDate || Date.now());
+      const daysLeft = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+
+      return {
+        id: subscription.id,
+        name: subscription.name,
+        provider: subscription.provider,
+        planName: subscription.planName,
+        amount: Number(subscription.amount || 0),
+        currency: subscription.currency,
+        trialEndDate: subscription.trialEndDate || '',
+        nextPaymentDate: subscription.nextPaymentDate,
+        status: subscription.status,
+        cancelUrl: subscription.cancelUrl,
+        reminderDaysBefore: subscription.reminderDaysBefore,
+        daysLeft: Math.max(0, daysLeft),
+      };
+    });
+
+  return {
+    days,
+    count: items.length,
+    items,
+  };
+}
+
+function buildCategoryBreakdownFromSubscriptions(subscriptions: Subscription[]): CategoryBreakdownResponse {
+  const countedSubscriptions = subscriptions.filter((subscription) => {
+    if (subscription.status === 'canceled') return false;
+    return subscription.includeInStats !== false;
+  });
+
+  const totals = countedSubscriptions.reduce(
+    (acc, subscription) => {
+      const category = subscription.category || 'other';
+      acc[category] = (acc[category] || 0) + toMonthlyAmount(subscription);
+      return acc;
+    },
+    {} as Record<SubscriptionCategory, number>
+  );
+
+  const totalMonthly = Object.values(totals).reduce((sum, amount) => sum + amount, 0);
+  const items = Object.entries(totals).map(([category, monthlyAmount]) => ({
+    category: category as SubscriptionCategory,
+    monthlyAmount,
+    subscriptionCount: countedSubscriptions.filter((subscription) => subscription.category === category).length,
+    percentage: totalMonthly > 0 ? Math.round((monthlyAmount / totalMonthly) * 100) : 0,
+  }));
+
+  return {
+    totalMonthly,
+    baseCurrency: countedSubscriptions[0]?.currency || 'PLN',
+    items,
   };
 }
 
@@ -141,12 +362,31 @@ export async function updateUserSettings(payload: Partial<UserSettings>): Promis
  * GET /dashboard/summary
  */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
-  const data = await apiGet<any>('/dashboard/summary');
-  return {
-    ...data,
-    monthlyTotal: typeof data.monthlyTotal === 'string' ? parseFloat(data.monthlyTotal) : data.monthlyTotal,
-    yearlyTotal: typeof data.yearlyTotal === 'string' ? parseFloat(data.yearlyTotal) : data.yearlyTotal,
-  };
+  try {
+    const data = await apiGetWithTimeout<any>('/dashboard/summary', 12000);
+    const summary = {
+      ...data,
+      monthlyTotal: typeof data.monthlyTotal === 'string' ? parseFloat(data.monthlyTotal) : data.monthlyTotal,
+      yearlyTotal: typeof data.yearlyTotal === 'string' ? parseFloat(data.yearlyTotal) : data.yearlyTotal,
+    };
+
+    await cacheDashboardSummary(summary);
+    return summary;
+  } catch (summaryError) {
+    console.log('[dashboard] Summary endpoint failed, falling back to /subscriptions.', summaryError);
+
+    try {
+      const subscriptions = await getSubscriptionsFallback();
+      const fallbackSummary = buildSummaryFromSubscriptions(subscriptions);
+      await cacheDashboardSummary(fallbackSummary);
+      return fallbackSummary;
+    } catch (fallbackError) {
+      console.log('[dashboard] Subscriptions fallback failed, trying cached summary.', fallbackError);
+      const cachedSummary = await getCachedDashboardSummary();
+      if (cachedSummary) return cachedSummary;
+      throw fallbackError;
+    }
+  }
 }
 
 /**
@@ -155,11 +395,16 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
 export async function getUpcomingPayments(
   days: number = 7
 ): Promise<UpcomingPaymentsResponse> {
-  const data = await apiGet<any>(`/dashboard/upcoming?days=${days}`);
-  return normalizeItemsResponse(data, days, (item) => ({
-      ...item,
-      amount: Number(item.amount || 0),
-  }));
+  try {
+    const data = await apiGetWithTimeout<any>(`/dashboard/upcoming?days=${days}`, 12000);
+    return normalizeItemsResponse(data, days, (item) => ({
+        ...item,
+        amount: Number(item.amount || 0),
+    }));
+  } catch (error) {
+    console.log('[dashboard] Upcoming endpoint failed, falling back to /subscriptions.', error);
+    return buildUpcomingFromSubscriptions(await getSubscriptionsFallback(), days);
+  }
 }
 
 /**
@@ -168,19 +413,29 @@ export async function getUpcomingPayments(
 export async function getTrials(
   days: number = 30
 ): Promise<TrialsResponse> {
-  const data = await apiGet<any>(`/dashboard/trials?days=${days}`);
-  return normalizeItemsResponse(data, days, (item) => ({
-      ...item,
-      amount: Number(item.amount || 0),
-  }));
+  try {
+    const data = await apiGetWithTimeout<any>(`/dashboard/trials?days=${days}`, 12000);
+    return normalizeItemsResponse(data, days, (item) => ({
+        ...item,
+        amount: Number(item.amount || 0),
+    }));
+  } catch (error) {
+    console.log('[dashboard] Trials endpoint failed, falling back to /subscriptions.', error);
+    return buildTrialsFromSubscriptions(await getSubscriptionsFallback(), days);
+  }
 }
 
 /**
  * GET /dashboard/category-breakdown
  */
-export async function getCategoryBreakdown() {
-  const data = await apiGet<any>('/dashboard/category-breakdown');
-  return data;
+export async function getCategoryBreakdown(): Promise<CategoryBreakdownResponse> {
+  try {
+    const data = await apiGetWithTimeout<any>('/dashboard/category-breakdown', 12000);
+    return data;
+  } catch (error) {
+    console.log('[dashboard] Category breakdown endpoint failed, falling back to /subscriptions.', error);
+    return buildCategoryBreakdownFromSubscriptions(await getSubscriptionsFallback());
+  }
 }
 
 /**

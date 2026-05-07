@@ -47,10 +47,10 @@ import { useTrials } from '../hooks/useTrials';
 import { useDashboardSavings } from '../hooks/useDashboardSavings';
 import { useDashboardTrends } from '../hooks/useDashboardTrends';
 import { useReminders } from '../hooks/useReminders';
-import { useUserSettings } from '../hooks/useUserSettings';
 import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
 import { ErrorState } from '../components/ErrorState';
+import { NetworkStatusBanner } from '../components/NetworkStatusBanner';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
 import { useHealthScore } from '../hooks/useHealthScore';
@@ -186,18 +186,16 @@ export const DashboardScreen = () => {
   const { data: healthData, refetch: refetchHealth } = useHealthScore(secondaryEnabled);
   const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10, secondaryEnabled);
 
-  const { isError: isSettingsError, error: settingsError } = useUserSettings(false);
   const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(secondaryEnabled);
   useNotificationPreview(false);
 
   const isLoading = isSummaryLoading;
-  const isError = isSummaryError || isSettingsError;
+  const isError = isSummaryError;
   const hasData = !!summaryData;
 
   // DIAGNOSTIC LOGGING
   console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
-  if (isSummaryError) console.error('[DashboardScreen] Summary Error');
-  if (isSettingsError) console.error('[DashboardScreen] Settings Error:', settingsError);
+  if (isSummaryError) console.warn('[DashboardScreen] Summary Error:', summaryError);
 
   useEffect(() => {
     if (!summaryData || isSummaryError) {
@@ -1063,14 +1061,23 @@ export const DashboardScreen = () => {
     },
     miniChart: {
       flexDirection: 'row',
-      alignItems: 'flex-end',
+      alignItems: 'stretch',
       gap: 5,
       height: 54,
       marginTop: 14,
     },
-    miniChartBar: {
+    miniChartTrack: {
       flex: 1,
-      borderRadius: 6,
+      justifyContent: 'flex-end',
+      borderRadius: 8,
+      backgroundColor: '#E9F4EE',
+      overflow: 'hidden',
+    },
+    miniChartBar: {
+      width: '100%',
+      minHeight: 6,
+      borderTopLeftRadius: 8,
+      borderTopRightRadius: 8,
       backgroundColor: theme.primary,
       opacity: 0.22,
     },
@@ -1753,13 +1760,17 @@ export const DashboardScreen = () => {
         <Text style={dynamicStyles.widgetTitle}>Statystyki</Text>
         <View style={dynamicStyles.miniChart}>
           {bars.map((height, index) => (
-            <View
-              key={`${height}-${index}`}
-              style={[
-                dynamicStyles.miniChartBar,
-                { height: `${Math.min(1, height) * 100}%`, opacity: index === bars.length - 1 ? 1 : 0.28 + index * 0.08 },
-              ]}
-            />
+            <View key={`${height}-${index}`} style={dynamicStyles.miniChartTrack}>
+              <View
+                style={[
+                  dynamicStyles.miniChartBar,
+                  {
+                    height: `${Math.min(1, height) * 100}%`,
+                    opacity: index === bars.length - 1 ? 1 : 0.28 + index * 0.08,
+                  },
+                ]}
+              />
+            </View>
           ))}
         </View>
         <Text style={dynamicStyles.widgetCaption}>{hasHistory ? 'Trend kosztów' : 'Zbieramy historię'}</Text>
@@ -1860,7 +1871,7 @@ export const DashboardScreen = () => {
   if (false && isError && !hasData) {
     const errorDetails = isSummaryError
       ? `Summary Error: ${summaryError?.message || JSON.stringify(summaryError)}`
-      : isSettingsError ? `Settings Error: ${settingsError?.message || JSON.stringify(settingsError)}` : 'Unknown error';
+      : 'Unknown error';
 
     const checkConnectivity = async () => {
       try {
@@ -1905,6 +1916,7 @@ export const DashboardScreen = () => {
         }
       >
         {renderMenuHeader()}
+        <NetworkStatusBanner onRetry={handleRefresh} />
         {renderDashboardNotice()}
         {renderHeroWidget()}
         <View style={dynamicStyles.widgetGrid}>
