@@ -28,6 +28,7 @@ type GmailScanMessage = {
     date: string;
     snippet: string;
     analysis: EmailDetectionResult;
+    sourceQueryNames: string[];
 };
 
 type GmailScanQuerySummary = {
@@ -54,6 +55,8 @@ export class GmailScanServiceError extends Error {
 
 export type ScanGmailParams = {
     connectionId?: string;
+    debug?: boolean;
+    dryRun?: boolean;
     limit: number;
     sinceDays: number;
 };
@@ -74,7 +77,11 @@ function buildGmailQueryVariants(sinceDays: number): GmailScanQueryVariant[] {
         },
         {
             name: "known_providers",
-            query: `newer_than:${sinceDays}d (Netflix OR Spotify OR "Google Play" OR Apple OR OpenAI OR ChatGPT OR Canva OR Adobe OR Microsoft OR Amazon OR Disney OR Dropbox OR Notion OR Figma OR GitHub)`,
+            query: `newer_than:${sinceDays}d (Netflix OR Spotify OR "Spotify Premium" OR "Google Play" OR "Google One" OR "YouTube Premium" OR YouTube OR Apple OR OpenAI OR ChatGPT OR "ChatGPT Plus" OR Canva OR "Canva Pro" OR Adobe OR Microsoft OR Amazon OR Disney OR "Disney+" OR Dropbox OR "Dropbox Plus" OR Max OR HBO OR Notion OR Figma OR GitHub)`,
+        },
+        {
+            name: "provider_onboarding",
+            query: `newer_than:${sinceDays}d ("welcome to" OR "thanks for joining" OR "your account is ready" OR "start using" OR "you're all set" OR "trial started" OR "free trial" OR "Canva Pro" OR "Spotify Premium" OR "Dropbox Plus" OR "ChatGPT Plus" OR "YouTube Premium")`,
         },
         {
             name: "payments",
@@ -197,6 +204,7 @@ async function analyzeGmailMessage(
         date,
         snippet,
         analysis,
+        sourceQueryNames: [],
     };
 }
 
@@ -222,6 +230,10 @@ async function runGmailQueryVariant(
         const existingMessage = globalMessagesById.get(message.id);
 
         if (existingMessage) {
+            if (!existingMessage.sourceQueryNames.includes(variant.name)) {
+                existingMessage.sourceQueryNames.push(variant.name);
+            }
+
             if (existingMessage.analysis.isCandidate) {
                 candidates += 1;
             }
@@ -229,6 +241,7 @@ async function runGmailQueryVariant(
         }
 
         const analyzedMessage = await analyzeGmailMessage(gmail, message.id);
+        analyzedMessage.sourceQueryNames.push(variant.name);
         globalMessagesById.set(analyzedMessage.id, analyzedMessage);
 
         if (analyzedMessage.analysis.isCandidate) {
@@ -242,6 +255,29 @@ async function runGmailQueryVariant(
         analyzed: messages.filter((message) => Boolean(message.id)).length,
         candidates,
     };
+}
+
+function buildDebugMessages(messages: GmailScanMessage[]) {
+    return messages.slice(0, 50).map((message) => ({
+        id: message.id,
+        from: message.from,
+        subject: message.subject,
+        date: message.date,
+        snippet: truncateEvidenceSnippet(message.snippet),
+        isCandidate: message.analysis.isCandidate,
+        confidence: message.analysis.confidence,
+        reasons: message.analysis.reasons,
+        detected: {
+            provider: message.analysis.detected.provider,
+            name: message.analysis.detected.name,
+            isTrial: message.analysis.detected.isTrial,
+            trialEndDateText: message.analysis.detected.trialEndDateText,
+            amountText: message.analysis.detected.amountText,
+            currency: message.analysis.detected.currency,
+            billingCycle: message.analysis.detected.billingCycle,
+        },
+        sourceQueryNames: message.sourceQueryNames,
+    }));
 }
 
 async function saveCandidates(params: {
@@ -359,36 +395,59 @@ export async function scanGmailForUser(userId: string, params: ScanGmailParams) 
         const candidates = analyzedMessages.filter(
             (message) => message.analysis.isCandidate
         );
-        const { created, skippedExisting } = await saveCandidates({
-            userId,
-            emailConnectionId: connection.id,
-            candidates,
-        });
-        const lastScanAt = new Date();
-        const updatedConnection = await prisma.emailConnection.update({
-            where: {
-                id: connection.id,
-            },
-            data: {
-                lastScanAt,
-            },
-            select: {
-                id: true,
-                email: true,
-                provider: true,
-                lastScanAt: true,
-            },
-        });
 
-        return {
-            connection: updatedConnection,
+        const scanResult = params.dryRun
+            ? {
+                  created: [],
+                  skippedExisting: 0,
+                  connection: {
+                      id: connection.id,
+                      email: connection.email,
+                      provider: connection.provider,
+                      lastScanAt: connection.lastScanAt,
+                  },
+              }
+            : {
+                  ...(await saveCandidates({
+                      userId,
+                      emailConnectionId: connection.id,
+                      candidates,
+                  })),
+                  connection: await prisma.emailConnection.update({
+                      where: {
+                          id: connection.id,
+                      },
+                      data: {
+                          lastScanAt: new Date(),
+                      },
+                      select: {
+                          id: true,
+                          email: true,
+                          provider: true,
+                          lastScanAt: true,
+                      },
+                  }),
+              };
+
+        const result = {
+            connection: scanResult.connection,
             scannedMessages: analyzedMessages.length,
             candidatesFound: candidates.length,
-            createdDetections: created.length,
-            skippedExisting,
+            createdDetections: scanResult.created.length,
+            skippedExisting: scanResult.skippedExisting,
             rejectedMessages: analyzedMessages.length - candidates.length,
             querySummaries,
-            created,
+            created: scanResult.created,
+        };
+        const response = params.dryRun ? { ...result, dryRun: true } : result;
+
+        if (!params.debug) {
+            return response;
+        }
+
+        return {
+            ...response,
+            debugMessages: buildDebugMessages(analyzedMessages),
         };
     } catch (error) {
         if (error instanceof GmailScanServiceError) {

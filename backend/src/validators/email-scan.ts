@@ -63,6 +63,8 @@ export type AcceptDetectedSubscriptionInput = z.infer<
 
 export const scanGmailSchema = z.object({
     connectionId: z.string().trim().min(1).optional(),
+    debug: z.coerce.boolean().optional().default(false),
+    dryRun: z.coerce.boolean().optional().default(false),
     limit: z.coerce
         .number()
         .int("limit must be an integer")

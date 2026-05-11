@@ -9,7 +9,8 @@
     "seed": "ts-node-dev --respawn --transpile-only src/scripts/seed.ts",
     "test:login": "ts-node-dev --respawn --transpile-only src/scripts/test-login.ts",
     "gmail:scan-spike": "ts-node-dev --transpile-only ./src/scripts/gmail-scan-spike.ts",
-    "seed:email-detection": "ts-node-dev --transpile-only ./src/scripts/seed-email-detection.ts"
+    "seed:email-detection": "ts-node-dev --transpile-only ./src/scripts/seed-email-detection.ts",
+    "test:email-detection": "ts-node-dev --transpile-only ./src/scripts/test-email-detection.ts"
   },
   "keywords": [],
   "author": "",
