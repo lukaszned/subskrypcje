@@ -9,6 +9,7 @@ export type EmailDetectionFixtureCase = {
         name?: string;
         isTrial?: boolean;
         billingCycle?: BillingCycleDetection;
+        amountText?: string;
         minConfidence?: number;
         maxConfidence?: number;
     };
@@ -966,6 +967,199 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
         expected: {
             isCandidate: false,
             maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "Play monthly invoice PL",
+        input: {
+            id: "fixture-play-monthly-invoice-pl",
+            from: "Play <faktury@play.pl>",
+            subject: "Twoja faktura Play jest juz dostepna",
+            snippet:
+                "Wystawilismy fakture za uslugi telekomunikacyjne. Kwota do zaplaty: 79,99 PLN. Termin platnosci: 20 maja 2026. Abonament odnawia sie co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Play",
+            billingCycle: "monthly",
+            amountText: "79,99 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Play internet recurring payment PL",
+        input: {
+            id: "fixture-play-internet-recurring-payment-pl",
+            from: "Play <ebok@play.pl>",
+            subject: "Informacja o platnosci za internet",
+            snippet:
+                "Twoja platnosc cykliczna za internet domowy Play zostala zrealizowana. Usluga jest rozliczana miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Play",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Orange internet invoice PL",
+        input: {
+            id: "fixture-orange-internet-invoice-pl",
+            from: "Orange <faktury@orange.pl>",
+            subject: "Faktura za uslugi Orange",
+            snippet:
+                "Twoja faktura za internet domowy i abonament jest gotowa. Kwota do zaplaty 89,99 PLN. Okres rozliczeniowy: maj 2026.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Orange",
+            billingCycle: "monthly",
+            amountText: "89,99 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "T-Mobile monthly bill PL",
+        input: {
+            id: "fixture-t-mobile-monthly-bill-pl",
+            from: "T-Mobile <faktura@t-mobile.pl>",
+            subject: "Nowa faktura T-Mobile",
+            snippet:
+                "Wystawilismy fakture za abonament telefoniczny. Kwota do zaplaty: 65,00 PLN. Usluga rozliczana jest co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "T-Mobile",
+            billingCycle: "monthly",
+            amountText: "65,00 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Plus invoice PL",
+        input: {
+            id: "fixture-plus-invoice-pl",
+            from: "Plus <ebok@plus.pl>",
+            subject: "Faktura Plus",
+            snippet:
+                "Faktura za Twoj abonament jest dostepna. Kwota do zaplaty 59,99 PLN. Termin platnosci znajduje sie na fakturze.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Plus",
+            amountText: "59,99 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Netia internet invoice PL",
+        input: {
+            id: "fixture-netia-internet-invoice-pl",
+            from: "Netia <faktura@netia.pl>",
+            subject: "Faktura za Internet Netia",
+            snippet:
+                "Twoja faktura za internet jest dostepna. Abonament miesieczny za usluge internetowa wynosi 69,90 PLN.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Netia",
+            billingCycle: "monthly",
+            amountText: "69,90 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Vectra internet bill PL",
+        input: {
+            id: "fixture-vectra-internet-bill-pl",
+            from: "Vectra <ebok@vectra.pl>",
+            subject: "Nowy rachunek za Internet",
+            snippet:
+                "Rachunek za internet i telewizje jest juz dostepny. Kwota do zaplaty: 99,99 PLN. Uslugi sa rozliczane miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Vectra",
+            billingCycle: "monthly",
+            amountText: "99,99 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "UPC internet bill PL",
+        input: {
+            id: "fixture-upc-internet-bill-pl",
+            from: "UPC <faktury@upc.pl>",
+            subject: "Faktura UPC",
+            snippet:
+                "Faktura za pakiet internetowy zostala wystawiona. Kwota do zaplaty: 79,00 PLN. Okres rozliczeniowy obejmuje kolejny miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "UPC",
+            billingCycle: "monthly",
+            amountText: "79,00 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Play marketing offer PL",
+        input: {
+            id: "fixture-play-marketing-offer-pl",
+            from: "Play <newsletter@play.pl>",
+            subject: "Oferta specjalna Play",
+            snippet:
+                "Poznaj nowa oferte telefonow i internetu. To wiadomosc marketingowa, nie faktura ani potwierdzenie platnosci.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Play",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Orange login/security PL",
+        input: {
+            id: "fixture-orange-login-security-pl",
+            from: "Orange <bezpieczenstwo@orange.pl>",
+            subject: "Nowe logowanie do Moj Orange",
+            snippet:
+                "Wykrylismy nowe logowanie do Twojego konta. Jesli to nie Ty, zmien haslo.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Orange",
+            maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "T-Mobile marketing PL",
+        input: {
+            id: "fixture-t-mobile-marketing-pl",
+            from: "T-Mobile <newsletter@t-mobile.pl>",
+            subject: "Promocja na smartfony",
+            snippet:
+                "Sprawdz najnowsze telefony w promocyjnych cenach. Ta wiadomosc nie jest faktura ani rachunkiem.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "T-Mobile",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Payment confirmation one-time shop PL",
+        input: {
+            id: "fixture-payment-confirmation-one-time-shop-pl",
+            from: "PayU <no-reply@payu.pl>",
+            subject: "Potwierdzenie platnosci",
+            snippet:
+                "Potwierdzamy platnosc za zamowienie w sklepie internetowym. Ta platnosc nie dotyczy subskrypcji ani abonamentu.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
         },
     },
 ];

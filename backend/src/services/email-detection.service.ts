@@ -53,9 +53,11 @@ type DetectionSignals = {
     hasFreePlanEvidence: boolean;
     hasMarketingEvidence: boolean;
     hasNegatedSubscriptionEvidence: boolean;
+    hasNegatedBillingEvidence: boolean;
     hasPromotionalTrialEvidence: boolean;
     hasActiveTrialSubscriptionEvidence: boolean;
     hasPaymentSetupEvidence: boolean;
+    hasRecurringBillEvidence: boolean;
     hasActiveRenewalPaymentEvidence: boolean;
     hasPaymentReceiptTrialChargeEvidence: boolean;
 };
@@ -82,6 +84,13 @@ const PROVIDER_CATALOG = [
     { name: "Slack", patterns: ["slack"] },
     { name: "Duolingo", patterns: ["duolingo"] },
     { name: "NordVPN", patterns: ["nordvpn", "nord vpn"] },
+    { name: "T-Mobile", patterns: ["t-mobile", "tmobile"] },
+    { name: "Orange", patterns: ["orange.pl", "orange"] },
+    { name: "Play", patterns: ["play.pl", " play "] },
+    { name: "Plus", patterns: ["plus.pl", "faktura plus"] },
+    { name: "Netia", patterns: ["netia"] },
+    { name: "Vectra", patterns: ["vectra"] },
+    { name: "UPC", patterns: ["upc"] },
 ];
 
 export function cleanText(value: string | null | undefined) {
@@ -145,6 +154,45 @@ function hasNegatedSubscriptionSignal(subjectAndSnippet: string) {
         /nie rozpoczeto subskrypcji/i,
         /to nie jest subskrypcja/i,
         /brak subskrypcji/i,
+    ]);
+}
+
+function hasNegatedBillingSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /nie faktura/i,
+        /nie jest faktur[a\u0105]/i,
+        /nie jest rachunkiem/i,
+        /nie rachunek/i,
+        /nie potwierdzenie p[\u0142l]atno[s\u015b]ci/i,
+        /nie potwierdzenie platnosci/i,
+        /nie dotyczy subskrypcji/i,
+        /nie dotyczy abonamentu/i,
+        /nie dotyczy subskrypcji ani abonamentu/i,
+        /nie faktura ani potwierdzenie p[\u0142l]atno[s\u015b]ci/i,
+        /nie faktura ani potwierdzenie platnosci/i,
+        /nie jest faktur[a\u0105] ani rachunkiem/i,
+    ]);
+}
+
+function hasRecurringBillSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /us[l\u0142]ugi telekomunikacyjne/i,
+        /abonament telefoniczny/i,
+        /internet domowy/i,
+        /faktura za internet/i,
+        /faktura za pakiet internetowy/i,
+        /rachunek za internet/i,
+        /kwota do zap[l\u0142]aty/i,
+        /termin p[\u0142l]atno[s\u015b]ci/i,
+        /okres rozliczeniowy/i,
+        /p[\u0142l]atno[s\u015b][c\u0107] cykliczna/i,
+        /sta[l\u0142]a p[\u0142l]atno[s\u015b][c\u0107]/i,
+        /abonament miesi[e\u0119]czny/i,
+        /miesi[e\u0119]czny abonament/i,
+        /rozliczana miesi[e\u0119]cznie/i,
+        /rozliczane miesi[e\u0119]cznie/i,
+        /us[l\u0142]uga rozliczana jest co miesi[a\u0105]c/i,
+        /us[l\u0142]ugi s[a\u0105] rozliczane miesi[e\u0119]cznie/i,
     ]);
 }
 
@@ -473,6 +521,16 @@ export function detectBillingCycle(
             /\b(miesi[e\u0119]czna|miesi[e\u0119]czny|miesi[e\u0119]czne|miesi[e\u0119]cznej|miesi[e\u0119]czn[a\u0105])\b/i,
             /\b(miesieczna|miesieczny|miesieczne|miesiecznej)\b/i,
             /\b(miesi[e\u0119]cznej|miesiecznej)\s+(subskrypcji|p[\u0142l]atno[s\u015b]ci|platnosci)\b/i,
+            /rozliczana miesi[e\u0119]cznie/i,
+            /rozliczane miesi[e\u0119]cznie/i,
+            /us[l\u0142]uga rozliczana jest co miesi[a\u0105]c/i,
+            /us[l\u0142]ugi s[a\u0105] rozliczane miesi[e\u0119]cznie/i,
+            /kolejny miesi[a\u0105]c/i,
+            /obejmuje kolejny miesi[a\u0105]c/i,
+            /abonament miesi[e\u0119]czny/i,
+            /miesi[e\u0119]czny abonament/i,
+            /okres rozliczeniowy[\s\S]{0,120}\b(internet|abonament|us[l\u0142]ug)/i,
+            /\b(internet|abonament|us[l\u0142]ug)[\s\S]{0,120}okres rozliczeniowy/i,
         ])
     ) {
         return "monthly";
@@ -513,20 +571,32 @@ function collectDetectionSignals(params: {
     const hasNegatedSubscriptionEvidence = hasNegatedSubscriptionSignal(
         params.subjectAndSnippet
     );
+    const hasNegatedBillingEvidence = hasNegatedBillingSignal(
+        params.subjectAndSnippet
+    );
+    const hasRecurringBillEvidence = hasRecurringBillSignal(
+        params.subjectAndSnippet
+    );
     const hasTrialEvidence = includesAny(params.subjectAndSnippet, [
         /\b(trial|free trial|trial started|start your trial|your trial|trial will end|okres pr[o\u00f3]bny|wersja pr[o\u00f3]bna)\b/i,
     ]);
-    const hasReceiptEvidence = includesAny(params.subjectAndSnippet, [
-        /\b(receipt|order receipt|order confirmation|purchase confirmation|potwierdzenie zakupu|potwierdzenie p[\u0142l]atno[s\u015b]ci|potwierdzenie platnosci)\b/i,
-    ]);
-    const hasInvoiceEvidence = includesAny(params.subjectAndSnippet, [
-        /\b(invoice|faktura|numer faktury|rachunek)\b/i,
-    ]);
-    const hasPaymentEvidence = includesAny(params.subjectAndSnippet, [
-        /\b(payment|paid|purchase|purchased|billed|p[\u0142l]atno[s\u015b][c\u0107]i|p[\u0142l]atno[s\u015b][c\u0107]|platnosci|platnosc|zakup)\b/i,
-        /\bpobralismy\s+platnosc\b/i,
-        /\bpobral[i\u015b]my\s+p[\u0142l]atno[s\u015b][c\u0107]\b/i,
-    ]);
+    const hasReceiptEvidence =
+        !hasNegatedBillingEvidence &&
+        includesAny(params.subjectAndSnippet, [
+            /\b(receipt|order receipt|order confirmation|purchase confirmation|potwierdzenie zakupu|potwierdzenie p[\u0142l]atno[s\u015b]ci|potwierdzenie platnosci)\b/i,
+        ]);
+    const hasInvoiceEvidence =
+        !hasNegatedBillingEvidence &&
+        includesAny(params.subjectAndSnippet, [
+            /\b(invoice|faktura|numer faktury|rachunek)\b/i,
+        ]);
+    const hasPaymentEvidence =
+        !hasNegatedBillingEvidence &&
+        includesAny(params.subjectAndSnippet, [
+            /\b(payment|paid|purchase|purchased|billed|p[\u0142l]atno[s\u015b][c\u0107]i|p[\u0142l]atno[s\u015b][c\u0107]|platnosci|platnosc|zakup)\b/i,
+            /\bpobralismy\s+platnosc\b/i,
+            /\bpobral[i\u015b]my\s+p[\u0142l]atno[s\u015b][c\u0107]\b/i,
+        ]);
     const hasChargedEvidence = includesAny(params.subjectAndSnippet, [
         /\b(charged|automatically charged|charged for)\b/i,
         /\b(b[e\u0119]dziemy\s+obci[a\u0105][z\u017c]a[c\u0107]|bedziemy\s+obciazac|obci[a\u0105][z\u017c]a[c\u0107]|obciazac|obci[a\u0105][z\u017c]ymy|obciazymy|obci[a\u0105][z\u017c]enie|obciazenie)\b/i,
@@ -617,9 +687,11 @@ function collectDetectionSignals(params: {
         hasFreePlanEvidence,
         hasMarketingEvidence,
         hasNegatedSubscriptionEvidence,
+        hasNegatedBillingEvidence,
         hasPromotionalTrialEvidence,
         hasActiveTrialSubscriptionEvidence,
         hasPaymentSetupEvidence,
+        hasRecurringBillEvidence,
         hasActiveRenewalPaymentEvidence,
         hasPaymentReceiptTrialChargeEvidence,
     };
@@ -631,6 +703,7 @@ function hasStrongSubscriptionOrPaymentEvidence(signals: DetectionSignals) {
         signals.hasInvoiceEvidence ||
         signals.hasPaymentEvidence ||
         signals.hasChargedEvidence ||
+        signals.hasRecurringBillEvidence ||
         signals.hasTrialEvidence ||
         (signals.hasSubscriptionEvidence &&
             (signals.hasRecurringEvidence || signals.hasBillingCycleEvidence))
@@ -656,6 +729,11 @@ function isCandidateFromPositiveEvidence(signals: DetectionSignals) {
         (signals.hasTrialEvidence && hasProviderOrPlan) ||
         (signals.hasPaymentFailedEvidence &&
             (Boolean(signals.provider) || signals.hasSubscriptionEvidence)) ||
+        (signals.hasRecurringBillEvidence &&
+            (Boolean(signals.provider) ||
+                hasReceiptInvoiceOrPayment ||
+                Boolean(signals.amountText) ||
+                signals.hasBillingCycleEvidence)) ||
         (signals.hasPaidTierEvidence &&
             Boolean(signals.provider) &&
             (hasReceiptInvoiceOrPayment ||
@@ -729,6 +807,11 @@ export function analyzeMessageForSubscription(
         reasons.push("+0.15 recurring/renewal evidence");
     }
 
+    if (signals.hasRecurringBillEvidence) {
+        confidence += 0.2;
+        reasons.push("+0.20 recurring bill evidence");
+    }
+
     if (signals.hasBillingCycleEvidence) {
         confidence += 0.1;
         reasons.push("+0.10 billing cycle signal");
@@ -785,6 +868,11 @@ export function analyzeMessageForSubscription(
     if (signals.hasNegatedSubscriptionEvidence) {
         confidence -= 0.35;
         reasons.push("-0.35 negated subscription signal");
+    }
+
+    if (signals.hasNegatedBillingEvidence) {
+        confidence -= 0.35;
+        reasons.push("-0.35 negated billing/payment signal");
     }
 
     if (
@@ -864,6 +952,12 @@ export function analyzeMessageForSubscription(
     const isBlockedNegatedSubscriptionMessage =
         signals.hasNegatedSubscriptionEvidence &&
         !signals.hasPaymentReceiptTrialChargeEvidence;
+    const isBlockedNegatedBillingMessage =
+        signals.hasNegatedBillingEvidence &&
+        !signals.amountText &&
+        !signals.hasChargedEvidence &&
+        !signals.hasActiveRenewalPaymentEvidence &&
+        !signals.hasPaymentFailedEvidence;
     const isBlockedCanceledSubscriptionMessage =
         signals.hasCancellationEvidence && !signals.hasActiveRenewalPaymentEvidence;
     const isBlockedRefundMessage =
@@ -895,6 +989,10 @@ export function analyzeMessageForSubscription(
 
     if (isBlockedNegatedSubscriptionMessage) {
         reasons.push("-blocked: negated subscription message without payment signal");
+    }
+
+    if (isBlockedNegatedBillingMessage) {
+        reasons.push("-blocked: negated billing/payment message");
     }
 
     if (isBlockedCanceledSubscriptionMessage) {
@@ -933,6 +1031,7 @@ export function analyzeMessageForSubscription(
         isCandidate:
             !isBlockedAccountMessage &&
             !isBlockedNegatedSubscriptionMessage &&
+            !isBlockedNegatedBillingMessage &&
             !isBlockedCanceledSubscriptionMessage &&
             !isBlockedRefundMessage &&
             !isBlockedFreePlanMessage &&

@@ -63,6 +63,17 @@ function collectFailures(
     }
 
     if (
+        expected.amountText !== undefined &&
+        actual.detected.amountText !== expected.amountText
+    ) {
+        failures.push({
+            field: "amountText",
+            expected: expected.amountText,
+            actual: actual.detected.amountText,
+        });
+    }
+
+    if (
         expected.minConfidence !== undefined &&
         actual.confidence < expected.minConfidence
     ) {

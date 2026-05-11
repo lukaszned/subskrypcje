@@ -10,7 +10,8 @@
     "test:login": "ts-node-dev --respawn --transpile-only src/scripts/test-login.ts",
     "gmail:scan-spike": "ts-node-dev --transpile-only ./src/scripts/gmail-scan-spike.ts",
     "seed:email-detection": "ts-node-dev --transpile-only ./src/scripts/seed-email-detection.ts",
-    "test:email-detection": "ts-node-dev --transpile-only ./src/scripts/test-email-detection.ts"
+    "test:email-detection": "ts-node-dev --transpile-only ./src/scripts/test-email-detection.ts",
+    "imap:scan-spike": "ts-node-dev --transpile-only ./src/scripts/imap-scan-spike.ts"
   },
   "keywords": [],
   "author": "",
@@ -24,6 +25,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "googleapis": "^171.4.0",
+    "imapflow": "^1.3.3",
     "pg": "^8.20.0",
     "zod": "^4.3.6"
   },
