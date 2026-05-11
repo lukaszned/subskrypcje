@@ -698,4 +698,274 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
             minConfidence: 0.55,
         },
     },
+    {
+        name: "PayU payment for Canva Pro PL",
+        input: {
+            id: "fixture-payu-payment-for-canva-pro-pl",
+            from: "PayU <no-reply@payu.pl>",
+            subject: "Potwierdzenie platnosci PayU",
+            snippet:
+                "Potwierdzamy platnosc za Canva Pro. Kwota 49,99 PLN zostala pobrana. Subskrypcja odnawia sie co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Canva",
+            name: "Canva Pro",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Przelewy24 payment for Netflix PL",
+        input: {
+            id: "fixture-przelewy24-payment-for-netflix-pl",
+            from: "Przelewy24 <serwis@przelewy24.pl>",
+            subject: "Potwierdzenie transakcji Przelewy24",
+            snippet:
+                "Transakcja dla Netflix zostala zakonczona pomyslnie. Platnosc dotyczy miesiecznej subskrypcji Netflix.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Netflix",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Autopay recurring payment Spotify PL",
+        input: {
+            id: "fixture-autopay-recurring-payment-spotify-pl",
+            from: "Autopay <no-reply@autopay.pl>",
+            subject: "Potwierdzenie platnosci cyklicznej",
+            snippet:
+                "Platnosc cykliczna za Spotify Premium zostala zrealizowana. Subskrypcja odnawia sie co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Spotify",
+            name: "Spotify Premium",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Tpay payment for Disney PL",
+        input: {
+            id: "fixture-tpay-payment-for-disney-pl",
+            from: "Tpay <powiadomienia@tpay.com>",
+            subject: "Platnosc zakonczona",
+            snippet:
+                "Twoja platnosc za Disney+ Premium zostala zakonczona pomyslnie. Usluga jest rozliczana miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Disney",
+            name: "Disney+ Premium",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Stripe payment for Figma EN",
+        input: {
+            id: "fixture-stripe-payment-for-figma-en",
+            from: "Stripe <receipts+acct@test.stripe.com>",
+            subject: "Your receipt from Figma",
+            snippet:
+                "You paid Figma for your Professional plan. Your subscription will renew monthly.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Figma",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Trial ending soon Canva EN",
+        input: {
+            id: "fixture-trial-ending-soon-canva-en",
+            from: "Canva <no-reply@canva.com>",
+            subject: "Your Canva Pro trial ends soon",
+            snippet:
+                "Your free trial for Canva Pro ends in 3 days. After that, your subscription will renew monthly unless canceled.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Canva",
+            name: "Canva Pro",
+            isTrial: true,
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Trial ending soon YouTube PL",
+        input: {
+            id: "fixture-trial-ending-soon-youtube-pl",
+            from: "YouTube <noreply-purchases@youtube.com>",
+            subject: "Twoj okres probny YouTube Premium wkrotce sie konczy",
+            snippet:
+                "Okres probny YouTube Premium konczy sie za 3 dni. Po zakonczeniu okresu probnego bedziemy obciazac Twoja forme platnosci co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "YouTube",
+            name: "YouTube Premium",
+            isTrial: true,
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Price increase Netflix EN",
+        input: {
+            id: "fixture-price-increase-netflix-en",
+            from: "Netflix <info@account.netflix.com>",
+            subject: "Your Netflix price is changing",
+            snippet:
+                "Your monthly Netflix membership price will increase next month. Your subscription will continue unless you cancel.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Netflix",
+            billingCycle: "monthly",
+            minConfidence: 0.45,
+        },
+    },
+    {
+        name: "Price increase Spotify PL",
+        input: {
+            id: "fixture-price-increase-spotify-pl",
+            from: "Spotify <no-reply@spotify.com>",
+            subject: "Zmiana ceny Spotify Premium",
+            snippet:
+                "Cena Twojej subskrypcji Spotify Premium zmieni sie od nastepnego miesiaca. Subskrypcja bedzie odnawiana co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Spotify",
+            name: "Spotify Premium",
+            billingCycle: "monthly",
+            minConfidence: 0.45,
+        },
+    },
+    {
+        name: "Card declined OpenAI EN",
+        input: {
+            id: "fixture-card-declined-openai-en",
+            from: "OpenAI <noreply@tm.openai.com>",
+            subject: "Payment failed for ChatGPT Plus",
+            snippet:
+                "We could not process your payment for ChatGPT Plus. Please update your payment method to keep your subscription active.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "OpenAI",
+            name: "ChatGPT Plus",
+            minConfidence: 0.45,
+        },
+    },
+    {
+        name: "Payment reminder Microsoft PL",
+        input: {
+            id: "fixture-payment-reminder-microsoft-pl",
+            from: "Microsoft <microsoft-noreply@microsoft.com>",
+            subject: "Przypomnienie o platnosci Microsoft 365",
+            snippet:
+                "Nie udalo sie pobrac platnosci za Microsoft 365. Zaktualizuj metode platnosci, aby zachowac aktywna subskrypcje.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Microsoft",
+            name: "Microsoft 365",
+            minConfidence: 0.45,
+        },
+    },
+    {
+        name: "PayU account created PL",
+        input: {
+            id: "fixture-payu-account-created-pl",
+            from: "PayU <no-reply@payu.pl>",
+            subject: "Witamy w PayU",
+            snippet:
+                "Twoje konto PayU zostalo utworzone. Mozesz teraz szybciej placic w sklepach internetowych.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "Przelewy24 payment profile PL",
+        input: {
+            id: "fixture-przelewy24-payment-profile-pl",
+            from: "Przelewy24 <serwis@przelewy24.pl>",
+            subject: "Utworzono profil platnosci",
+            snippet:
+                "Utworzono profil platnosci dla Twojego konta. Ta wiadomosc nie potwierdza zadnej subskrypcji.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "Autopay marketing PL",
+        input: {
+            id: "fixture-autopay-marketing-pl",
+            from: "Autopay <newsletter@autopay.pl>",
+            subject: "Nowe mozliwosci platnosci automatycznych",
+            snippet:
+                "Poznaj wygodne platnosci automatyczne i promocje naszych partnerow. To newsletter, nie potwierdzenie subskrypcji.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "Trial marketing without active trial EN",
+        input: {
+            id: "fixture-trial-marketing-without-active-trial-en",
+            from: "Adobe <message@adobe.com>",
+            subject: "Try Adobe Creative Cloud for free",
+            snippet:
+                "Start a free trial today and discover creative tools. This promotional email does not confirm an active subscription.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Adobe",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Price promo without subscription EN",
+        input: {
+            id: "fixture-price-promo-without-subscription-en",
+            from: "Netflix <info@account.netflix.com>",
+            subject: "Special offer for Netflix",
+            snippet:
+                "See available plans and prices. This promotional email does not confirm a subscription or payment.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Netflix",
+            maxConfidence: 0.4,
+        },
+    },
+    {
+        name: "Payment method added Google PL",
+        input: {
+            id: "fixture-payment-method-added-google-pl",
+            from: "Google Payments <payments-noreply@google.com>",
+            subject: "Dodano forme platnosci",
+            snippet:
+                "Do Twojego konta Google dodano nowa forme platnosci. Ta wiadomosc nie oznacza rozpoczecia subskrypcji.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.35,
+        },
+    },
 ];

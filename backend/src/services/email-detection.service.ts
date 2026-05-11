@@ -53,6 +53,9 @@ type DetectionSignals = {
     hasFreePlanEvidence: boolean;
     hasMarketingEvidence: boolean;
     hasNegatedSubscriptionEvidence: boolean;
+    hasPromotionalTrialEvidence: boolean;
+    hasActiveTrialSubscriptionEvidence: boolean;
+    hasPaymentSetupEvidence: boolean;
     hasActiveRenewalPaymentEvidence: boolean;
     hasPaymentReceiptTrialChargeEvidence: boolean;
 };
@@ -120,16 +123,64 @@ function hasPaymentReceiptTrialChargeSignal(subjectAndSnippet: string) {
 
 function hasNegatedSubscriptionSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
+        /\bdoes not confirm an active subscription\b/i,
+        /\bdoes not confirm active subscription\b/i,
         /\bdoes not confirm any subscription\b/i,
         /\bdoes not confirm a subscription\b/i,
+        /\bdoes not confirm subscription\b/i,
         /\bno subscription\b/i,
         /\bnot a subscription\b/i,
         /\bnot confirm any subscription\b/i,
+        /\bnot confirm a subscription\b/i,
         /\bthis is not a receipt\b/i,
         /\bthis email does not confirm\b/i,
+        /nie potwierdza [\w\s]{0,24}subskrypcji/i,
         /nie potwierdza subskrypcji/i,
+        /nie jest potwierdzeniem subskrypcji/i,
+        /nie potwierdzenie subskrypcji/i,
+        /nie oznacza rozpocz[e\u0119]cia subskrypcji/i,
+        /nie oznacza rozpoczecia subskrypcji/i,
+        /nie oznacza aktywnej subskrypcji/i,
+        /nie rozpocz[e\u0119]to subskrypcji/i,
+        /nie rozpoczeto subskrypcji/i,
         /to nie jest subskrypcja/i,
         /brak subskrypcji/i,
+    ]);
+}
+
+function hasPromotionalTrialSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\bstart a free trial today\b/i,
+        /\btry .{0,80} for free\b/i,
+        /\btry .{0,80} free\b/i,
+        /\bstart your free trial\b/i,
+        /\bdiscover .{0,80} tools\b/i,
+        /\b(this promotional email|promotional email)\b/i,
+    ]);
+}
+
+function hasActiveTrialSubscriptionSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(active subscription|your subscription is active)\b/i,
+        /\b(trial has started|your free trial has started)\b/i,
+        /\b(trial ends in|trial ends soon|trial will end|trial ends on|trial will end on)\b/i,
+        /\b(subscription will renew|will renew monthly|will renew automatically)\b/i,
+        /\bsubskrypcja .{0,40}jest aktywna\b/i,
+        /\bokres pr[o\u00f3]bny .{0,60}ko[n\u0144]czy/i,
+        /\bbedziemy obciazac\b/i,
+        /\bb[e\u0119]dziemy obci[a\u0105][z\u017c]a[c\u0107]\b/i,
+    ]);
+}
+
+function hasPaymentSetupSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(payment profile|payment method added)\b/i,
+        /profil p[\u0142l]atno[s\u015b]ci/i,
+        /profil platnosci/i,
+        /dodano form[e\u0119] p[\u0142l]atno[s\u015b]ci/i,
+        /dodano forme platnosci/i,
+        /utworzono profil p[\u0142l]atno[s\u015b]ci/i,
+        /utworzono profil platnosci/i,
     ]);
 }
 
@@ -495,6 +546,8 @@ function collectDetectionSignals(params: {
     ]);
     const hasPaymentFailedEvidence = includesAny(params.subjectAndSnippet, [
         /\b(payment failed|problem with your .*payment|could not process your payment|update your payment method)\b/i,
+        /\bnie uda[l\u0142]o si[e\u0119] pobra[c\u0107] p[\u0142l]atno[s\u015b]ci\b/i,
+        /\bnie udalo sie pobrac platnosci\b/i,
     ]);
     const hasVerificationEvidence = includesAny(params.subjectAndSnippet, [
         /\b(verify your email|confirm your email|confirm email|email verification)\b/i,
@@ -514,8 +567,16 @@ function collectDetectionSignals(params: {
             /nowe\s+logowanie/i,
         ]);
     const hasMarketingEvidence = includesAny(params.subjectAndSnippet, [
-        /\b(newsletter|sale|promo|offer|deal|limited time offer)\b/i,
+        /\b(newsletter|sale|promo|offer|deal|limited time offer|special offer|discover|promotional email)\b/i,
+        /\b(promocje|promocyjna|oferta|poznaj)\b/i,
     ]);
+    const hasPromotionalTrialEvidence = hasPromotionalTrialSignal(
+        params.subjectAndSnippet
+    );
+    const hasActiveTrialSubscriptionEvidence = hasActiveTrialSubscriptionSignal(
+        params.subjectAndSnippet
+    );
+    const hasPaymentSetupEvidence = hasPaymentSetupSignal(params.subjectAndSnippet);
     const hasCancellationEvidence = hasCancellationSignal(params.subjectAndSnippet);
     const hasRefundEvidence = hasRefundSignal(params.subjectAndSnippet);
     const hasFreePlanEvidence = hasFreePlanSignal(params.subjectAndSnippet);
@@ -556,6 +617,9 @@ function collectDetectionSignals(params: {
         hasFreePlanEvidence,
         hasMarketingEvidence,
         hasNegatedSubscriptionEvidence,
+        hasPromotionalTrialEvidence,
+        hasActiveTrialSubscriptionEvidence,
+        hasPaymentSetupEvidence,
         hasActiveRenewalPaymentEvidence,
         hasPaymentReceiptTrialChargeEvidence,
     };
@@ -752,6 +816,30 @@ export function analyzeMessageForSubscription(
     }
 
     if (
+        signals.hasPromotionalTrialEvidence &&
+        !signals.hasActiveTrialSubscriptionEvidence &&
+        !signals.hasReceiptEvidence &&
+        !signals.hasInvoiceEvidence &&
+        !signals.hasPaymentEvidence &&
+        !signals.hasChargedEvidence
+    ) {
+        confidence -= 0.6;
+        reasons.push("-0.60 promotional trial signal");
+    }
+
+    if (
+        signals.hasPaymentSetupEvidence &&
+        !signals.hasReceiptEvidence &&
+        !signals.hasInvoiceEvidence &&
+        !signals.hasChargedEvidence &&
+        !signals.hasActiveTrialSubscriptionEvidence &&
+        !signals.hasActiveRenewalPaymentEvidence
+    ) {
+        confidence -= 0.6;
+        reasons.push("-0.60 payment setup signal");
+    }
+
+    if (
         /\bwelcome to google payments\b/i.test(subjectAndSnippet) &&
         !hasStrongSubscriptionOrPaymentEvidence(signals)
     ) {
@@ -784,6 +872,22 @@ export function analyzeMessageForSubscription(
         signals.hasFreePlanEvidence && !signals.hasPaymentReceiptTrialChargeEvidence;
     const isBlockedMarketingMessage =
         signals.hasMarketingEvidence && !hasStrongSubscriptionOrPaymentEvidence(signals);
+    const isBlockedMarketingNegatedMessage =
+        signals.hasMarketingEvidence && signals.hasNegatedSubscriptionEvidence;
+    const isBlockedPromotionalTrialMessage =
+        signals.hasPromotionalTrialEvidence &&
+        !signals.hasActiveTrialSubscriptionEvidence &&
+        !signals.hasReceiptEvidence &&
+        !signals.hasInvoiceEvidence &&
+        !signals.hasPaymentEvidence &&
+        !signals.hasChargedEvidence;
+    const isBlockedPaymentSetupMessage =
+        signals.hasPaymentSetupEvidence &&
+        !signals.hasReceiptEvidence &&
+        !signals.hasInvoiceEvidence &&
+        !signals.hasChargedEvidence &&
+        !signals.hasActiveTrialSubscriptionEvidence &&
+        !signals.hasActiveRenewalPaymentEvidence;
 
     if (isBlockedAccountMessage) {
         reasons.push("-blocked: account/security/login message without subscription signal");
@@ -809,6 +913,20 @@ export function analyzeMessageForSubscription(
         reasons.push("-blocked: marketing message without subscription signal");
     }
 
+    if (isBlockedMarketingNegatedMessage) {
+        reasons.push("-blocked: marketing message with negated subscription signal");
+    }
+
+    if (isBlockedPromotionalTrialMessage) {
+        reasons.push(
+            "-blocked: promotional trial message without active subscription signal"
+        );
+    }
+
+    if (isBlockedPaymentSetupMessage) {
+        reasons.push("-blocked: payment setup message without subscription signal");
+    }
+
     const candidateFromPositiveEvidence = isCandidateFromPositiveEvidence(signals);
 
     return {
@@ -819,6 +937,9 @@ export function analyzeMessageForSubscription(
             !isBlockedRefundMessage &&
             !isBlockedFreePlanMessage &&
             !isBlockedMarketingMessage &&
+            !isBlockedMarketingNegatedMessage &&
+            !isBlockedPromotionalTrialMessage &&
+            !isBlockedPaymentSetupMessage &&
             candidateFromPositiveEvidence &&
             normalizedConfidence >= 0.45,
         confidence: normalizedConfidence,
