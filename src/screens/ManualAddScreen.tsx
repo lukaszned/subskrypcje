@@ -21,6 +21,7 @@ import {
   LayoutAnimation,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, 
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
@@ -275,13 +276,22 @@ export const ManualAddScreen = () => {
   
     return (
       <SafeAreaView style={styles.safeArea}>
+        <View style={styles.appGlowTop} />
+        <View style={styles.appGlowBottom} />
         <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.inner}>
               <View style={styles.header}>
-                <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}><X size={22} color="#14251B" /></TouchableOpacity>
-                <Text style={styles.headerTitle}>{subscriptionId ? 'Edytuj' : 'Nowa'}</Text>
-                <View style={styles.headerIconButton} />
+                <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+                  <X size={22} color={vibrantTheme.colors.text} />
+                </TouchableOpacity>
+                <View style={styles.headerCenter}>
+                  <Text style={styles.headerEyebrow}>{subscriptionId ? 'Edycja subskrypcji' : 'Nowa subskrypcja'}</Text>
+                  <Text style={styles.headerTitle}>Skonfiguruj plan</Text>
+                </View>
+                <View style={styles.headerStepBadge}>
+                  <Text style={styles.headerStepText}>{isValid ? 'Gotowe' : 'Setup'}</Text>
+                </View>
               </View>
   
               <ScrollView 
@@ -290,8 +300,8 @@ export const ManualAddScreen = () => {
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
               >
-              <View style={styles.amountHeader}>
-                <Text style={styles.amountLabel}>Miesięczny koszt</Text>
+              <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.amountHeader}>
+                <Text style={styles.amountLabel}>Kwota subskrypcji</Text>
                 
                 {selectedService?.availablePlans && selectedService.availablePlans.length > 0 ? (
                   <View style={styles.planSelectionContainer}>
@@ -361,7 +371,7 @@ export const ManualAddScreen = () => {
                         }}
                       >
                         <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
-                        <ArrowRight size={16} color="#0B6B3A" />
+                        <ArrowRight size={16} color={vibrantTheme.colors.darkText} />
                       </TouchableOpacity>
                     )}
                   </View>
@@ -395,11 +405,21 @@ export const ManualAddScreen = () => {
                     ))}
                   </View>
                 )}
-              </View>
+                <View style={styles.costPreviewRow}>
+                  <View style={styles.costPreviewPill}>
+                    <Text style={styles.costPreviewLabel}>Twój koszt</Text>
+                    <Text style={styles.costPreviewValue}>{finalCalculatedCost.toFixed(2)} {currency}</Text>
+                  </View>
+                  <View style={styles.costPreviewPill}>
+                    <Text style={styles.costPreviewLabel}>Tryb</Text>
+                    <Text style={styles.costPreviewValue}>{isShared ? `${peopleCount} osoby` : 'Solo'}</Text>
+                  </View>
+                </View>
+              </LinearGradient>
 
               <View style={styles.formSection}>
                 <View style={[styles.infoBox, { marginBottom: 20 }]}>
-                  <AlertCircle size={16} color="#0B6B3A" style={{ marginRight: 8 }} />
+                  <AlertCircle size={16} color={vibrantTheme.colors.primary} style={{ marginRight: 8 }} />
                   <Text style={styles.infoBoxText}>
                     Wystarczy nazwa, koszt, cykl i data płatności. Resztę możesz uzupełnić później.
                   </Text>
@@ -417,7 +437,7 @@ export const ManualAddScreen = () => {
                   <View style={styles.rowBetween}>
                     <Text style={styles.label}>Nazwa</Text>
                     {filteredSuggestions.length > 0 && (
-                      <Text style={[styles.label, { color: '#0B6B3A' }]}>Sugestie</Text>
+                      <Text style={[styles.label, { color: vibrantTheme.colors.primary }]}>Sugestie</Text>
                     )}
                   </View>
                   
@@ -492,7 +512,7 @@ export const ManualAddScreen = () => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Następna płatność</Text>
                   <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
-                    <Calendar size={20} color="#0B6B3A" style={{ marginRight: 8 }} />
+                    <Calendar size={20} color={vibrantTheme.colors.primary} style={{ marginRight: 8 }} />
                     <Text style={styles.dateText}>{formatDate(date)}</Text>
                   </TouchableOpacity>
                   {showDatePicker && (
@@ -588,7 +608,7 @@ export const ManualAddScreen = () => {
                   
                   {isShared && parsedAmount > 0 && (
                     <View style={{ marginTop: 12, alignItems: 'center' }}>
-                      <Text style={{ fontSize: 16, fontWeight: '700', color: '#0B6B3A' }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: vibrantTheme.colors.primary }}>
                         Twój koszt: {finalCalculatedCost.toFixed(2)} {currency}
                       </Text>
                     </View>
@@ -643,6 +663,24 @@ export const ManualAddScreen = () => {
                 </View>
                 </View>
 
+                <View style={styles.saveSummaryCard}>
+                  <View>
+                    <Text style={styles.saveSummaryLabel}>Podsumowanie</Text>
+                    <Text style={styles.saveSummaryTitle} numberOfLines={1}>
+                      {name.trim() || 'Nowa subskrypcja'}
+                    </Text>
+                    <Text style={styles.saveSummaryMeta} numberOfLines={1}>
+                      {planName ? `${planName} · ` : ''}{formatDate(date)}
+                    </Text>
+                  </View>
+                  <View style={styles.saveSummaryAmountBlock}>
+                    <Text style={styles.saveSummaryAmount}>{finalCalculatedCost.toFixed(2)}</Text>
+                    <Text style={styles.saveSummaryCurrency}>
+                      {currency} · {CYCLES.find((item) => item.id === cycle)?.label || cycle}
+                    </Text>
+                  </View>
+                </View>
+
                 <TouchableOpacity
                   style={[styles.saveButton, isLoading && styles.saveButtonLoading]}
                   onPress={handleSave}
@@ -650,11 +688,11 @@ export const ManualAddScreen = () => {
                   activeOpacity={0.8}
                 >
                   {isLoading ? (
-                    <ActivityIndicator color="#FFFFFF" />
+                    <ActivityIndicator color={vibrantTheme.colors.darkText} />
                   ) : (
                     <>
                       <Text style={styles.saveButtonText}>Zapisz subskrypcję</Text>
-                      <ArrowRight size={20} color="#FFFFFF" />
+                      <ArrowRight size={20} color={vibrantTheme.colors.darkText} />
                     </>
                   )}
                 </TouchableOpacity>
@@ -671,12 +709,33 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   container: { flex: 1 },
   inner: { flex: 1 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerIconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: vibrantTheme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  headerTitle: { fontSize: 22, fontWeight: '900', color: vibrantTheme.colors.text },
+  appGlowTop: {
+    position: 'absolute',
+    top: -130,
+    right: -120,
+    width: 300,
+    height: 300,
+    borderRadius: 150,
+    backgroundColor: 'rgba(32,246,181,0.16)',
+  },
+  appGlowBottom: {
+    position: 'absolute',
+    bottom: 120,
+    left: -160,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(139,92,246,0.14)',
+  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, alignItems: 'center', gap: 12 },
+  headerIconButton: { width: 46, height: 46, borderRadius: 18, backgroundColor: vibrantTheme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  headerCenter: { flex: 1 },
+  headerEyebrow: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
+  headerTitle: { fontSize: 23, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 2 },
+  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: 'rgba(32,246,181,0.14)', borderWidth: 1, borderColor: 'rgba(32,246,181,0.28)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  headerStepText: { color: vibrantTheme.colors.primary, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   scrollContent: { paddingBottom: 44, flexGrow: 1, paddingHorizontal: 16 },
   amountHeader: {
-    backgroundColor: vibrantTheme.colors.cardStrong,
     paddingTop: 22,
     paddingBottom: 24,
     paddingHorizontal: 20,
@@ -690,6 +749,7 @@ const styles = StyleSheet.create({
     elevation: 8,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.borderStrong,
+    overflow: 'hidden',
   },
   amountLabel: {
     color: 'rgba(255,255,255,0.7)',
@@ -722,12 +782,39 @@ const styles = StyleSheet.create({
   currencyPillActive: { backgroundColor: vibrantTheme.colors.primary },
   currencyPillText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
   currencyPillTextActive: { color: vibrantTheme.colors.darkText },
+  costPreviewRow: {
+    width: '100%',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 18,
+  },
+  costPreviewPill: {
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 17,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  costPreviewLabel: {
+    color: 'rgba(255,255,255,0.66)',
+    fontSize: 11,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+  },
+  costPreviewValue: {
+    color: '#FFFFFF',
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 4,
+  },
   formSection: { margin: 0 },
   formCard: {
     backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 16,
+    borderRadius: 28,
+    padding: 20,
+    marginBottom: 18,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.18,
@@ -749,8 +836,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 2,
   },
   sectionHeaderTitle: {
-    fontSize: 17,
-    fontWeight: '800',
+    fontSize: 18,
+    fontWeight: '900',
     color: vibrantTheme.colors.text,
   },
   sectionHeaderHint: {
@@ -761,17 +848,17 @@ const styles = StyleSheet.create({
   },
   label: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
   labelOptional: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
-  textInput: { fontSize: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, color: vibrantTheme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  pill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', marginRight: 8, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  textInput: { fontSize: 16, backgroundColor: 'rgba(255,255,255,0.09)', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 14, color: vibrantTheme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', marginRight: 8, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   pillActive: { backgroundColor: 'rgba(32,246,181,0.16)', borderColor: vibrantTheme.colors.primary },
   pillText: { color: vibrantTheme.colors.textMuted, fontWeight: '700' },
   pillTextActive: { color: vibrantTheme.colors.primary },
-  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.09)', padding: 15, borderRadius: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   dateText: { fontSize: 16, fontWeight: '700', color: vibrantTheme.colors.primary },
   catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: vibrantTheme.colors.border },
   catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: '#DDE6DF', padding: 3 },
+  toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.16)', padding: 3 },
   toggleActive: { backgroundColor: vibrantTheme.colors.primary },
   toggleDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
   toggleDotActive: { transform: [{ translateX: 22 }] },
@@ -779,8 +866,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: 'rgba(32,246,181,0.13)',
     padding: 12,
-    borderRadius: 16,
+    borderRadius: 18,
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(32,246,181,0.24)',
   },
   infoBoxText: {
     flex: 1,
@@ -791,7 +880,7 @@ const styles = StyleSheet.create({
   },
   saveButton: {
     backgroundColor: vibrantTheme.colors.primary,
-    borderRadius: 18,
+    borderRadius: 22,
     paddingVertical: 18,
     flexDirection: 'row',
     alignItems: 'center',
@@ -803,6 +892,52 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.35,
     shadowRadius: 24,
     elevation: 8,
+  },
+  saveSummaryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 24,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    marginTop: 4,
+  },
+  saveSummaryLabel: {
+    color: vibrantTheme.colors.textSubtle,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  saveSummaryTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 16,
+    fontWeight: '900',
+    marginTop: 4,
+    maxWidth: 190,
+  },
+  saveSummaryMeta: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 3,
+    maxWidth: 190,
+  },
+  saveSummaryAmountBlock: {
+    alignItems: 'flex-end',
+  },
+  saveSummaryAmount: {
+    color: vibrantTheme.colors.primary,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  saveSummaryCurrency: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: 2,
   },
   saveButtonLoading: {
     opacity: 0.7,
@@ -822,18 +957,18 @@ const styles = StyleSheet.create({
   suggestionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 16,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#E6ECE4',
+    borderColor: vibrantTheme.colors.border,
   },
   suggestionIcon: {
-    width: 20,
-    height: 20,
-    borderRadius: 6,
+    width: 24,
+    height: 24,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
@@ -845,8 +980,8 @@ const styles = StyleSheet.create({
   },
   suggestionText: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#14251B',
+    fontWeight: '800',
+    color: vibrantTheme.colors.text,
   },
   planSelectionContainer: {
     width: '100%',
@@ -865,10 +1000,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   planBackButton: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
   },
   planBackButtonText: {
     color: '#FFFFFF',
@@ -881,16 +1016,16 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   planCard: {
-    backgroundColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     padding: 16,
-    borderRadius: 20,
-    minWidth: 110,
-    borderWidth: 2,
-    borderColor: 'transparent',
+    borderRadius: 22,
+    minWidth: 122,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
     alignItems: 'center',
   },
   planCardActive: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     borderColor: '#FFFFFF',
     transform: [{ scale: 1.05 }],
   },
@@ -940,7 +1075,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.94)',
     marginHorizontal: 40,
     marginTop: 20,
     paddingVertical: 12,
@@ -953,22 +1088,24 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   planConfirmButtonText: {
-    color: '#0B6B3A',
+    color: vibrantTheme.colors.darkText,
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   stepperBtn: {
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   stepperBtnText: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#334155',
+    color: vibrantTheme.colors.text,
     lineHeight: 28,
   },
 });

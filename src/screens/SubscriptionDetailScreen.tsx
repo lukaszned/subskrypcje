@@ -17,9 +17,11 @@ import {
   Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   ArrowLeft, Edit, Trash2, Calendar, CreditCard, 
-  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users, AlertCircle
+  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users, AlertCircle,
+  ShieldCheck, FileText, Link as LinkIcon
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -127,6 +129,7 @@ export const SubscriptionDetailScreen = () => {
   };
 
   const nextDate = parseAppDate(sub.nextPaymentDate);
+  const nextDaysLeft = daysUntilDate(sub.nextPaymentDate);
   const trialDaysLeft = daysUntilDate(sub.trialEndDate);
 
   let parsedNotes = { text: sub.notes || '', isShared: false, peopleCount: undefined as number | undefined };
@@ -139,34 +142,104 @@ export const SubscriptionDetailScreen = () => {
     }
   } catch(e) {}
 
+  const statusConfig = (() => {
+    if (sub.status === 'canceled') return { label: 'Anulowana', color: vibrantTheme.colors.textMuted, bg: 'rgba(255,255,255,0.1)' };
+    if (sub.status === 'overdue' || (nextDaysLeft !== null && nextDaysLeft < 0)) {
+      return { label: 'Po terminie', color: vibrantTheme.colors.danger, bg: 'rgba(255,77,109,0.16)' };
+    }
+    if (sub.isTrial) return { label: 'Trial', color: vibrantTheme.colors.warning, bg: 'rgba(251,191,36,0.16)' };
+    if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: vibrantTheme.colors.warning, bg: 'rgba(251,191,36,0.16)' };
+    return { label: 'Aktywna', color: vibrantTheme.colors.primary, bg: 'rgba(32,246,181,0.16)' };
+  })();
+
+  const cancelReadiness = (() => {
+    if (sub.status === 'canceled') {
+      return {
+        title: 'Subskrypcja anulowana',
+        desc: 'Ta usługa nie powinna już generować kolejnych płatności.',
+        icon: CheckCircle,
+        color: vibrantTheme.colors.success,
+        bg: 'rgba(52,211,153,0.14)',
+      };
+    }
+    if (cancelGuideLookup?.hasGuide) {
+      return {
+        title: 'Instrukcja anulowania gotowa',
+        desc: 'Możesz przejść przez Cancel Assistant i zamknąć usługę krok po kroku.',
+        icon: ShieldCheck,
+        color: vibrantTheme.colors.primary,
+        bg: 'rgba(32,246,181,0.14)',
+      };
+    }
+    if (sub.cancelUrl) {
+      return {
+        title: 'Link anulowania zapisany',
+        desc: 'Masz bezpośredni skrót do strony rezygnacji u dostawcy.',
+        icon: LinkIcon,
+        color: vibrantTheme.colors.cyan,
+        bg: 'rgba(34,211,238,0.14)',
+      };
+    }
+    return {
+      title: 'Brakuje instrukcji anulowania',
+      desc: 'Możesz zgłosić brak poradnika, a na razie anulować usługę u dostawcy.',
+      icon: FileText,
+      color: vibrantTheme.colors.warning,
+      bg: 'rgba(251,191,36,0.14)',
+    };
+  })();
+  const CancelReadinessIcon = cancelReadiness.icon;
+
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={styles.glowTop} />
+      <View style={styles.glowBottom} />
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={vibrantTheme.colors.text} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Szczegóły</Text>
-        <TouchableOpacity onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}>
-          <Edit size={24} color="#6366F1" />
+        <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={vibrantTheme.colors.text} />
+        </TouchableOpacity>
+        <View style={styles.headerCenter}>
+          <Text style={styles.headerEyebrow}>Subskrypcja</Text>
+          <Text style={styles.headerTitle}>Szczegóły planu</Text>
+        </View>
+        <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}>
+          <Edit size={20} color={vibrantTheme.colors.primary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.hero}>
-          <View style={styles.logoContainer}>
-            <Text style={styles.logoText}>{sub.name.charAt(0)}</Text>
+        <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.heroCard}>
+          <View style={styles.heroTopRow}>
+            <View style={styles.logoContainer}>
+              <Text style={styles.logoText}>{sub.name.charAt(0)}</Text>
+            </View>
+            <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+            </View>
           </View>
           <Text style={styles.name}>{sub.name}</Text>
-          {sub.provider && <Text style={styles.provider}>{sub.provider}</Text>}
+          <Text style={styles.provider}>{[sub.provider, sub.planName].filter(Boolean).join(' · ') || 'Plan własny'}</Text>
           <View style={styles.priceTag}>
             <Text style={styles.price}>{sub.amount.toFixed(2)} {sub.currency}</Text>
             <Text style={styles.cycle}>/ {sub.billingCycle}</Text>
           </View>
-        </View>
+          <View style={styles.heroMetrics}>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroMetricLabel}>Następna</Text>
+              <Text style={styles.heroMetricValue}>{formatRelativeDay(sub.nextPaymentDate)}</Text>
+            </View>
+            <View style={styles.heroMetric}>
+              <Text style={styles.heroMetricLabel}>Kategoria</Text>
+              <Text style={styles.heroMetricValue}>{CATEGORY_LABELS[sub.category] || sub.category}</Text>
+            </View>
+          </View>
+        </LinearGradient>
 
         <View style={styles.actionsRow}>
           {sub.status !== 'canceled' && (
             <TouchableOpacity style={styles.actionBtn} onPress={handlePay} disabled={payMutation.isPending}>
-              <CheckCircle size={20} color="#FFFFFF" />
-              <Text style={styles.actionBtnText}>Opłać</Text>
+              {payMutation.isPending ? <ActivityIndicator size="small" color={vibrantTheme.colors.darkText} /> : <CheckCircle size={20} color={vibrantTheme.colors.darkText} />}
+              <Text style={styles.actionBtnText}>Oznacz jako opłaconą</Text>
             </TouchableOpacity>
           )}
           {sub.status !== 'canceled' ? (
@@ -180,6 +253,47 @@ export const SubscriptionDetailScreen = () => {
             </View>
           )}
         </View>
+
+        <View style={styles.decisionGrid}>
+          <View style={styles.decisionCard}>
+            <View style={styles.decisionIcon}>
+              <Calendar size={19} color={vibrantTheme.colors.primary} />
+            </View>
+            <View style={styles.decisionText}>
+              <Text style={styles.decisionTitle}>Termin płatności</Text>
+              <Text style={styles.decisionDesc}>
+                {nextDate
+                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} · ${formatRelativeDay(sub.nextPaymentDate)}`
+                  : 'Brak zaplanowanej daty'}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.decisionCard}>
+            <View style={styles.decisionIcon}>
+              <CreditCard size={19} color={vibrantTheme.colors.primary} />
+            </View>
+            <View style={styles.decisionText}>
+              <Text style={styles.decisionTitle}>Metoda płatności</Text>
+              <Text style={styles.decisionDesc}>{sub.paymentMethodLabel || 'Nie ustawiono'}</Text>
+            </View>
+          </View>
+        </View>
+
+        <TouchableOpacity
+          style={styles.readinessCard}
+          activeOpacity={0.86}
+          onPress={sub.status === 'canceled' ? undefined : handleCancel}
+        >
+          <View style={[styles.readinessIcon, { backgroundColor: cancelReadiness.bg }]}>
+            <CancelReadinessIcon size={21} color={cancelReadiness.color} />
+          </View>
+          <View style={styles.readinessBody}>
+            <Text style={styles.readinessTitle}>{cancelReadiness.title}</Text>
+            <Text style={styles.readinessDesc}>{cancelReadiness.desc}</Text>
+          </View>
+          {sub.status !== 'canceled' && <ArrowRight size={18} color={vibrantTheme.colors.textMuted} />}
+        </TouchableOpacity>
 
         <View style={styles.infoCard}>
           <View style={styles.infoRow}>
@@ -355,24 +469,64 @@ export const SubscriptionDetailScreen = () => {
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerTitle: { fontSize: 19, fontWeight: '900', color: vibrantTheme.colors.text },
-  content: { padding: 20 },
+  glowTop: {
+    position: 'absolute',
+    top: -150,
+    right: -130,
+    width: 330,
+    height: 330,
+    borderRadius: 165,
+    backgroundColor: 'rgba(32,246,181,0.16)',
+  },
+  glowBottom: {
+    position: 'absolute',
+    left: -150,
+    bottom: 80,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
+    backgroundColor: 'rgba(139,92,246,0.14)',
+  },
+  header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10, alignItems: 'center', gap: 12 },
+  headerIconButton: { width: 44, height: 44, borderRadius: 18, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  headerCenter: { flex: 1 },
+  headerEyebrow: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 2 },
+  content: { padding: 20, paddingBottom: 36 },
   hero: { alignItems: 'center', marginBottom: 30 },
-  logoContainer: { width: 86, height: 86, borderRadius: 28, backgroundColor: vibrantTheme.colors.cardStrong, justifyContent: 'center', alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: vibrantTheme.colors.borderStrong, ...vibrantTheme.shadows.glow },
-  logoText: { fontSize: 34, fontWeight: '900', color: vibrantTheme.colors.text },
-  name: { fontSize: 26, fontWeight: '900', color: vibrantTheme.colors.text },
-  provider: { fontSize: 16, color: vibrantTheme.colors.textMuted, marginTop: 4 },
+  heroCard: { borderRadius: 30, padding: 22, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', ...vibrantTheme.shadows.glow },
+  heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
+  logoContainer: { width: 76, height: 76, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.16)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  logoText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF' },
+  statusBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
+  statusBadgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  name: { fontSize: 28, fontWeight: '900', color: '#FFFFFF' },
+  provider: { fontSize: 14, color: 'rgba(255,255,255,0.72)', marginTop: 5, fontWeight: '700' },
   priceTag: { flexDirection: 'row', alignItems: 'baseline', marginTop: 12 },
-  price: { fontSize: 30, fontWeight: '900', color: vibrantTheme.colors.primary },
-  cycle: { fontSize: 16, color: vibrantTheme.colors.textMuted, marginLeft: 4 },
-  actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 30 },
-  actionBtn: { flex: 1, height: 52, borderRadius: 18, backgroundColor: vibrantTheme.colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...vibrantTheme.shadows.glow },
-  actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#EF4444' },
+  price: { fontSize: 34, fontWeight: '900', color: '#FFFFFF' },
+  cycle: { fontSize: 14, color: 'rgba(255,255,255,0.72)', marginLeft: 6, fontWeight: '800' },
+  heroMetrics: { flexDirection: 'row', gap: 10, marginTop: 20 },
+  heroMetric: { flex: 1, backgroundColor: 'rgba(255,255,255,0.13)', borderRadius: 18, padding: 13, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  heroMetricLabel: { color: 'rgba(255,255,255,0.62)', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  heroMetricValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', marginTop: 5 },
+  actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  actionBtn: { flex: 1.25, minHeight: 54, borderRadius: 20, backgroundColor: vibrantTheme.colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, ...vibrantTheme.shadows.glow },
+  actionBtnOutline: { flex: 0.85, backgroundColor: 'rgba(255,77,109,0.08)', borderWidth: 1, borderColor: 'rgba(255,77,109,0.5)', shadowOpacity: 0, elevation: 0 },
   actionBtnText: { color: vibrantTheme.colors.darkText, fontWeight: '900', fontSize: 16 },
   canceledBadge: { flex: 1, height: 50, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   canceledBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },
-  infoCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 26, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
+  decisionGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  decisionCard: { flex: 1, backgroundColor: vibrantTheme.colors.card, borderRadius: 22, padding: 15, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  decisionIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: 'rgba(32,246,181,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(32,246,181,0.24)' },
+  decisionText: { flex: 1 },
+  decisionTitle: { color: vibrantTheme.colors.text, fontSize: 13, fontWeight: '900' },
+  decisionDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 5 },
+  readinessCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
+  readinessIcon: { width: 46, height: 46, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  readinessBody: { flex: 1 },
+  readinessTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
+  readinessDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '600', lineHeight: 18, marginTop: 4 },
+  infoCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 26, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   trialRow: { backgroundColor: 'rgba(251,191,36,0.12)', padding: 12, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)' },
   infoTextContainer: { marginLeft: 16 },
