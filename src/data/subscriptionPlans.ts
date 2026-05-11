@@ -16,34 +16,40 @@ export interface PopularSubscription {
 }
 
 export const LOCAL_SUBSCRIPTION_PLANS: PopularSubscription[] = [
-  { name: 'Netflix', defaultPrice: '43.00', category: 'entertainment', color: '#E50914', provider: 'Netflix', availablePlans: [
-    { name: 'Podstawowy', price: 29.00 },
-    { name: 'Standard', price: 43.00 },
-    { name: 'Premium', price: 60.00 },
+  { name: 'Netflix', defaultPrice: '55.00', category: 'entertainment', color: '#E50914', provider: 'Netflix', availablePlans: [
+    { name: 'Podstawowy', price: 37.00 },
+    { name: 'Standard', price: 55.00 },
+    { name: 'Premium', price: 75.00 },
   ] },
-  { name: 'Spotify', defaultPrice: '23.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify', availablePlans: [
-    { name: 'Student', price: 12.99 },
-    { name: 'Individual', price: 23.99 },
-    { name: 'Duo', price: 30.99 },
-    { name: 'Family', price: 37.99 },
+  { name: 'Spotify', defaultPrice: '26.99', category: 'entertainment', color: '#1DB954', provider: 'Spotify', availablePlans: [
+    { name: 'Student', price: 14.49 },
+    { name: 'Individual', price: 26.99 },
+    { name: 'Duo', price: 36.99 },
+    { name: 'Family', price: 45.99 },
   ] },
-  { name: 'YouTube Premium', defaultPrice: '25.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [
-    { name: 'Student', price: 14.99 },
-    { name: 'Individual', price: 25.99 },
-    { name: 'Family', price: 46.99 },
+  { name: 'YouTube Premium', defaultPrice: '29.99', category: 'entertainment', color: '#FF0000', provider: 'Google', availablePlans: [
+    { name: 'Premium Lite', price: 17.99 },
+    { name: 'Student', price: 18.99 },
+    { name: 'Individual', price: 29.99 },
+    { name: 'Family', price: 59.99 },
   ] },
-  { name: 'Disney+', defaultPrice: '29.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [
-    { name: 'Standard', price: 29.99 },
-    { name: 'Premium', price: 37.99 },
+  { name: 'Disney+', defaultPrice: '34.99', category: 'entertainment', color: '#006E99', provider: 'Disney', availablePlans: [
+    { name: 'Standard', price: 34.99 },
+    { name: 'Premium', price: 59.99 },
+    { name: 'Standard rocznie', price: 349.90, billingCycle: 'yearly' },
+    { name: 'Premium rocznie', price: 599.90, billingCycle: 'yearly' },
   ] },
-  { name: 'Max', defaultPrice: '29.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros', availablePlans: [
-    { name: 'Podstawowy', price: 19.99 },
-    { name: 'Standard', price: 29.99 },
+  { name: 'Max', defaultPrice: '39.99', category: 'entertainment', color: '#5822B4', provider: 'Warner Bros', availablePlans: [
+    { name: 'Podstawowy', price: 29.99 },
+    { name: 'Standard', price: 39.99 },
     { name: 'Premium', price: 49.99 },
+    { name: 'Podstawowy rocznie', price: 299.00, billingCycle: 'yearly' },
+    { name: 'Standard rocznie', price: 399.00, billingCycle: 'yearly' },
+    { name: 'Premium rocznie', price: 499.00, billingCycle: 'yearly' },
   ] },
-  { name: 'Amazon Prime', defaultPrice: '10.99', category: 'entertainment', color: '#FF9900', provider: 'Amazon', availablePlans: [
-    { name: 'Miesiecznie', price: 10.99, billingCycle: 'monthly' },
-    { name: 'Rocznie', price: 49.00, billingCycle: 'yearly' },
+  { name: 'Amazon Prime', defaultPrice: '15.50', category: 'entertainment', color: '#FF9900', provider: 'Amazon', availablePlans: [
+    { name: 'Miesiecznie', price: 15.50, billingCycle: 'monthly' },
+    { name: 'Rocznie', price: 69.00, billingCycle: 'yearly' },
   ] },
   { name: 'Apple Music', defaultPrice: '21.99', category: 'entertainment', color: '#FA243C', provider: 'Apple', availablePlans: [
     { name: 'Student', price: 11.99 },

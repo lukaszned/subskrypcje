@@ -5,6 +5,7 @@
 import * as Notifications from 'expo-notifications';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
+import { parseAppDate } from './date';
 
 // Konfiguracja zachowania powiadomień, gdy apka jest otwarta
 Notifications.setNotificationHandler({
@@ -72,7 +73,9 @@ export async function scheduleSubscriptionReminder(
   // Najpierw usuwamy stare powiadomienie dla tego ID (jeśli istnieje)
   await cancelSubscriptionReminder(id);
 
-  const paymentDate = new Date(nextPaymentDate);
+  const paymentDate = parseAppDate(nextPaymentDate);
+  if (!paymentDate) return null;
+
   const triggerDate = new Date(paymentDate);
   
   // Ustawiamy godzinę przypomnienia np. na 10:00 rano

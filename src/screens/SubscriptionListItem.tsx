@@ -20,6 +20,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { CheckCircle, XCircle } from 'lucide-react-native';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 export interface SubscriptionItem {
   id: string;
@@ -61,8 +62,19 @@ function getCategoryStyle(category: string) {
 }
 
 const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
-  const catStyle = getCategoryStyle(item.category);
-  const isCancelled = item.status === 'canceled';
+  const safeItem: SubscriptionItem = {
+    ...item,
+    name: item.name || 'Subskrypcja',
+    category: item.category || 'Inne',
+    amount: Number(item.amount || 0),
+    currency: item.currency || 'PLN',
+    nextPaymentDate: item.nextPaymentDate || '-',
+    cycle: item.cycle || 'Co miesiÄ…c',
+    status: item.status || 'pending',
+    isTrial: Boolean(item.isTrial),
+  };
+  const catStyle = getCategoryStyle(safeItem.category);
+  const isCancelled = safeItem.status === 'canceled';
 
   const getStatusInfo = (status: string, isTrial?: boolean) => {
     if (isTrial) return { label: 'Trial', color: '#F59E0B', bg: '#FFFBEB' };
@@ -74,7 +86,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
     }
   };
 
-  const statusInfo = getStatusInfo(item.status, item.isTrial);
+  const statusInfo = getStatusInfo(safeItem.status, safeItem.isTrial);
 
   const renderRightActions = (
     progress: Animated.AnimatedInterpolation<number>,
@@ -93,7 +105,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         {/* Opłać — zielony */}
         <TouchableOpacity
           style={[styles.actionButton, styles.payAction]}
-          onPress={() => onPause(item.id)}
+          onPress={() => onPause(safeItem.id)}
           activeOpacity={0.8}
         >
           <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
@@ -105,7 +117,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         {/* Anuluj — czerwony */}
         <TouchableOpacity
           style={[styles.actionButton, styles.cancelAction]}
-          onPress={() => onDelete(item.id)}
+          onPress={() => onDelete(safeItem.id)}
           activeOpacity={0.8}
         >
           <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
@@ -142,7 +154,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
               { color: isCancelled ? '#94A3B8' : catStyle.text },
             ]}
           >
-            {item.name.charAt(0).toUpperCase()}
+            {safeItem.name.charAt(0).toUpperCase()}
           </Text>
         </View>
 
@@ -152,7 +164,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
             style={[styles.name, isCancelled && styles.textCancelled]}
             numberOfLines={2}
           >
-            {item.name}
+            {safeItem.name}
           </Text>
           <View style={styles.statusRow}>
             <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
@@ -162,7 +174,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
             </View>
           </View>
           <Text style={styles.dateText} numberOfLines={1}>
-            {isCancelled ? 'Anulowana' : `Następna: ${item.nextPaymentDate}`}
+            {isCancelled ? 'Anulowana' : `Następna: ${safeItem.nextPaymentDate}`}
           </Text>
         </View>
 
@@ -174,10 +186,10 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
             adjustsFontSizeToFit
             minimumFontScale={0.82}
           >
-            {(Number(item.amount) || 0).toFixed(2)} {item.currency}
+            {safeItem.amount.toFixed(2)} {safeItem.currency}
           </Text>
           <View style={styles.cycleBadge}>
-            <Text style={styles.cycleText} numberOfLines={1}>{item.cycle}</Text>
+            <Text style={styles.cycleText} numberOfLines={1}>{safeItem.cycle}</Text>
           </View>
         </View>
       </TouchableOpacity>
@@ -189,14 +201,21 @@ const styles = StyleSheet.create({
   rowContainer: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.card,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
+    borderRadius: 24,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    elevation: 2,
   },
   rowContainerCancelled: {
-    backgroundColor: '#FAFAFA',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   avatar: {
     width: 48,
@@ -219,7 +238,7 @@ const styles = StyleSheet.create({
   name: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#0F172A',
+    color: vibrantTheme.colors.text,
     marginBottom: 4,
     lineHeight: 20,
   },
@@ -229,7 +248,7 @@ const styles = StyleSheet.create({
   },
   dateText: {
     fontSize: 13,
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
     fontWeight: '500',
   },
   rightContent: {
@@ -242,12 +261,12 @@ const styles = StyleSheet.create({
   amount: {
     fontSize: 16,
     fontWeight: '800',
-    color: '#0F172A',
+    color: vibrantTheme.colors.text,
     marginBottom: 4,
     textAlign: 'right',
   },
   cycleBadge: {
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -255,7 +274,7 @@ const styles = StyleSheet.create({
   cycleText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
     textTransform: 'uppercase',
   },
   // Swipe actions
@@ -272,10 +291,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   payAction: {
-    backgroundColor: '#10B981', // emerald-500
+    backgroundColor: '#12F7B0',
   },
   cancelAction: {
-    backgroundColor: '#EF4444', // red-500
+    backgroundColor: '#FF3B6B',
   },
   actionText: {
     color: '#FFFFFF',

@@ -15,6 +15,7 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
 import type { AppStackParamList } from '../types/navigation';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 type Navigation = NativeStackNavigationProp<AppStackParamList, 'Notifications'>;
 
@@ -29,7 +30,7 @@ export const NotificationsScreen = React.memo(() => {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
-          <ArrowLeft size={24} color="#14251B" />
+          <ArrowLeft size={24} color={vibrantTheme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Powiadomienia</Text>
         <View style={styles.iconButton} />
@@ -37,7 +38,7 @@ export const NotificationsScreen = React.memo(() => {
 
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#0B6B3A" />}
+        refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={vibrantTheme.colors.primary} />}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.summaryCard}>
@@ -118,31 +119,33 @@ export const NotificationsScreen = React.memo(() => {
 });
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
+  safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.bg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E6ECE4',
+    borderBottomColor: vibrantTheme.colors.border,
   },
   iconButton: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
+  headerTitle: { fontSize: 21, fontWeight: '900', color: vibrantTheme.colors.text },
   content: { padding: 20, paddingBottom: 40 },
   summaryCard: {
     flexDirection: 'row',
     padding: 20,
     borderRadius: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.card,
     marginBottom: 24,
-    shadowColor: '#1C3025',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 3,
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
   summaryIcon: {
     width: 52,
@@ -150,28 +153,28 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#0B6B3A',
+    backgroundColor: vibrantTheme.colors.primary,
     marginRight: 16,
   },
   summaryText: { flex: 1 },
   summaryLabel: { fontSize: 12, fontWeight: '800', color: '#94A3B8', textTransform: 'uppercase' },
-  summaryTitle: { marginTop: 4, color: '#14251B', fontSize: 22, fontWeight: '800' },
-  summaryDescription: { marginTop: 4, color: '#64748B', fontSize: 13, lineHeight: 18 },
+  summaryTitle: { marginTop: 4, color: vibrantTheme.colors.text, fontSize: 22, fontWeight: '900' },
+  summaryDescription: { marginTop: 4, color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 18 },
   centerState: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48 },
-  retryButton: { marginTop: 16, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, backgroundColor: '#0B6B3A' },
-  retryText: { color: '#FFFFFF', fontWeight: '800' },
+  retryButton: { marginTop: 16, paddingHorizontal: 18, paddingVertical: 10, borderRadius: 14, backgroundColor: vibrantTheme.colors.primary, ...vibrantTheme.shadows.glow },
+  retryText: { color: vibrantTheme.colors.darkText, fontWeight: '900' },
   sectionLabel: { marginBottom: 12, color: '#94A3B8', fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
-  nextCard: { padding: 20, borderRadius: 24, backgroundColor: '#E8F3EC', marginBottom: 24, borderWidth: 1, borderColor: '#D7E8DD' },
-  nextTitle: { color: '#14251B', fontSize: 20, fontWeight: '800' },
-  nextDescription: { marginTop: 8, color: '#475569', fontSize: 14, lineHeight: 20 },
-  nextDate: { marginTop: 14, color: '#0B6B3A', fontSize: 14, fontWeight: '800' },
-  emptyCard: { alignItems: 'center', padding: 24, borderRadius: 24, backgroundColor: '#FFFFFF' },
-  emptyTitle: { color: '#14251B', fontSize: 16, fontWeight: '800', textAlign: 'center' },
-  itemCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, backgroundColor: '#FFFFFF', marginBottom: 10 },
-  itemIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: '#E8F3EC', marginRight: 12 },
+  nextCard: { padding: 20, borderRadius: 24, backgroundColor: 'rgba(32,246,181,0.12)', marginBottom: 24, borderWidth: 1, borderColor: 'rgba(32,246,181,0.22)' },
+  nextTitle: { color: vibrantTheme.colors.text, fontSize: 20, fontWeight: '900' },
+  nextDescription: { marginTop: 8, color: vibrantTheme.colors.textMuted, fontSize: 14, lineHeight: 20 },
+  nextDate: { marginTop: 14, color: vibrantTheme.colors.primary, fontSize: 14, fontWeight: '900' },
+  emptyCard: { alignItems: 'center', padding: 24, borderRadius: 24, backgroundColor: vibrantTheme.colors.card },
+  emptyTitle: { color: vibrantTheme.colors.text, fontSize: 16, fontWeight: '900', textAlign: 'center' },
+  itemCard: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, backgroundColor: vibrantTheme.colors.card, marginBottom: 10, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  itemIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32,246,181,0.13)', marginRight: 12 },
   itemBody: { flex: 1 },
-  itemTitle: { color: '#14251B', fontSize: 15, fontWeight: '800' },
-  itemDate: { marginTop: 4, color: '#64748B', fontSize: 12, fontWeight: '600' },
+  itemTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
+  itemDate: { marginTop: 4, color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700' },
 });
 
 export default NotificationsScreen;

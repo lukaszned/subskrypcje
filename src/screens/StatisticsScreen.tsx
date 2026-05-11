@@ -14,6 +14,7 @@ import type { AppStackParamList } from '../types/navigation';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useDashboardTrends } from '../hooks/useDashboardTrends';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 export const StatisticsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Statistics'>>();
@@ -110,7 +111,7 @@ export const StatisticsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
+  safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -124,14 +125,16 @@ const styles = StyleSheet.create({
     borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.card,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: vibrantTheme.colors.text },
   content: { padding: 20, paddingBottom: 48 },
   heroCard: {
     borderRadius: 28,
     padding: 24,
-    backgroundColor: '#0B6B3A',
+    backgroundColor: vibrantTheme.colors.cardStrong,
     marginBottom: 18,
   },
   heroIcon: {
@@ -143,26 +146,28 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginBottom: 18,
   },
-  heroLabel: { color: '#BFEAD2', fontSize: 13, fontWeight: '700' },
-  heroValue: { color: '#FFFFFF', fontSize: 38, fontWeight: '900', marginTop: 6 },
-  heroHint: { color: '#D8F5E5', fontSize: 13, lineHeight: 19, marginTop: 10 },
+  heroLabel: { color: vibrantTheme.colors.primary, fontSize: 13, fontWeight: '800' },
+  heroValue: { color: vibrantTheme.colors.text, fontSize: 42, fontWeight: '900', marginTop: 6 },
+  heroHint: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 10 },
   card: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.card,
     borderRadius: 24,
     padding: 20,
     marginBottom: 16,
-    shadowColor: '#1C3025',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 2,
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
   cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 },
-  cardTitle: { color: '#14251B', fontSize: 16, fontWeight: '800' },
+  cardTitle: { color: vibrantTheme.colors.text, fontSize: 16, fontWeight: '900' },
   chartShell: {
     height: 190,
     borderRadius: 22,
-    backgroundColor: '#F7FAF6',
+    backgroundColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: 12,
     paddingTop: 16,
     paddingBottom: 10,
@@ -174,7 +179,7 @@ const styles = StyleSheet.create({
     right: 16,
     top: 32,
     height: 1,
-    backgroundColor: '#E2EAE4',
+    backgroundColor: vibrantTheme.colors.border,
   },
   chartGridLineMiddle: {
     top: 92,
@@ -204,16 +209,16 @@ const styles = StyleSheet.create({
     borderBottomRightRadius: 5,
   },
   chartValue: {
-    color: '#8B9A91',
+    color: vibrantTheme.colors.textSubtle,
     fontSize: 10,
     fontWeight: '800',
     marginTop: 7,
   },
   chartValueActive: {
-    color: '#0B6B3A',
+    color: vibrantTheme.colors.primary,
   },
   chartLabel: {
-    color: '#66756A',
+    color: vibrantTheme.colors.textMuted,
     fontSize: 10,
     fontWeight: '800',
     marginTop: 3,
@@ -225,13 +230,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   emptyChartText: {
-    color: '#66756A',
+    color: vibrantTheme.colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
     textAlign: 'center',
   },
-  metricValue: { color: '#0B6B3A', fontSize: 34, fontWeight: '900' },
-  metricHint: { color: '#66756A', fontSize: 13, lineHeight: 19, marginTop: 8 },
+  metricValue: { color: vibrantTheme.colors.primary, fontSize: 34, fontWeight: '900' },
+  metricHint: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 8 },
 });
 
 export default StatisticsScreen;

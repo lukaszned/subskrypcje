@@ -18,6 +18,7 @@ import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings
 import { useEmailScanStatus } from '../hooks/useEmailScan';
 import { useAuth } from '../context/AuthContext';
 import type { AppStackParamList } from '../types/navigation';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
@@ -100,8 +101,8 @@ export const SettingsScreen = () => {
           <ArrowLeft size={24} color="#14251B" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Ustawienia</Text>
-        <TouchableOpacity 
-          onPress={handleSave} 
+        <TouchableOpacity
+          onPress={handleSave}
           disabled={updateMutation.isPending}
         >
           {updateMutation.isPending ? (
@@ -116,7 +117,7 @@ export const SettingsScreen = () => {
         {renderProfileHeader()}
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Finanse</Text>
-          
+
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={[styles.iconContainer, { backgroundColor: '#E8F3EC' }]}>
@@ -129,7 +130,7 @@ export const SettingsScreen = () => {
             </View>
             <View style={styles.currencyRow}>
               {USER_SETTING_CURRENCIES.map(c => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={c}
                   style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
                   onPress={() => setCurrency(c)}
@@ -161,7 +162,7 @@ export const SettingsScreen = () => {
               />
               <View style={styles.incomeCurrencyRow}>
                 {USER_SETTING_CURRENCIES.map(c => (
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     key={c}
                     style={[styles.miniPill, incomeCurrency === c && styles.miniPillActive]}
                     onPress={() => setIncomeCurrency(c)}
@@ -176,7 +177,7 @@ export const SettingsScreen = () => {
 
         <View style={styles.section}>
           <Text style={styles.sectionLabel}>Powiadomienia</Text>
-          
+
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
               <View style={[styles.iconContainer, { backgroundColor: '#F0FDF4' }]}>
@@ -187,8 +188,8 @@ export const SettingsScreen = () => {
                 <Text style={styles.settingDesc}>Przypomnienia o płatnościach</Text>
               </View>
             </View>
-            <Switch 
-              value={notifsEnabled} 
+            <Switch
+              value={notifsEnabled}
               onValueChange={setNotifsEnabled}
               trackColor={{ false: '#DDE6DF', true: '#0B6B3A' }}
             />
@@ -204,8 +205,8 @@ export const SettingsScreen = () => {
                 <Text style={styles.settingDesc}>Miesięczne zestawienia kosztów</Text>
               </View>
             </View>
-            <Switch 
-              value={emailsEnabled} 
+            <Switch
+              value={emailsEnabled}
               onValueChange={setEmailsEnabled}
               trackColor={{ false: '#E2E8F0', true: '#3B82F6' }}
             />
@@ -223,7 +224,7 @@ export const SettingsScreen = () => {
             </View>
             <View style={styles.reminderRow}>
               {[1, 2, 3, 5, 7].map(d => (
-                <TouchableOpacity 
+                <TouchableOpacity
                   key={d}
                   style={[styles.reminderPill, reminderDays === d && styles.reminderPillActive]}
                   onPress={() => setReminderDays(d)}
@@ -268,9 +269,9 @@ export const SettingsScreen = () => {
         <View style={styles.footer}>
           <Text style={styles.versionText}>Sub-Sentry v1.0.0 (MVP)</Text>
           <Text style={styles.footerInfo}>Twoje dane są bezpieczne i szyfrowane.</Text>
-          
-          <TouchableOpacity 
-            style={styles.logoutBtn} 
+
+          <TouchableOpacity
+            style={styles.logoutBtn}
             onPress={() => {
               Alert.alert(
                 'Wyloguj się',
@@ -292,95 +293,97 @@ export const SettingsScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
+  safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  header: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingHorizontal: 20, 
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.bg,
     borderBottomWidth: 1,
-    borderBottomColor: '#E6ECE4'
+    borderBottomColor: vibrantTheme.colors.border
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
-  saveBtnText: { color: '#0B6B3A', fontWeight: '800', fontSize: 16 },
+  headerTitle: { fontSize: 21, fontWeight: '900', color: vibrantTheme.colors.text },
+  saveBtnText: { color: vibrantTheme.colors.primary, fontWeight: '900', fontSize: 16 },
   content: { padding: 20 },
   section: { marginBottom: 32 },
-  sectionLabel: { 
-    fontSize: 12, 
-    fontWeight: '700', 
-    color: '#94A3B8', 
-    textTransform: 'uppercase', 
+  sectionLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: vibrantTheme.colors.textSubtle,
+    textTransform: 'uppercase',
     letterSpacing: 1,
     marginBottom: 16
   },
-  settingItem: { 
-    backgroundColor: '#FFFFFF', 
+  settingItem: {
+    backgroundColor: vibrantTheme.colors.card,
     borderRadius: 22,
-    padding: 16, 
+    padding: 16,
     marginBottom: 12,
     flexDirection: 'column', // Changed to column for better responsiveness with pills
-    shadowColor: '#1C3025',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.05,
-    shadowRadius: 16,
-    elevation: 2,
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
-  settingInfo: { 
-    flexDirection: 'row', 
+  settingInfo: {
+    flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12, // Gap if there's a pill row below
   },
-  iconContainer: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 12, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginRight: 16 
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 16
   },
-  settingTitle: { fontSize: 15, fontWeight: '800', color: '#14251B' },
-  settingDesc: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  settingTitle: { fontSize: 15, fontWeight: '900', color: vibrantTheme.colors.text },
+  settingDesc: { fontSize: 12, color: vibrantTheme.colors.textMuted, marginTop: 2 },
   settingTextBlock: { flex: 1 },
   settingTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pendingBadge: {
     minWidth: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: '#0B6B3A',
+    backgroundColor: vibrantTheme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 6,
   },
-  pendingBadgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
+  pendingBadgeText: { color: vibrantTheme.colors.darkText, fontSize: 11, fontWeight: '900' },
   currencyRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  currencyPill: { 
-    paddingHorizontal: 16, 
-    paddingVertical: 8, 
-    borderRadius: 10, 
-    backgroundColor: '#F1F5F9',
+  currencyPill: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1,
     borderColor: 'transparent'
   },
-  currencyPillActive: { 
-    backgroundColor: '#E8F3EC',
-    borderColor: '#0B6B3A'
+  currencyPillActive: {
+    backgroundColor: 'rgba(32,246,181,0.16)',
+    borderColor: vibrantTheme.colors.primary
   },
-  currencyPillText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
-  currencyPillTextActive: { color: '#0B6B3A' },
+  currencyPillText: { fontSize: 13, fontWeight: '700', color: vibrantTheme.colors.textMuted },
+  currencyPillTextActive: { color: vibrantTheme.colors.primary },
   reminderRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  reminderPill: { 
-    paddingHorizontal: 12, 
-    paddingVertical: 8, 
-    borderRadius: 10, 
-    backgroundColor: '#F1F5F9' 
+  reminderPill: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.07)'
   },
-  reminderPillActive: { backgroundColor: '#0B6B3A' },
-  reminderPillText: { fontSize: 13, fontWeight: '600', color: '#64748B' },
-  reminderPillTextActive: { color: '#FFFFFF' },
+  reminderPillActive: { backgroundColor: vibrantTheme.colors.primary },
+  reminderPillText: { fontSize: 13, fontWeight: '700', color: vibrantTheme.colors.textMuted },
+  reminderPillTextActive: { color: vibrantTheme.colors.darkText },
   incomeInputRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -389,12 +392,12 @@ const styles = StyleSheet.create({
   incomeInput: {
     flex: 1,
     height: 48,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.card,
     borderRadius: 12,
     paddingHorizontal: 16,
     fontSize: 16,
     fontWeight: '600',
-    color: '#14251B',
+    color: vibrantTheme.colors.text,
   },
   incomeCurrencyRow: {
     flexDirection: 'row',
@@ -404,40 +407,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#F1F5F9',
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderWidth: 1,
     borderColor: 'transparent',
   },
   miniPillActive: {
-    backgroundColor: '#E8F3EC',
-    borderColor: '#0B6B3A',
+    backgroundColor: 'rgba(32,246,181,0.16)',
+    borderColor: vibrantTheme.colors.primary,
   },
   miniPillText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
   },
   miniPillTextActive: {
-    color: '#0B6B3A',
+    color: vibrantTheme.colors.primary,
   },
   profileHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 24,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.cardStrong,
     borderRadius: 24,
     marginBottom: 24,
-    shadowColor: '#64748B',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 12,
-    elevation: 3,
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 6,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
   avatarContainer: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#0B6B3A',
+    backgroundColor: vibrantTheme.colors.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -448,27 +453,27 @@ const styles = StyleSheet.create({
   profileName: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#14251B',
+    color: vibrantTheme.colors.text,
   },
   profileEmail: {
     fontSize: 14,
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
     marginTop: 2,
   },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: '#E8F3EC',
+    backgroundColor: 'rgba(32,246,181,0.14)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
     marginTop: 8,
     borderWidth: 1,
-    borderColor: '#0B6B3A',
+    borderColor: vibrantTheme.colors.primary,
   },
   badgeText: {
     fontSize: 10,
     fontWeight: '800',
-    color: '#0B6B3A',
+    color: vibrantTheme.colors.primary,
     textTransform: 'uppercase',
   },
   footer: { marginTop: 20, marginBottom: 40, alignItems: 'center' },

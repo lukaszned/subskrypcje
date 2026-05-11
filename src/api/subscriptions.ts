@@ -7,6 +7,7 @@
 // =============================================================
 
 import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/apiClient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Subscription,
   SubscriptionCategory,
@@ -20,15 +21,62 @@ import {
   CancelGuideRequestResponse,
 } from '../types/api';
 
+const SUBSCRIPTIONS_CACHE_KEY = 'sub-sentry.subscriptions.v1';
+
 // ─────────────────────────────────────────────────────────────
 // Helper do normalizacji danych (string amount -> number)
 // ─────────────────────────────────────────────────────────────
 
 function normalizeSubscription(sub: any): Subscription {
+  const amount = typeof sub?.amount === 'string' ? parseFloat(sub.amount) : Number(sub?.amount ?? 0);
+
   return {
     ...sub,
-    amount: typeof sub.amount === 'string' ? parseFloat(sub.amount) : sub.amount,
+    id: String(sub?.id ?? ''),
+    name: String(sub?.name || sub?.provider || 'Subskrypcja'),
+    provider: sub?.provider ?? null,
+    planName: sub?.planName ?? null,
+    amount: Number.isFinite(amount) ? amount : 0,
+    currency: sub?.currency || 'PLN',
+    category: sub?.category || 'other',
+    billingCycle: sub?.billingCycle || 'monthly',
+    status: sub?.status || 'pending',
+    isTrial: Boolean(sub?.isTrial),
+    reminderDaysBefore: Number(sub?.reminderDaysBefore ?? 2),
   };
+}
+
+function normalizeSubscriptionsResponse(data: any): Subscription[] {
+  const rawItems = Array.isArray(data)
+    ? data
+    : Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.subscriptions)
+        ? data.subscriptions
+        : [];
+
+  return rawItems
+    .map(normalizeSubscription)
+    .filter((subscription: Subscription) => subscription.id.length > 0);
+}
+
+async function cacheSubscriptions(subscriptions: Subscription[]) {
+  try {
+    await AsyncStorage.setItem(SUBSCRIPTIONS_CACHE_KEY, JSON.stringify(subscriptions));
+  } catch (error) {
+    console.log('[subscriptions] Could not cache subscriptions.', error);
+  }
+}
+
+async function getCachedSubscriptions(): Promise<Subscription[] | null> {
+  try {
+    const raw = await AsyncStorage.getItem(SUBSCRIPTIONS_CACHE_KEY);
+    if (!raw) return null;
+    return normalizeSubscriptionsResponse(JSON.parse(raw));
+  } catch (error) {
+    console.log('[subscriptions] Could not read cached subscriptions.', error);
+    return null;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -56,8 +104,20 @@ export async function getSubscriptions(
   const qs = query.toString();
   const path = qs ? `/subscriptions?${qs}` : '/subscriptions';
 
-  const data = await apiGet<any[]>(path);
-  return data.map(normalizeSubscription);
+  try {
+    const data = await apiGet<any[]>(path);
+    const subscriptions = normalizeSubscriptionsResponse(data);
+
+    if (!params?.category && !params?.status && !params?.search) {
+      await cacheSubscriptions(subscriptions);
+    }
+
+    return subscriptions;
+  } catch (error) {
+    const cached = await getCachedSubscriptions();
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function getSubscriptionById(id: string): Promise<Subscription> {

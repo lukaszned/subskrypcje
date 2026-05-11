@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { 
   Plus, 
   Bell, 
@@ -61,6 +62,8 @@ import {
   SubscriptionCategory,
   DashboardActivityItem
 } from '../types/api';
+import { vibrantTheme } from '../theme/vibrantTheme';
+import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
 
 const { width } = Dimensions.get('window');
 
@@ -315,21 +318,39 @@ export const DashboardScreen = () => {
 
   // THEME COLORS (inline simple theme for now)
   const theme = useMemo(() => ({
-    background: isDark ? '#0F172A' : '#F6F8F4',
-    card: isDark ? '#1E293B' : '#FFFFFF',
-    text: isDark ? '#F8FAFC' : '#1E293B',
-    textDim: isDark ? '#94A3B8' : '#66756A',
-    border: isDark ? '#334155' : '#E6ECE4',
-    primary: '#0B6B3A',
-    success: '#0E8F58',
-    warning: '#C97A12',
-    error: '#DC2626',
+    background: vibrantTheme.colors.bg,
+    card: vibrantTheme.colors.card,
+    text: vibrantTheme.colors.text,
+    textDim: vibrantTheme.colors.textMuted,
+    border: vibrantTheme.colors.border,
+    primary: vibrantTheme.colors.primary,
+    success: vibrantTheme.colors.success,
+    warning: vibrantTheme.colors.warning,
+    error: vibrantTheme.colors.danger,
   }), [isDark]);
 
   const dynamicStyles = useMemo(() => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.background },
     container: { flex: 1 },
     content: { padding: 20, paddingBottom: 132 + insets.bottom },
+    appGlowOne: {
+      position: 'absolute',
+      width: width * 0.9,
+      height: width * 0.9,
+      borderRadius: width,
+      backgroundColor: 'rgba(32,246,181,0.12)',
+      top: -160,
+      right: -140,
+    },
+    appGlowTwo: {
+      position: 'absolute',
+      width: width * 0.75,
+      height: width * 0.75,
+      borderRadius: width,
+      backgroundColor: 'rgba(139,92,246,0.14)',
+      top: 260,
+      left: -140,
+    },
     dashboardNotice: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -915,24 +936,28 @@ export const DashboardScreen = () => {
       shadowOpacity: 0.06,
       shadowRadius: 16,
       elevation: 2,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     topActions: {
       flexDirection: 'row',
       gap: 10,
     },
     heroDashboardCard: {
-      backgroundColor: '#0B6B3A',
       borderRadius: 28,
       padding: 24,
       marginBottom: 18,
-      shadowColor: '#0B6B3A',
+      shadowColor: theme.primary,
       shadowOffset: { width: 0, height: 16 },
-      shadowOpacity: 0.18,
-      shadowRadius: 24,
-      elevation: 6,
+      shadowOpacity: 0.35,
+      shadowRadius: 28,
+      elevation: 9,
+      overflow: 'hidden',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.22)',
     },
     heroEyebrow: {
-      color: '#BFEAD2',
+      color: 'rgba(255,255,255,0.74)',
       fontSize: 13,
       fontWeight: '700',
       marginBottom: 8,
@@ -985,11 +1010,13 @@ export const DashboardScreen = () => {
       backgroundColor: theme.card,
       borderRadius: 22,
       padding: 18,
-      shadowColor: '#1C3025',
+      shadowColor: '#000000',
       shadowOffset: { width: 0, height: 10 },
-      shadowOpacity: 0.07,
+      shadowOpacity: 0.18,
       shadowRadius: 18,
       elevation: 3,
+      borderWidth: 1,
+      borderColor: theme.border,
     },
     wideWidget: {
       width: '100%',
@@ -1010,7 +1037,9 @@ export const DashboardScreen = () => {
       borderRadius: 15,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#E8F3EC',
+      backgroundColor: 'rgba(32,246,181,0.13)',
+      borderWidth: 1,
+      borderColor: 'rgba(32,246,181,0.22)',
     },
     widgetTitle: {
       fontSize: 16,
@@ -1100,6 +1129,51 @@ export const DashboardScreen = () => {
     },
     insightTextBlock: {
       flex: 1,
+    },
+    decisionGrid: {
+      gap: 12,
+      marginBottom: 18,
+    },
+    decisionCard: {
+      backgroundColor: theme.card,
+      borderRadius: 22,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: theme.border,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+    },
+    decisionAccent: {
+      width: 46,
+      height: 46,
+      borderRadius: 16,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(32,246,181,0.14)',
+      borderWidth: 1,
+      borderColor: 'rgba(32,246,181,0.24)',
+    },
+    decisionBody: {
+      flex: 1,
+    },
+    decisionTitle: {
+      color: theme.text,
+      fontSize: 15,
+      fontWeight: '900',
+    },
+    decisionDesc: {
+      color: theme.textDim,
+      fontSize: 12,
+      fontWeight: '600',
+      lineHeight: 17,
+      marginTop: 3,
+    },
+    decisionCta: {
+      color: theme.primary,
+      fontSize: 12,
+      fontWeight: '900',
+      marginTop: 8,
     },
     fab: {
       position: 'absolute',
@@ -1461,13 +1535,9 @@ export const DashboardScreen = () => {
   };
 
   const renderUpcomingPayment = useCallback(({ item }: { item: UpcomingPaymentItem }) => {
-    const now = new Date();
-    const next = new Date(item.nextPaymentDate);
-    const diffMs = next.getTime() - now.getTime();
-    const daysLeft = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const daysLeft = daysUntilDate(item.nextPaymentDate) ?? 999;
     const isTomorrow = daysLeft <= 1;
-
-    const dateLabel = daysLeft === 0 ? 'Dzisiaj' : daysLeft === 1 ? 'Jutro' : `Za ${daysLeft} dni`;
+    const dateLabel = formatRelativeDay(item.nextPaymentDate);
 
     return (
       <TouchableOpacity 
@@ -1656,7 +1726,7 @@ export const DashboardScreen = () => {
     const average = activeCount > 0 ? monthlyTotal / activeCount : 0;
 
     return (
-      <View style={dynamicStyles.heroDashboardCard}>
+      <LinearGradient colors={vibrantTheme.gradients.hero} style={dynamicStyles.heroDashboardCard}>
         <Text style={dynamicStyles.heroEyebrow}>Całkowity koszt miesięczny</Text>
         <View style={dynamicStyles.heroAmountRow}>
           <Text style={dynamicStyles.heroAmount}>{monthlyTotal.toFixed(2)}</Text>
@@ -1672,7 +1742,7 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.heroMetaLabel}>Średnio / usługa</Text>
           </View>
         </View>
-      </View>
+      </LinearGradient>
     );
   };
 
@@ -1683,7 +1753,7 @@ export const DashboardScreen = () => {
       <TouchableOpacity
         style={[dynamicStyles.widgetCard, dynamicStyles.wideWidget]}
         activeOpacity={0.86}
-        onPress={() => navigation.navigate('SubscriptionList')}
+        onPress={() => navigation.navigate('PaymentCalendar')}
       >
         <View style={dynamicStyles.widgetTop}>
           <View>
@@ -1709,7 +1779,7 @@ export const DashboardScreen = () => {
               <View style={dynamicStyles.paymentText}>
                 <Text style={dynamicStyles.paymentName} numberOfLines={1}>{item.name}</Text>
                 <Text style={dynamicStyles.paymentDate}>
-                  {new Date(item.nextPaymentDate).toLocaleDateString('pl-PL', { day: '2-digit', month: 'short' })}
+                  {formatShortDate(item.nextPaymentDate)} · {formatRelativeDay(item.nextPaymentDate)}
                 </Text>
               </View>
               <Text style={dynamicStyles.paymentAmount}>{item.amount.toFixed(2)} {item.currency}</Text>
@@ -1824,6 +1894,69 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderDecisionCenter = () => {
+    const nextPayment = upcomingData?.items?.[0];
+    const nextTrial = trialsData?.items?.[0];
+    const cards = [
+      nextPayment ? {
+        id: 'next-payment',
+        icon: CalendarDays,
+        title: 'Najblizsza platnosc',
+        desc: `${nextPayment.name} · ${formatRelativeDay(nextPayment.nextPaymentDate)} · ${nextPayment.amount.toFixed(2)} ${nextPayment.currency}`,
+        cta: 'Otworz szczegoly',
+        onPress: () => navigation.navigate('SubscriptionDetail', { id: nextPayment.id }),
+      } : {
+        id: 'calendar',
+        icon: CalendarDays,
+        title: 'Kalendarz platnosci',
+        desc: 'Zobacz liste subskrypcji posortowana po najblizszym terminie.',
+        cta: 'Otworz kalendarz',
+        onPress: () => navigation.navigate('PaymentCalendar'),
+      },
+      nextTrial ? {
+        id: 'trial',
+        icon: Clock,
+        title: 'Trial radar',
+        desc: `${nextTrial.name} konczy sie za ${formatDays(nextTrial.daysLeft)}. To dobry moment na decyzje.`,
+        cta: 'Sprawdz trial',
+        onPress: () => navigation.navigate('SubscriptionDetail', { id: nextTrial.id }),
+      } : {
+        id: 'email-scan',
+        icon: Sparkles,
+        title: 'Automatyczne wykrywanie',
+        desc: 'Przeskanuj Gmaila i dodawaj tylko te kandydatury, ktore zatwierdzisz.',
+        cta: 'Otworz Gmail Scan',
+        onPress: () => navigation.navigate('EmailScan'),
+      },
+    ];
+
+    return (
+      <View style={dynamicStyles.sectionContainer}>
+        <Text style={dynamicStyles.sectionTitle}>Centrum decyzji</Text>
+        <View style={dynamicStyles.decisionGrid}>
+          {cards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={dynamicStyles.decisionCard}
+              activeOpacity={0.86}
+              onPress={card.onPress}
+            >
+              <View style={dynamicStyles.decisionAccent}>
+                <card.icon size={20} color={theme.primary} />
+              </View>
+              <View style={dynamicStyles.decisionBody}>
+                <Text style={dynamicStyles.decisionTitle}>{card.title}</Text>
+                <Text style={dynamicStyles.decisionDesc}>{card.desc}</Text>
+                <Text style={dynamicStyles.decisionCta}>{card.cta}</Text>
+              </View>
+              <ChevronRight size={18} color={theme.textDim} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const renderDashboardNotice = () => {
     if (isError) {
       return (
@@ -1907,6 +2040,8 @@ export const DashboardScreen = () => {
 
   return (
     <SafeAreaView style={dynamicStyles.safeArea}>
+      <View style={dynamicStyles.appGlowOne} />
+      <View style={dynamicStyles.appGlowTwo} />
       <ScrollView 
         style={dynamicStyles.container}
         contentContainerStyle={dynamicStyles.content}
@@ -1925,6 +2060,7 @@ export const DashboardScreen = () => {
           {renderStatsWidget()}
         </View>
         {renderPremiumInsights()}
+        {renderDecisionCenter()}
 
         {false && (<>
         {renderHeader()}

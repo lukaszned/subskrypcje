@@ -24,6 +24,7 @@ import {
   CategoryBreakdownResponse,
 } from '../types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { daysUntilDate, parseAppDate, startOfLocalDay } from '../utils/date';
 
 const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 
@@ -118,14 +119,16 @@ function buildSummaryFromSubscriptions(rawSubscriptions: any[]): DashboardSummar
 
   const upcomingPaymentsCount = countedSubscriptions.filter((subscription) => {
     if (!subscription.nextPaymentDate) return false;
-    const paymentDate = new Date(subscription.nextPaymentDate);
+    const paymentDate = parseAppDate(subscription.nextPaymentDate);
+    if (!paymentDate) return false;
     return paymentDate >= today && paymentDate <= upcomingLimit;
   }).length;
 
   const overdueCount = countedSubscriptions.filter((subscription) => {
     if (subscription.status === 'overdue') return true;
     if (!subscription.nextPaymentDate) return false;
-    return new Date(subscription.nextPaymentDate) < today;
+    const paymentDate = parseAppDate(subscription.nextPaymentDate);
+    return paymentDate ? paymentDate < today : false;
   }).length;
 
   return {
@@ -152,7 +155,7 @@ async function getSubscriptionsFallback(): Promise<Subscription[]> {
 }
 
 function getDateOnly(date: Date) {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  return startOfLocalDay(date);
 }
 
 function buildUpcomingFromSubscriptions(subscriptions: Subscription[], days: number): UpcomingPaymentsResponse {
@@ -163,12 +166,13 @@ function buildUpcomingFromSubscriptions(subscriptions: Subscription[], days: num
   const items = subscriptions
     .filter((subscription) => {
       if (subscription.status === 'canceled' || !subscription.nextPaymentDate) return false;
-      const paymentDate = new Date(subscription.nextPaymentDate);
+      const paymentDate = parseAppDate(subscription.nextPaymentDate);
+      if (!paymentDate) return false;
       return paymentDate >= today && paymentDate <= limit;
     })
     .sort((a, b) => {
-      const first = new Date(a.nextPaymentDate || 0).getTime();
-      const second = new Date(b.nextPaymentDate || 0).getTime();
+      const first = parseAppDate(a.nextPaymentDate)?.getTime() ?? 0;
+      const second = parseAppDate(b.nextPaymentDate)?.getTime() ?? 0;
       return first - second;
     })
     .map((subscription) => ({
@@ -201,17 +205,17 @@ function buildTrialsFromSubscriptions(subscriptions: Subscription[], days: numbe
       if (subscription.status === 'canceled' || !subscription.isTrial || !subscription.trialEndDate) {
         return false;
       }
-      const trialEndDate = new Date(subscription.trialEndDate);
+      const trialEndDate = parseAppDate(subscription.trialEndDate);
+      if (!trialEndDate) return false;
       return trialEndDate >= today && trialEndDate <= limit;
     })
     .sort((a, b) => {
-      const first = new Date(a.trialEndDate || 0).getTime();
-      const second = new Date(b.trialEndDate || 0).getTime();
+      const first = parseAppDate(a.trialEndDate)?.getTime() ?? 0;
+      const second = parseAppDate(b.trialEndDate)?.getTime() ?? 0;
       return first - second;
     })
     .map((subscription) => {
-      const trialEndDate = new Date(subscription.trialEndDate || Date.now());
-      const daysLeft = Math.ceil((trialEndDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      const daysLeft = daysUntilDate(subscription.trialEndDate) ?? 0;
 
       return {
         id: subscription.id,

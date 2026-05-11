@@ -426,6 +426,8 @@ export interface GmailScanRequest {
   connectionId?: string;
   limit?: number;
   sinceDays?: number;
+  debug?: boolean;
+  dryRun?: boolean;
 }
 
 export interface GmailScanQuerySummary {

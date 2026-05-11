@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { X, ExternalLink, Clock, AlertTriangle, CheckCircle, ShieldAlert, AlertCircle } from 'lucide-react-native';
 import { useCancelGuide } from '../hooks/useCancelGuide';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 interface Props {
   isVisible: boolean;
@@ -177,7 +178,7 @@ const styles = StyleSheet.create({
     justifyContent: 'flex-end',
   },
   container: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.bg2,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 32,
@@ -194,7 +195,7 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: vibrantTheme.colors.card,
     borderRadius: 20,
     zIndex: 10,
   },
@@ -206,7 +207,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -216,13 +217,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#0F172A',
+    color: vibrantTheme.colors.text,
     marginBottom: 12,
     textAlign: 'center',
   },
   desc: {
     fontSize: 15,
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
@@ -240,7 +241,7 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F1F5F9',
+    backgroundColor: vibrantTheme.colors.card,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -249,7 +250,7 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 13,
     fontWeight: '700',
-    color: '#64748B',
+    color: vibrantTheme.colors.textMuted,
   },
   easy: { backgroundColor: '#ECFDF5' },
   easyText: { color: '#10B981' },
@@ -270,20 +271,20 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#EEF2FF',
+    backgroundColor: 'rgba(32,246,181,0.14)',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,
   },
   stepNumber: {
-    color: '#6366F1',
+    color: vibrantTheme.colors.primary,
     fontWeight: '800',
     fontSize: 14,
   },
   instructionText: {
     flex: 1,
     fontSize: 16,
-    color: '#334155',
+    color: vibrantTheme.colors.text,
     lineHeight: 24,
   },
   notes: {
@@ -303,7 +304,7 @@ const styles = StyleSheet.create({
   },
   btn: {
     flexDirection: 'row',
-    backgroundColor: '#6366F1',
+    backgroundColor: vibrantTheme.colors.primary,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
@@ -316,7 +317,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   btnText: {
-    color: '#FFFFFF',
+    color: vibrantTheme.colors.darkText,
     fontWeight: '700',
     fontSize: 16,
   },

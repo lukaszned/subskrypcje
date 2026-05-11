@@ -2,6 +2,7 @@ import React from 'react';
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { CloudOff, RotateCw, WifiOff } from 'lucide-react-native';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 interface NetworkStatusBannerProps {
   onRetry?: () => void;
@@ -56,18 +57,18 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   slow: {
-    backgroundColor: '#FFF7ED',
-    borderColor: '#FED7AA',
+    backgroundColor: 'rgba(251,191,36,0.13)',
+    borderColor: 'rgba(251,191,36,0.28)',
   },
   offline: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#FECACA',
+    backgroundColor: 'rgba(255,77,109,0.13)',
+    borderColor: 'rgba(255,77,109,0.28)',
   },
   iconWrap: {
     width: 36,
     height: 36,
     borderRadius: 13,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -76,12 +77,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    color: '#14251B',
+    color: vibrantTheme.colors.text,
     fontSize: 13,
     fontWeight: '900',
   },
   description: {
-    color: '#66756A',
+    color: vibrantTheme.colors.textMuted,
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 17,
@@ -91,7 +92,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 13,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 10,

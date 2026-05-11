@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { AlertCircle, RefreshCw } from 'lucide-react-native';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 interface ErrorStateProps {
   message?: string;
@@ -11,11 +12,12 @@ interface ErrorStateProps {
 }
 
 export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', details, onRetry, onSignOut, isDark }: ErrorStateProps) => {
+  const resolvedDark = isDark ?? true;
   const theme = {
-    bg: isDark ? '#0F172A' : '#F8FAFC',
-    text: isDark ? '#F8FAFC' : '#0F172A',
-    textDim: isDark ? '#94A3B8' : '#64748B',
-    card: isDark ? '#1E293B' : '#FFFFFF',
+    bg: resolvedDark ? vibrantTheme.colors.bg : '#F8FAFC',
+    text: resolvedDark ? vibrantTheme.colors.text : '#0F172A',
+    textDim: resolvedDark ? vibrantTheme.colors.textMuted : '#64748B',
+    card: resolvedDark ? vibrantTheme.colors.card : '#FFFFFF',
   };
 
   return (
@@ -28,7 +30,7 @@ export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', detail
         <Text style={[styles.message, { color: theme.textDim }]}>{message}</Text>
         
         {details && (
-          <View style={[styles.detailsContainer, { backgroundColor: isDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9' }]}>
+          <View style={[styles.detailsContainer, { backgroundColor: resolvedDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9' }]}>
             <Text style={[styles.detailsText, { color: theme.textDim }]}>{details}</Text>
           </View>
         )}
@@ -36,7 +38,7 @@ export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', detail
         <View style={styles.retryContainer}>
           {onRetry && (
             <TouchableOpacity style={styles.button} onPress={onRetry} activeOpacity={0.8}>
-              <RefreshCw size={20} color="#FFFFFF" style={{ marginRight: 8 }} />
+              <RefreshCw size={20} color={vibrantTheme.colors.darkText} style={{ marginRight: 8 }} />
               <Text style={styles.buttonText}>Spróbuj ponownie</Text>
             </TouchableOpacity>
           )}
@@ -67,7 +69,7 @@ const styles = StyleSheet.create({
     padding: 32,
     borderRadius: 24,
     alignItems: 'center',
-    shadowColor: '#64748B',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.1,
     shadowRadius: 16,
@@ -81,7 +83,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: 'rgba(255,77,109,0.14)',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -100,7 +102,7 @@ const styles = StyleSheet.create({
   },
   button: {
     flexDirection: 'row',
-    backgroundColor: '#6366F1',
+    backgroundColor: vibrantTheme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 16,
@@ -110,10 +112,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: vibrantTheme.colors.border,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: vibrantTheme.colors.darkText,
     fontSize: 16,
     fontWeight: '700',
   },

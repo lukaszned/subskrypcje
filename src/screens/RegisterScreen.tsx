@@ -7,10 +7,12 @@ import {
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
@@ -24,7 +26,7 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     if (!email || !password) return;
     if (password.length < 6) {
-      Alert.alert('Błąd', 'Hasło musi mieć co najmniej 6 znaków.');
+      Alert.alert('Blad', 'Haslo musi miec co najmniej 6 znakow.');
       return;
     }
     setIsLoading(true);
@@ -32,93 +34,104 @@ export default function RegisterScreen() {
       await signUp(email.trim(), password);
       Alert.alert(
         'Konto utworzone!',
-        'Sprawdź swój email i potwierdź rejestrację, a następnie zaloguj się.',
+        'Sprawdz swoj email i potwierdz rejestracje, a nastepnie zaloguj sie.',
         [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {
-      Alert.alert('Błąd rejestracji', error.message || 'Spróbuj ponownie.');
+      Alert.alert('Blad rejestracji', error.message || 'Sprobuj ponownie.');
     } finally {
       setIsLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.container}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <Text style={styles.title}>Utwórz konto</Text>
-        <Text style={styles.subtitle}>Witaj w Sub-Sentry</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Email"
-          placeholderTextColor="#94A3B8"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Hasło (min. 6 znaków)"
-          placeholderTextColor="#94A3B8"
-          value={password}
-          onChangeText={setPassword}
-          secureTextEntry
-        />
-
-        <TouchableOpacity
-          style={[styles.button, (!email || !password || isLoading) && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={!email || !password || isLoading}
-          activeOpacity={0.8}
+    <LinearGradient colors={vibrantTheme.gradients.app} style={styles.safe}>
+      <View style={styles.glowOne} />
+      <View style={styles.glowTwo} />
+      <SafeAreaView style={styles.safe}>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          {isLoading
-            ? <ActivityIndicator color="#fff" />
-            : <Text style={styles.buttonText}>Zarejestruj się</Text>
-          }
-        </TouchableOpacity>
+          <Text style={styles.title}>Utworz konto</Text>
+          <Text style={styles.subtitle}>Witaj w Sub-Sentry</Text>
 
-        <TouchableOpacity
-          style={styles.link}
-          onPress={() => navigation.navigate('Login')}
-        >
-          <Text style={styles.linkText}>Masz już konto? Zaloguj się</Text>
-        </TouchableOpacity>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <TextInput
+            style={styles.input}
+            placeholder="Email"
+            placeholderTextColor={vibrantTheme.colors.textSubtle}
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Haslo (min. 6 znakow)"
+            placeholderTextColor={vibrantTheme.colors.textSubtle}
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
+
+          <TouchableOpacity
+            style={[styles.button, (!email || !password || isLoading) && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={!email || !password || isLoading}
+            activeOpacity={0.86}
+          >
+            <LinearGradient colors={vibrantTheme.gradients.primary} style={styles.buttonGradient}>
+              {isLoading
+                ? <ActivityIndicator color={vibrantTheme.colors.darkText} />
+                : <Text style={styles.buttonText}>Zarejestruj sie</Text>
+              }
+            </LinearGradient>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.link}
+            onPress={() => navigation.navigate('Login')}
+          >
+            <Text style={styles.linkText}>Masz juz konto? Zaloguj sie</Text>
+          </TouchableOpacity>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#0B1120' },
+  safe: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
+  glowOne: { position: 'absolute', width: 280, height: 280, borderRadius: 180, backgroundColor: 'rgba(32,246,181,0.18)', top: -90, right: -100 },
+  glowTwo: { position: 'absolute', width: 240, height: 240, borderRadius: 160, backgroundColor: 'rgba(139,92,246,0.2)', bottom: 120, left: -100 },
   container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
-  title: { fontSize: 32, fontWeight: '800', color: '#FFFFFF', marginBottom: 8 },
-  subtitle: { fontSize: 16, color: 'rgba(255,255,255,0.5)', marginBottom: 40 },
+  title: { fontSize: 40, fontWeight: '900', color: vibrantTheme.colors.text, marginBottom: 8 },
+  subtitle: { fontSize: 16, color: vibrantTheme.colors.textMuted, marginBottom: 40 },
   input: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 14,
+    backgroundColor: vibrantTheme.colors.card,
+    borderRadius: 20,
     paddingHorizontal: 18,
     paddingVertical: 16,
     fontSize: 16,
-    color: '#FFFFFF',
+    color: vibrantTheme.colors.text,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: vibrantTheme.colors.border,
     marginBottom: 16,
   },
   button: {
-    backgroundColor: '#6366F1',
     borderRadius: 30,
-    paddingVertical: 18,
-    alignItems: 'center',
+    overflow: 'hidden',
     marginTop: 8,
     marginBottom: 20,
+    ...vibrantTheme.shadows.glow,
+  },
+  buttonGradient: {
+    paddingVertical: 18,
+    alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  buttonText: { color: vibrantTheme.colors.darkText, fontSize: 17, fontWeight: '900' },
   link: { alignItems: 'center', paddingVertical: 10 },
-  linkText: { color: 'rgba(255,255,255,0.5)', fontSize: 14 },
+  linkText: { color: vibrantTheme.colors.textMuted, fontSize: 14 },
 });

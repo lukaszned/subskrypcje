@@ -39,6 +39,8 @@ import { useSubscriptionPlans } from '../hooks/useSubscriptionPlans';
 import type { PopularSubscription } from '../data/subscriptionPlans';
 import { SubscriptionCategory, BillingCycle } from '../types/api';
 import { ApiError } from '../lib/apiClient';
+import { vibrantTheme } from '../theme/vibrantTheme';
+import { formatInputDate, parseAppDate } from '../utils/date';
 
 const CATEGORIES: Array<{
   id: SubscriptionCategory;
@@ -175,10 +177,10 @@ export const ManualAddScreen = () => {
       setNotes(parsedText);
       setCancelUrl(existingSub.cancelUrl || '');
       if (existingSub.nextPaymentDate) {
-        setDate(new Date(existingSub.nextPaymentDate));
+        setDate(parseAppDate(existingSub.nextPaymentDate) || new Date());
       }
       if (existingSub.trialEndDate) {
-        setTrialEndDate(new Date(existingSub.trialEndDate));
+        setTrialEndDate(parseAppDate(existingSub.trialEndDate) || new Date());
       }
     }
   }, [existingSub]);
@@ -216,9 +218,9 @@ export const ManualAddScreen = () => {
       billingCycle: cycle,
       provider: provider.trim() || undefined,
       planName: planName.trim() || undefined,
-      nextPaymentDate: date.toISOString().split('T')[0],
+      nextPaymentDate: formatInputDate(date),
       isTrial,
-      trialEndDate: isTrial ? trialEndDate.toISOString().split('T')[0] : undefined,
+      trialEndDate: isTrial ? formatInputDate(trialEndDate) : undefined,
       notes: notesPayload,
       cancelUrl: cancelUrl.trim() || undefined,
       reminderDaysBefore: 1,
@@ -564,7 +566,7 @@ export const ManualAddScreen = () => {
                   </View>
                   
                   {isShared && (
-                    <View style={{ marginTop: 16, backgroundColor: '#F6F8F4', padding: 16, borderRadius: 16 }}>
+                    <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.07)', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: vibrantTheme.colors.border }}>
                       <Text style={[styles.labelOptional, { marginBottom: 12 }]}>Liczba osób</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
                         <TouchableOpacity 
@@ -573,7 +575,7 @@ export const ManualAddScreen = () => {
                         >
                           <Text style={styles.stepperBtnText}>-</Text>
                         </TouchableOpacity>
-                        <Text style={{ fontSize: 24, fontWeight: '700', color: '#14251B', minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
+                        <Text style={{ fontSize: 24, fontWeight: '700', color: vibrantTheme.colors.text, minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
                         <TouchableOpacity 
                           style={styles.stepperBtn}
                           onPress={() => setPeopleCount(peopleCount + 1)}
@@ -608,6 +610,7 @@ export const ManualAddScreen = () => {
                     value={cancelUrl}
                     onChangeText={setCancelUrl}
                     placeholder="https://..."
+                    placeholderTextColor={vibrantTheme.colors.textSubtle}
                     autoCapitalize="none"
                   />
                 </View>
@@ -619,6 +622,7 @@ export const ManualAddScreen = () => {
                     value={notes}
                     onChangeText={setNotes}
                     placeholder="Wpisz dodatkowe informacje..."
+                    placeholderTextColor={vibrantTheme.colors.textSubtle}
                     multiline
                   />
                 </View>
@@ -633,7 +637,7 @@ export const ManualAddScreen = () => {
                       <View style={[styles.toggleDot, includeInStats && styles.toggleDotActive]} />
                     </TouchableOpacity>
                   </View>
-                  <Text style={[styles.infoBoxText, { marginTop: 8, color: '#64748B' }]}>
+                  <Text style={[styles.infoBoxText, { marginTop: 8, color: vibrantTheme.colors.textMuted }]}>
                     Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
                   </Text>
                 </View>
@@ -664,26 +668,28 @@ export const ManualAddScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F6F8F4' },
+  safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   container: { flex: 1 },
   inner: { flex: 1 },
   header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerIconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: '#FFFFFF', alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#14251B' },
+  headerIconButton: { width: 42, height: 42, borderRadius: 21, backgroundColor: vibrantTheme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  headerTitle: { fontSize: 22, fontWeight: '900', color: vibrantTheme.colors.text },
   scrollContent: { paddingBottom: 44, flexGrow: 1, paddingHorizontal: 16 },
   amountHeader: {
-    backgroundColor: '#0B6B3A',
+    backgroundColor: vibrantTheme.colors.cardStrong,
     paddingTop: 22,
     paddingBottom: 24,
     paddingHorizontal: 20,
     alignItems: 'center',
     borderRadius: 28,
     marginBottom: 16,
-    shadowColor: '#0B6B3A',
+    shadowColor: vibrantTheme.colors.primary,
     shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.16,
-    shadowRadius: 22,
-    elevation: 5,
+    shadowOpacity: 0.32,
+    shadowRadius: 28,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.borderStrong,
   },
   amountLabel: {
     color: 'rgba(255,255,255,0.7)',
@@ -713,20 +719,22 @@ const styles = StyleSheet.create({
   },
   currencyPills: { flexDirection: 'row', gap: 8, marginTop: 20 },
   currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
-  currencyPillActive: { backgroundColor: '#FFFFFF' },
+  currencyPillActive: { backgroundColor: vibrantTheme.colors.primary },
   currencyPillText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
-  currencyPillTextActive: { color: '#0B6B3A' },
+  currencyPillTextActive: { color: vibrantTheme.colors.darkText },
   formSection: { margin: 0 },
   formCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: vibrantTheme.colors.card,
     borderRadius: 24,
     padding: 18,
     marginBottom: 16,
-    shadowColor: '#1C3025',
+    shadowColor: '#000000',
     shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.06,
-    shadowRadius: 18,
-    elevation: 2,
+    shadowOpacity: 0.18,
+    shadowRadius: 22,
+    elevation: 5,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
   inputGroup: {
     marginBottom: 14,
@@ -743,7 +751,7 @@ const styles = StyleSheet.create({
   sectionHeaderTitle: {
     fontSize: 17,
     fontWeight: '800',
-    color: '#14251B',
+    color: vibrantTheme.colors.text,
   },
   sectionHeaderHint: {
     marginTop: 3,
@@ -751,25 +759,25 @@ const styles = StyleSheet.create({
     color: '#94A3B8',
     fontWeight: '600',
   },
-  label: { fontSize: 12, fontWeight: '800', color: '#7B8A80', textTransform: 'uppercase', marginBottom: 12 },
-  labelOptional: { fontSize: 12, fontWeight: '800', color: '#66756A', textTransform: 'uppercase', marginBottom: 12 },
-  textInput: { fontSize: 16, backgroundColor: '#F6F8F4', borderRadius: 14, paddingHorizontal: 14, paddingVertical: 12, color: '#14251B', fontWeight: '600' },
-  pill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: '#F6F8F4', marginRight: 8, borderWidth: 1, borderColor: '#E6ECE4' },
-  pillActive: { backgroundColor: '#E8F3EC', borderColor: '#0B6B3A' },
-  pillText: { color: '#66756A', fontWeight: '700' },
-  pillTextActive: { color: '#0B6B3A' },
-  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F6F8F4', padding: 14, borderRadius: 14 },
-  dateText: { fontSize: 16, fontWeight: '700', color: '#0B6B3A' },
-  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: '#F6F8F4' },
+  label: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
+  labelOptional: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
+  textInput: { fontSize: 16, backgroundColor: 'rgba(255,255,255,0.08)', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 12, color: vibrantTheme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  pill: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', marginRight: 8, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  pillActive: { backgroundColor: 'rgba(32,246,181,0.16)', borderColor: vibrantTheme.colors.primary },
+  pillText: { color: vibrantTheme.colors.textMuted, fontWeight: '700' },
+  pillTextActive: { color: vibrantTheme.colors.primary },
+  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.08)', padding: 14, borderRadius: 16, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  dateText: { fontSize: 16, fontWeight: '700', color: vibrantTheme.colors.primary },
+  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: vibrantTheme.colors.border },
   catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: '#DDE6DF', padding: 3 },
-  toggleActive: { backgroundColor: '#0B6B3A' },
+  toggleActive: { backgroundColor: vibrantTheme.colors.primary },
   toggleDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
   toggleDotActive: { transform: [{ translateX: 22 }] },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: '#E8F3EC',
+    backgroundColor: 'rgba(32,246,181,0.13)',
     padding: 12,
     borderRadius: 16,
     alignItems: 'center',
@@ -777,12 +785,12 @@ const styles = StyleSheet.create({
   infoBoxText: {
     flex: 1,
     fontSize: 12,
-    color: '#0B6B3A',
+    color: vibrantTheme.colors.primary,
     fontWeight: '500',
     lineHeight: 16,
   },
   saveButton: {
-    backgroundColor: '#0B6B3A',
+    backgroundColor: vibrantTheme.colors.primary,
     borderRadius: 18,
     paddingVertical: 18,
     flexDirection: 'row',
@@ -790,17 +798,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     marginTop: 20,
-    shadowColor: '#0B6B3A',
+    shadowColor: vibrantTheme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOpacity: 0.35,
+    shadowRadius: 24,
+    elevation: 8,
   },
   saveButtonLoading: {
     opacity: 0.7,
   },
   saveButtonText: {
-    color: '#FFFFFF',
+    color: vibrantTheme.colors.darkText,
     fontSize: 17,
     fontWeight: '800',
   },

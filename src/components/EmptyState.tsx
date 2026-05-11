@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Plus, Search } from 'lucide-react-native';
+import { vibrantTheme } from '../theme/vibrantTheme';
 
 interface EmptyStateProps {
   title: string;
@@ -20,20 +21,20 @@ export const EmptyState = ({
   type = 'add'
 }: EmptyStateProps) => {
   const theme = {
-    bg: isDark ? '#0F172A' : '#F8FAFC',
-    text: isDark ? '#F8FAFC' : '#0F172A',
-    textDim: isDark ? '#94A3B8' : '#64748B',
-    card: isDark ? '#1E293B' : '#FFFFFF',
-    iconBg: isDark ? '#334155' : '#EEF2FF',
+    bg: isDark === false ? '#F8FAFC' : vibrantTheme.colors.bg,
+    text: isDark === false ? '#0F172A' : vibrantTheme.colors.text,
+    textDim: isDark === false ? '#64748B' : vibrantTheme.colors.textMuted,
+    card: isDark === false ? '#FFFFFF' : vibrantTheme.colors.card,
+    iconBg: isDark === false ? '#EEF2FF' : 'rgba(32,246,181,0.12)',
   };
 
   return (
     <View style={styles.container}>
       <View style={[styles.iconContainer, { backgroundColor: theme.iconBg }]}>
         {type === 'search' ? (
-          <Search size={40} color="#6366F1" />
+          <Search size={40} color={vibrantTheme.colors.primary} />
         ) : (
-          <Plus size={40} color="#6366F1" />
+          <Plus size={40} color={vibrantTheme.colors.primary} />
         )}
       </View>
       <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
@@ -77,18 +78,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   button: {
-    backgroundColor: '#6366F1',
+    backgroundColor: vibrantTheme.colors.primary,
     paddingVertical: 16,
     paddingHorizontal: 32,
     borderRadius: 20,
-    shadowColor: '#6366F1',
+    shadowColor: vibrantTheme.colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.2,
     shadowRadius: 16,
     elevation: 6,
   },
   buttonText: {
-    color: '#FFFFFF',
+    color: vibrantTheme.colors.darkText,
     fontSize: 16,
     fontWeight: '700',
   },

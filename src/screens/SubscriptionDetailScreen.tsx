@@ -36,6 +36,8 @@ import { useCancelSubscription } from '../hooks/useCancelSubscription';
 import { useSubscriptionCancelGuide } from '../hooks/useSubscriptionCancelGuide';
 import { useCancelGuideRequest } from '../hooks/useCancelGuideRequest';
 import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
+import { vibrantTheme } from '../theme/vibrantTheme';
+import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
@@ -61,7 +63,7 @@ export const SubscriptionDetailScreen = () => {
     return (
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color="#0F172A" /></TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={vibrantTheme.colors.text} /></TouchableOpacity>
         </View>
         <View style={{ padding: 20 }}>
           <View style={{ alignItems: 'center', marginBottom: 30 }}>
@@ -69,7 +71,7 @@ export const SubscriptionDetailScreen = () => {
             <View style={{ width: 150, height: 24, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 8 }} />
             <View style={{ width: 100, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
           </View>
-          <View style={{ height: 200, backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20 }} />
+          <View style={{ height: 200, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 20 }} />
         </View>
       </SafeAreaView>
     );
@@ -124,10 +126,8 @@ export const SubscriptionDetailScreen = () => {
     });
   };
 
-  const nextDate = sub.nextPaymentDate ? new Date(sub.nextPaymentDate) : null;
-  const diffDays = nextDate
-    ? Math.ceil((nextDate.getTime() - new Date().getTime()) / (1000 * 3600 * 24))
-    : null;
+  const nextDate = parseAppDate(sub.nextPaymentDate);
+  const trialDaysLeft = daysUntilDate(sub.trialEndDate);
 
   let parsedNotes = { text: sub.notes || '', isShared: false, peopleCount: undefined as number | undefined };
   try {
@@ -142,7 +142,7 @@ export const SubscriptionDetailScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color="#0F172A" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={vibrantTheme.colors.text} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Szczegóły</Text>
         <TouchableOpacity onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}>
           <Edit size={24} color="#6366F1" />
@@ -188,7 +188,7 @@ export const SubscriptionDetailScreen = () => {
               <Text style={styles.infoLabel}>Następna płatność</Text>
               <Text style={styles.infoValue}>
                 {nextDate
-                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} (${diffDays && diffDays > 0 ? `za ${diffDays} dni` : 'dziś'})`
+                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} (${formatRelativeDay(sub.nextPaymentDate).toLowerCase()})`
                   : 'Brak zaplanowanej płatności'}
               </Text>
             </View>
@@ -213,15 +213,13 @@ export const SubscriptionDetailScreen = () => {
           )}
 
           {sub.isTrial && sub.trialEndDate && (
-            <View style={[styles.infoRow, { backgroundColor: '#FFFBEB', padding: 12, borderRadius: 16, marginBottom: 12 }]}>
+            <View style={[styles.infoRow, styles.trialRow]}>
               <Clock size={20} color="#F59E0B" />
               <View style={styles.infoTextContainer}>
-                <Text style={[styles.infoLabel, { color: '#D97706' }]}>Okres próbny</Text>
+                <Text style={[styles.infoLabel, { color: vibrantTheme.colors.warning }]}>Okres próbny</Text>
                 <Text style={styles.infoValue}>
-                  Kończy się {new Date(sub.trialEndDate).toLocaleDateString('pl-PL')}
-                  {Math.ceil((new Date(sub.trialEndDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24)) > 0 
-                    ? ` (za ${Math.ceil((new Date(sub.trialEndDate).getTime() - new Date().getTime()) / (1000 * 3600 * 24))} dni)` 
-                    : ' (dziś)'}
+                  Kończy się {parseAppDate(sub.trialEndDate)?.toLocaleDateString('pl-PL') || '-'}
+                  {trialDaysLeft !== null && trialDaysLeft > 0 ? ` (za ${trialDaysLeft} dni)` : ' (dziś)'}
                 </Text>
               </View>
             </View>
@@ -296,7 +294,7 @@ export const SubscriptionDetailScreen = () => {
               ))}
             </View>
           ) : (
-            <Text style={{ color: '#64748B', fontSize: 14, marginTop: 8 }}>Brak zarejestrowanych płatności.</Text>
+            <Text style={{ color: vibrantTheme.colors.textMuted, fontSize: 14, marginTop: 8 }}>Brak zarejestrowanych płatności.</Text>
           )}
         </View>
 
@@ -331,7 +329,7 @@ export const SubscriptionDetailScreen = () => {
               ))}
             </View>
           ) : (
-            <Text style={{ color: '#64748B', fontSize: 14, marginTop: 8 }}>Brak historii zdarzeń.</Text>
+            <Text style={{ color: vibrantTheme.colors.textMuted, fontSize: 14, marginTop: 8 }}>Brak historii zdarzeń.</Text>
           )}
         </View>
 
@@ -355,43 +353,44 @@ export const SubscriptionDetailScreen = () => {
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: '#F8FAFC' },
+  safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   header: { flexDirection: 'row', justifyContent: 'space-between', padding: 20, alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
+  headerTitle: { fontSize: 19, fontWeight: '900', color: vibrantTheme.colors.text },
   content: { padding: 20 },
   hero: { alignItems: 'center', marginBottom: 30 },
-  logoContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#6366F1', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  logoText: { fontSize: 32, fontWeight: '800', color: '#FFFFFF' },
-  name: { fontSize: 24, fontWeight: '800', color: '#0F172A' },
-  provider: { fontSize: 16, color: '#64748B', marginTop: 4 },
+  logoContainer: { width: 86, height: 86, borderRadius: 28, backgroundColor: vibrantTheme.colors.cardStrong, justifyContent: 'center', alignItems: 'center', marginBottom: 16, borderWidth: 1, borderColor: vibrantTheme.colors.borderStrong, ...vibrantTheme.shadows.glow },
+  logoText: { fontSize: 34, fontWeight: '900', color: vibrantTheme.colors.text },
+  name: { fontSize: 26, fontWeight: '900', color: vibrantTheme.colors.text },
+  provider: { fontSize: 16, color: vibrantTheme.colors.textMuted, marginTop: 4 },
   priceTag: { flexDirection: 'row', alignItems: 'baseline', marginTop: 12 },
-  price: { fontSize: 28, fontWeight: '800', color: '#6366F1' },
-  cycle: { fontSize: 16, color: '#94A3B8', marginLeft: 4 },
+  price: { fontSize: 30, fontWeight: '900', color: vibrantTheme.colors.primary },
+  cycle: { fontSize: 16, color: vibrantTheme.colors.textMuted, marginLeft: 4 },
   actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 30 },
-  actionBtn: { flex: 1, height: 50, borderRadius: 16, backgroundColor: '#6366F1', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  actionBtn: { flex: 1, height: 52, borderRadius: 18, backgroundColor: vibrantTheme.colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, ...vibrantTheme.shadows.glow },
   actionBtnOutline: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#EF4444' },
-  actionBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
-  canceledBadge: { flex: 1, height: 50, borderRadius: 16, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
+  actionBtnText: { color: vibrantTheme.colors.darkText, fontWeight: '900', fontSize: 16 },
+  canceledBadge: { flex: 1, height: 50, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   canceledBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },
-  infoCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 20, marginBottom: 20 },
+  infoCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 26, padding: 20, marginBottom: 20, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
+  trialRow: { backgroundColor: 'rgba(251,191,36,0.12)', padding: 12, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)' },
   infoTextContainer: { marginLeft: 16 },
   infoLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase' },
-  infoValue: { fontSize: 16, color: '#0F172A', fontWeight: '600', marginTop: 2 },
-  cancelUrlBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: '#F1F5F9' },
+  infoValue: { fontSize: 16, color: vibrantTheme.colors.text, fontWeight: '700', marginTop: 2 },
+  cancelUrlBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: vibrantTheme.colors.border },
   cancelUrlBtnText: { color: '#6366F1', fontWeight: '600' },
-  notesText: { fontSize: 15, color: '#475569', marginTop: 8, lineHeight: 22 },
+  notesText: { fontSize: 15, color: vibrantTheme.colors.textMuted, marginTop: 8, lineHeight: 22 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  historyBadge: { backgroundColor: '#F1F5F9', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  historyBadgeText: { fontSize: 10, fontWeight: '800', color: '#64748B', textTransform: 'uppercase' },
+  historyBadge: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
+  historyBadgeText: { fontSize: 10, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase' },
   historyList: { gap: 16 },
   historyItem: { flexDirection: 'row', gap: 12, minHeight: 60 },
   historyDot: { width: 10, height: 10, borderRadius: 5, marginTop: 6, zIndex: 2 },
-  historyLine: { position: 'absolute', left: 4.5, top: 16, bottom: -16, width: 1, backgroundColor: '#E2E8F0' },
+  historyLine: { position: 'absolute', left: 4.5, top: 16, bottom: -16, width: 1, backgroundColor: vibrantTheme.colors.border },
   historyMain: { flex: 1, paddingBottom: 20 },
-  historyTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  historyDate: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  historyTitle: { fontSize: 14, fontWeight: '800', color: vibrantTheme.colors.text },
+  historyDate: { fontSize: 12, color: vibrantTheme.colors.textMuted, marginTop: 2 },
   historyPayload: { fontSize: 11, color: '#6366F1', fontWeight: '600', marginTop: 4 },
   historyAmount: { fontSize: 15, fontWeight: '700', color: '#EF4444' },
   deleteBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 20 },

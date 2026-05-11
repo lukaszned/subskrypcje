@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
+import { vibrantTheme } from './src/theme/vibrantTheme';
 
 // Ekrany — Auth Stack
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -30,6 +31,7 @@ import { NotificationsScreen } from './src/screens/NotificationsScreen';
 import { SettingsScreen } from './src/screens/SettingsScreen';
 import { EmailScanScreen } from './src/screens/EmailScanScreen';
 import { StatisticsScreen } from './src/screens/StatisticsScreen';
+import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -98,6 +100,7 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen name="Settings" component={SettingsScreen} />
       <AppStack.Screen name="EmailScan" component={EmailScanScreen} />
       <AppStack.Screen name="Statistics" component={StatisticsScreen} />
+      <AppStack.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
     </AppStack.Navigator>
   );
 });
@@ -107,8 +110,8 @@ function RootNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F6F8F4' }}>
-        <ActivityIndicator size="large" color="#0B6B3A" />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: vibrantTheme.colors.bg }}>
+        <ActivityIndicator size="large" color={vibrantTheme.colors.primary} />
       </View>
     );
   }
