@@ -6,7 +6,7 @@
 // Wywoływane przez hooki w src/hooks/.
 // =============================================================
 
-import { apiGet, apiPost, apiPatch, apiDelete } from '../lib/apiClient';
+import { apiGet, apiGetWithTimeout, apiPost, apiPatch, apiDelete } from '../lib/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Subscription,
@@ -79,6 +79,11 @@ async function getCachedSubscriptions(): Promise<Subscription[] | null> {
   }
 }
 
+async function getCachedSubscriptionById(id: string): Promise<Subscription | null> {
+  const cached = await getCachedSubscriptions();
+  return cached?.find((subscription) => subscription.id === id) || null;
+}
+
 // ─────────────────────────────────────────────────────────────
 // QUERY (odczyt)
 // ─────────────────────────────────────────────────────────────
@@ -105,7 +110,7 @@ export async function getSubscriptions(
   const path = qs ? `/subscriptions?${qs}` : '/subscriptions';
 
   try {
-    const data = await apiGet<any[]>(path);
+    const data = await apiGetWithTimeout<any[]>(path, 8000);
     const subscriptions = normalizeSubscriptionsResponse(data);
 
     if (!params?.category && !params?.status && !params?.search) {
@@ -121,16 +126,34 @@ export async function getSubscriptions(
 }
 
 export async function getSubscriptionById(id: string): Promise<Subscription> {
-  const data = await apiGet<any>(`/subscriptions/${id}`);
-  return normalizeSubscription(data);
+  try {
+    const data = await apiGetWithTimeout<any>(`/subscriptions/${id}`, 8000);
+    return normalizeSubscription(data);
+  } catch (error) {
+    const cached = await getCachedSubscriptionById(id);
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 export async function getSubscriptionHistory(id: string): Promise<SubscriptionHistoryResponse> {
-  return apiGet<SubscriptionHistoryResponse>(`/subscriptions/${id}/history`);
+  try {
+    return await apiGetWithTimeout<SubscriptionHistoryResponse>(`/subscriptions/${id}/history`, 6000);
+  } catch (error) {
+    console.log('[subscriptions] History endpoint slow/unavailable, showing empty history.', error);
+    return { count: 0, items: [] };
+  }
 }
 
 export async function getSubscriptionPayments(id: string): Promise<SubscriptionPaymentsResponse> {
-  const data = await apiGet<SubscriptionPaymentsResponse>(`/subscriptions/${id}/payments`);
+  let data: SubscriptionPaymentsResponse;
+  try {
+    data = await apiGetWithTimeout<SubscriptionPaymentsResponse>(`/subscriptions/${id}/payments`, 6000);
+  } catch (error) {
+    console.log('[subscriptions] Payments endpoint slow/unavailable, showing empty payments.', error);
+    return { count: 0, items: [] };
+  }
+
   return {
     ...data,
     items: data.items.map(p => ({

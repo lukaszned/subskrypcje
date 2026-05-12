@@ -27,6 +27,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { daysUntilDate, parseAppDate, startOfLocalDay } from '../utils/date';
 
 const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
+const DASHBOARD_SUMMARY_FAST_CACHE_MS = 2 * 60 * 1000;
 
 function normalizeItemsResponse<T>(
   raw: any,
@@ -54,26 +55,31 @@ function normalizeTrendItem(item: any) {
 
 async function cacheDashboardSummary(summary: DashboardSummary) {
   try {
-    await AsyncStorage.setItem(DASHBOARD_SUMMARY_CACHE_KEY, JSON.stringify(summary));
+    await AsyncStorage.setItem(DASHBOARD_SUMMARY_CACHE_KEY, JSON.stringify({
+      summary,
+      cachedAt: Date.now(),
+    }));
   } catch (error) {
     console.log('[dashboard] Could not cache summary.', error);
   }
 }
 
-async function getCachedDashboardSummary(): Promise<DashboardSummary | null> {
+async function getCachedDashboardSummary(): Promise<(DashboardSummary & { __cachedAt?: number }) | null> {
   try {
     const raw = await AsyncStorage.getItem(DASHBOARD_SUMMARY_CACHE_KEY);
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
+    const source = parsed.summary || parsed;
     return {
-      monthlyTotal: Number(parsed.monthlyTotal || 0),
-      yearlyTotal: Number(parsed.yearlyTotal || 0),
-      activeSubscriptionsCount: Number(parsed.activeSubscriptionsCount || 0),
-      trialsCount: Number(parsed.trialsCount || 0),
-      upcomingPaymentsCount: Number(parsed.upcomingPaymentsCount || 0),
-      overdueCount: Number(parsed.overdueCount || 0),
-      baseCurrency: parsed.baseCurrency || 'PLN',
+      monthlyTotal: Number(source.monthlyTotal || 0),
+      yearlyTotal: Number(source.yearlyTotal || 0),
+      activeSubscriptionsCount: Number(source.activeSubscriptionsCount || 0),
+      trialsCount: Number(source.trialsCount || 0),
+      upcomingPaymentsCount: Number(source.upcomingPaymentsCount || 0),
+      overdueCount: Number(source.overdueCount || 0),
+      baseCurrency: source.baseCurrency || 'PLN',
+      __cachedAt: Number(parsed.cachedAt || 0),
     };
   } catch (error) {
     console.log('[dashboard] Could not read cached summary.', error);
@@ -150,7 +156,7 @@ function normalizeSubscriptions(rawSubscriptions: any[]): Subscription[] {
 }
 
 async function getSubscriptionsFallback(): Promise<Subscription[]> {
-  const subscriptions = await apiGetWithTimeout<any[]>('/subscriptions', 12000);
+  const subscriptions = await apiGetWithTimeout<any[]>('/subscriptions', 6000);
   return normalizeSubscriptions(Array.isArray(subscriptions) ? subscriptions : []);
 }
 
@@ -366,8 +372,13 @@ export async function updateUserSettings(payload: Partial<UserSettings>): Promis
  * GET /dashboard/summary
  */
 export async function getDashboardSummary(): Promise<DashboardSummary> {
+  const cachedSummary = await getCachedDashboardSummary();
+  if (cachedSummary && cachedSummary.__cachedAt && Date.now() - cachedSummary.__cachedAt < DASHBOARD_SUMMARY_FAST_CACHE_MS) {
+    return cachedSummary;
+  }
+
   try {
-    const data = await apiGetWithTimeout<any>('/dashboard/summary', 12000);
+    const data = await apiGetWithTimeout<any>('/dashboard/summary', 6000);
     const summary = {
       ...data,
       monthlyTotal: typeof data.monthlyTotal === 'string' ? parseFloat(data.monthlyTotal) : data.monthlyTotal,
@@ -386,8 +397,10 @@ export async function getDashboardSummary(): Promise<DashboardSummary> {
       return fallbackSummary;
     } catch (fallbackError) {
       console.log('[dashboard] Subscriptions fallback failed, trying cached summary.', fallbackError);
-      const cachedSummary = await getCachedDashboardSummary();
-      if (cachedSummary) return cachedSummary;
+      const staleSummary = await getCachedDashboardSummary();
+      if (staleSummary) {
+        return staleSummary;
+      }
       throw fallbackError;
     }
   }
@@ -400,7 +413,7 @@ export async function getUpcomingPayments(
   days: number = 7
 ): Promise<UpcomingPaymentsResponse> {
   try {
-    const data = await apiGetWithTimeout<any>(`/dashboard/upcoming?days=${days}`, 12000);
+    const data = await apiGetWithTimeout<any>(`/dashboard/upcoming?days=${days}`, 6000);
     return normalizeItemsResponse(data, days, (item) => ({
         ...item,
         amount: Number(item.amount || 0),
@@ -418,7 +431,7 @@ export async function getTrials(
   days: number = 30
 ): Promise<TrialsResponse> {
   try {
-    const data = await apiGetWithTimeout<any>(`/dashboard/trials?days=${days}`, 12000);
+    const data = await apiGetWithTimeout<any>(`/dashboard/trials?days=${days}`, 6000);
     return normalizeItemsResponse(data, days, (item) => ({
         ...item,
         amount: Number(item.amount || 0),
@@ -434,7 +447,7 @@ export async function getTrials(
  */
 export async function getCategoryBreakdown(): Promise<CategoryBreakdownResponse> {
   try {
-    const data = await apiGetWithTimeout<any>('/dashboard/category-breakdown', 12000);
+    const data = await apiGetWithTimeout<any>('/dashboard/category-breakdown', 6000);
     return data;
   } catch (error) {
     console.log('[dashboard] Category breakdown endpoint failed, falling back to /subscriptions.', error);

@@ -35,6 +35,7 @@ import {
   BarChart3,
   CalendarDays,
   Sparkles,
+  ShieldCheck,
 } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -1848,6 +1849,28 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderGuardWidget = () => {
+    const riskCount = (summaryData?.trialsCount ?? 0) + overdueCount;
+
+    return (
+      <TouchableOpacity
+        style={[dynamicStyles.widgetCard, dynamicStyles.halfWidget]}
+        activeOpacity={0.86}
+        onPress={() => navigation.navigate('Guard')}
+      >
+        <View style={dynamicStyles.widgetTop}>
+          <View style={dynamicStyles.widgetIcon}>
+            <ShieldCheck size={20} color={theme.primary} />
+          </View>
+          <Sparkles size={18} color={theme.primary} />
+        </View>
+        <Text style={dynamicStyles.widgetTitle}>Guard</Text>
+        <Text style={dynamicStyles.subscriptionMetric}>{riskCount}</Text>
+        <Text style={dynamicStyles.widgetCaption}>triale i ryzyka do pilnowania</Text>
+      </TouchableOpacity>
+    );
+  };
+
   const renderPremiumInsights = () => {
     const healthLabel = healthData ? `${healthData.label} · ${healthData.score}/100` : 'Analiza w toku';
     const savingsLabel = savingsData && savingsData.monthlySavings > 0
@@ -2058,6 +2081,7 @@ export const DashboardScreen = () => {
           {renderUpcomingWidget()}
           {renderSubscriptionsWidget()}
           {renderStatsWidget()}
+          {renderGuardWidget()}
         </View>
         {renderPremiumInsights()}
         {renderDecisionCenter()}

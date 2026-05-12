@@ -14,6 +14,7 @@ export type AppStackParamList = {
   EmailScan: undefined;
   Statistics: undefined;
   PaymentCalendar: undefined;
+  Guard: undefined;
 };
 
 export type RootStackParamList = AuthStackParamList & AppStackParamList;

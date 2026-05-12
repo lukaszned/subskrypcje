@@ -32,6 +32,7 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { EmailScanScreen } from './src/screens/EmailScanScreen';
 import { StatisticsScreen } from './src/screens/StatisticsScreen';
 import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
+import { GuardScreen } from './src/screens/GuardScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -44,7 +45,10 @@ import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60 * 1000,
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
       retry: (failureCount, error: any) => {
         if (error?.status === 401 || error?.status === 403) return false;
         const message = error?.message || '';
@@ -101,6 +105,7 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen name="EmailScan" component={EmailScanScreen} />
       <AppStack.Screen name="Statistics" component={StatisticsScreen} />
       <AppStack.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
+      <AppStack.Screen name="Guard" component={GuardScreen} />
     </AppStack.Navigator>
   );
 });

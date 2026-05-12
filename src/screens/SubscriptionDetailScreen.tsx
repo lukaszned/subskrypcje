@@ -59,7 +59,7 @@ export const SubscriptionDetailScreen = () => {
 
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
 
-  const isLoading = isSubLoading || isHistoryLoading || isPaymentsLoading;
+  const isLoading = isSubLoading;
 
   if (isLoading || !sub) {
     return (
@@ -382,7 +382,9 @@ export const SubscriptionDetailScreen = () => {
             </View>
           </View>
           
-          {paymentsData?.items && paymentsData.items.length > 0 ? (
+          {isPaymentsLoading ? (
+            <Text style={{ color: vibrantTheme.colors.textMuted, fontSize: 14, marginTop: 8 }}>Ładuję historię płatności...</Text>
+          ) : paymentsData?.items && paymentsData.items.length > 0 ? (
             <View style={styles.historyList}>
               {paymentsData.items.map((payment: any, index: number) => (
                 <View key={payment.id} style={styles.historyItem}>
@@ -420,7 +422,9 @@ export const SubscriptionDetailScreen = () => {
             </View>
           </View>
           
-          {historyData?.items && historyData.items.length > 0 ? (
+          {isHistoryLoading ? (
+            <Text style={{ color: vibrantTheme.colors.textMuted, fontSize: 14, marginTop: 8 }}>Ładuję historię aktywności...</Text>
+          ) : historyData?.items && historyData.items.length > 0 ? (
             <View style={styles.historyList}>
               {historyData.items.map((event: any, index: number) => (
                 <View key={event.id} style={styles.historyItem}>
