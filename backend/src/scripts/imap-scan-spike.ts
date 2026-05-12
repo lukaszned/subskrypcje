@@ -4,6 +4,8 @@ import { simpleParser } from "mailparser";
 import {
     analyzeMessageForSubscription,
     cleanText,
+    debugAnalyzeMessageForSubscription,
+    EmailDetectionDebugDetails,
     truncateEvidenceSnippet,
 } from "../services/email-detection.service";
 
@@ -17,6 +19,8 @@ type ImapSpikeConfig = {
     limit: number;
     verbose: boolean;
     outputJson: boolean;
+    targetedSearch: boolean;
+    targetedSearchLimit: number;
 };
 
 type ImapDebugMessage = {
@@ -29,6 +33,8 @@ type ImapDebugMessage = {
     confidence: number;
     reasons: string[];
     detected: ReturnType<typeof analyzeMessageForSubscription>["detected"];
+    source: "latest_scan" | "targeted_search";
+    debug?: EmailDetectionDebugDetails;
 };
 
 type ImapRecurringGroup = {
@@ -118,6 +124,12 @@ function getConfig(): ImapSpikeConfig {
         ),
         verbose: parseBoolean(process.env.IMAP_VERBOSE, false),
         outputJson: parseBoolean(process.env.IMAP_OUTPUT_JSON, false),
+        targetedSearch: parseBoolean(process.env.IMAP_TARGETED_SEARCH, false),
+        targetedSearchLimit: parsePositiveInteger(
+            process.env.IMAP_TARGETED_SEARCH_LIMIT,
+            250,
+            "IMAP_TARGETED_SEARCH_LIMIT"
+        ),
     };
 }
 
@@ -169,6 +181,147 @@ async function messageSourceToSnippet(source: Buffer | undefined) {
     }
 
     return sourceToSnippet(source);
+}
+
+const TARGETED_SEARCH_TERMS = [
+    "subscription",
+    "subskrypcja",
+    "abonament",
+    "renewal",
+    "odnowienie",
+    "trial",
+    "okres próbny",
+    "faktura",
+    "efaktura",
+    "rachunek",
+    "kwota do zapłaty",
+    "termin płatności",
+    "invoice",
+    "receipt",
+    "Google Play",
+    "App Store",
+    "Prime Video",
+    "Amazon Prime",
+    "PayPal",
+    "Stripe",
+    "Netflix",
+    "Spotify",
+    "YouTube",
+    "Google One",
+    "iCloud",
+    "Disney",
+    "Max",
+    "SkyShowtime",
+    "Adobe",
+    "Canva",
+    "Microsoft 365",
+    "Dropbox",
+    "AllTrails",
+    "Play",
+    "Orange",
+    "T-Mobile",
+    "Plus",
+    "Netia",
+    "Vectra",
+    "TOYA",
+    "Tauron",
+    "PGE",
+    "E.ON",
+    "Energa",
+];
+
+async function appendDebugMessageFromFetchMessage(
+    debugMessages: ImapDebugMessage[],
+    seenIds: Set<string>,
+    message: {
+        uid?: number | string;
+        seq?: number | string;
+        envelope?: {
+            from?: MessageAddressObject[];
+            subject?: string;
+            date?: Date | string;
+        };
+        internalDate?: Date | string;
+        source?: Buffer;
+    },
+    source: "latest_scan" | "targeted_search"
+) {
+    const id = String(message.uid ?? message.seq);
+
+    if (!id || seenIds.has(id)) {
+        return;
+    }
+
+    seenIds.add(id);
+
+    const from = cleanText(formatAddress(message.envelope?.from?.[0]));
+    const subject = cleanText(message.envelope?.subject ?? "");
+    const dateValue = message.envelope?.date ?? message.internalDate ?? undefined;
+    const date =
+        dateValue instanceof Date
+            ? dateValue.toISOString()
+            : cleanText(String(dateValue ?? ""));
+    const snippet = await messageSourceToSnippet(message.source);
+    const input = {
+        id,
+        from,
+        subject,
+        date,
+        snippet,
+    };
+    const analysis = analyzeMessageForSubscription(input);
+    const debug = debugAnalyzeMessageForSubscription(input);
+
+    debugMessages.push({
+        id,
+        from,
+        subject,
+        date,
+        snippet,
+        isCandidate: analysis.isCandidate,
+        confidence: analysis.confidence,
+        reasons: analysis.reasons,
+        detected: analysis.detected,
+        source,
+        debug,
+    });
+}
+
+async function collectTargetedSearchUids(
+    client: ImapFlow,
+    limit: number,
+    verbose: boolean
+) {
+    const uids = new Set<number>();
+
+    for (const term of TARGETED_SEARCH_TERMS) {
+        if (uids.size >= limit) {
+            break;
+        }
+
+        try {
+            const matches = (await (client as any).search(
+                { body: term },
+                { uid: true }
+            )) as number[];
+
+            for (const uid of matches.reverse()) {
+                uids.add(uid);
+
+                if (uids.size >= limit) {
+                    break;
+                }
+            }
+        } catch (error) {
+            if (verbose) {
+                const message =
+                    error instanceof Error ? error.message : "targeted search failed";
+                console.error(`Targeted IMAP search skipped for "${term}": ${message}`);
+            }
+        }
+    }
+
+    return [...uids].slice(0, limit);
 }
 
 function optionalLine(label: string, value: string | number | boolean | undefined) {
@@ -243,6 +396,22 @@ function hasRecurringGroupEvidence(message: ImapDebugMessage) {
     );
 }
 
+function hasOnetMarketingIntermediaryGroupSignal(text: string) {
+    return /mailing_reklamowy@(grupa)?onet\.pl|\s-\s*onet\b/i.test(text);
+}
+
+function hasRecurringGroupInvoiceDueSignal(text: string) {
+    return /\b(ekofaktura|e-faktura|efaktura|faktura|rachunek|payment due|invoice due|termin p[\u0142l]atno[s\u015b]ci|kwota do zap[\u0142l]aty|op[\u0142l]a[c\u0107] faktur[e\u0119]|oplac fakture|numer faktury|eboa|ebok|e-bok)\b/i.test(
+        text
+    );
+}
+
+function hasRecurringGroupCreditLoanMarketingSignal(text: string) {
+    return /\b(rrso|po[z\u017c]yczka|pozyczka|kredyt|oprocentowanie|prowizja|raty|leasing|kredyt 50\/50|rzeczywista roczna stopa oprocentowania)\b/i.test(
+        text
+    );
+}
+
 function isInvoiceLikeFamily(subjectFamily: string, messages: ImapDebugMessage[]) {
     const text = `${subjectFamily} ${messages
         .map((message) => `${message.subject} ${message.snippet}`)
@@ -269,6 +438,14 @@ function isOneTimeOrNoiseGroup(messages: ImapDebugMessage[], subjectFamily: stri
     const isStrongInvoiceGroup =
         isStrongEfakturaFamily(subjectFamily) ||
         isInvoiceLikeFamily(subjectFamily, messages);
+
+    if (
+        (hasOnetMarketingIntermediaryGroupSignal(text) ||
+            hasRecurringGroupCreditLoanMarketingSignal(text)) &&
+        !hasRecurringGroupInvoiceDueSignal(text)
+    ) {
+        return true;
+    }
 
     if (/do[\u0142l]adowanie|top-up|phone top-up|mailing@interia\.pl|dostarczone przez interi/i.test(text)) {
         return true;
@@ -429,8 +606,11 @@ function buildRecurringGroups(debugMessages: ImapDebugMessage[]) {
         const invoiceLike = isInvoiceLikeFamily(subjectFamily, sortedMessages);
         const strongEfakturaFamily = isStrongEfakturaFamily(subjectFamily);
         const blockedNoise = isOneTimeOrNoiseGroup(sortedMessages, subjectFamily);
+        const hasEnoughEvidenceForSmallGroup =
+            sortedMessages.length > 2 || invoiceLike || candidateMessages >= 1;
         const isRecurringCandidate =
             !blockedNoise &&
+            hasEnoughEvidenceForSmallGroup &&
             evidenceMessages >= 2 &&
             (cadence !== "unknown" ||
                 invoiceLike ||
@@ -556,13 +736,33 @@ function printHumanSummary(result: ImapScanSpikeResult) {
             .filter((message): message is ImapDebugMessage => Boolean(message))
             .map((message) => message.id)
     );
-    const candidates = result.debugMessages
+    const visibleCandidates = result.debugMessages
         .filter(
             (message) =>
                 message.isCandidate &&
                 (!recurringMessageIds.has(message.id) ||
                     representativeMessageIds.has(message.id))
-        )
+        );
+    const dedupedCandidates = new Map<string, ImapDebugMessage>();
+
+    for (const message of visibleCandidates) {
+        const providerOrName = message.detected.provider ?? message.detected.name;
+
+        if (!providerOrName) {
+            dedupedCandidates.set(message.id, message);
+            continue;
+        }
+
+        const subjectFamily = normalizeSubjectFamily(message.subject);
+        const key = `${providerOrName}|${message.detected.name ?? ""}|${subjectFamily}`;
+        const previous = dedupedCandidates.get(key);
+
+        if (!previous || Date.parse(message.date) > Date.parse(previous.date)) {
+            dedupedCandidates.set(key, message);
+        }
+    }
+
+    const candidates = [...dedupedCandidates.values()]
         .sort((a, b) => b.confidence - a.confidence);
 
     console.log("Potential subscriptions:");
@@ -662,6 +862,7 @@ async function main() {
         }
 
         const debugMessages: ImapDebugMessage[] = [];
+        const seenMessageIds = new Set<string>();
 
         if (totalMessages > 0) {
             const startSeq = Math.max(1, totalMessages - config.limit + 1);
@@ -674,35 +875,47 @@ async function main() {
                     maxLength: 20_000,
                 },
             })) {
-                const id = String(message.uid ?? message.seq);
-                const from = cleanText(formatAddress(message.envelope?.from?.[0]));
-                const subject = cleanText(message.envelope?.subject ?? "");
-                const dateValue =
-                    message.envelope?.date ?? message.internalDate ?? undefined;
-                const date =
-                    dateValue instanceof Date
-                        ? dateValue.toISOString()
-                        : cleanText(String(dateValue ?? ""));
-                const snippet = await messageSourceToSnippet(message.source);
-                const analysis = analyzeMessageForSubscription({
-                    id,
-                    from,
-                    subject,
-                    date,
-                    snippet,
-                });
+                await appendDebugMessageFromFetchMessage(
+                    debugMessages,
+                    seenMessageIds,
+                    message,
+                    "latest_scan"
+                );
+            }
 
-                debugMessages.push({
-                    id,
-                    from,
-                    subject,
-                    date,
-                    snippet,
-                    isCandidate: analysis.isCandidate,
-                    confidence: analysis.confidence,
-                    reasons: analysis.reasons,
-                    detected: analysis.detected,
-                });
+            if (config.targetedSearch) {
+                if (config.verbose) {
+                    console.error(
+                        `Running targeted IMAP search, limit ${config.targetedSearchLimit}`
+                    );
+                }
+
+                const targetedUids = await collectTargetedSearchUids(
+                    client,
+                    config.targetedSearchLimit,
+                    config.verbose
+                );
+
+                if (targetedUids.length > 0) {
+                    for await (const message of client.fetch(
+                        targetedUids,
+                        {
+                            envelope: true,
+                            internalDate: true,
+                            source: {
+                                maxLength: 20_000,
+                            },
+                        },
+                        { uid: true }
+                    )) {
+                        await appendDebugMessageFromFetchMessage(
+                            debugMessages,
+                            seenMessageIds,
+                            message,
+                            "targeted_search"
+                        );
+                    }
+                }
             }
         }
 

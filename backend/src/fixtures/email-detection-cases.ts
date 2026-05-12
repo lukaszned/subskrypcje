@@ -1537,4 +1537,791 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
             minConfidence: 0.55,
         },
     },
+    {
+        name: "Onet loan ad PL",
+        input: {
+            id: "fixture-onet-loan-ad-pl",
+            from: "Alior Bank - Onet <mailing_reklamowy@onet.pl>",
+            subject: "Pozyczka na Twoje cele z RRSO 9,91%",
+            snippet:
+                "Kwota do 60 tys. zl, splata do 2 lat. Rzeczywista Roczna Stopa Oprocentowania (RRSO) pozyczki gotowkowej wynosi 9,91%; calkowita kwota pozyczki: 16900zl; calkowita kwota do zaplaty: 18552,15zl; 23 miesieczne raty...",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Onet car credit ad PL",
+        input: {
+            id: "fixture-onet-car-credit-ad-pl",
+            from: "BYD Polska - Onet <mailing_reklamowy@grupaonet.pl>",
+            subject: "BYD Atto 2 DM-i w kredycie 50/50, RRSO 0%",
+            snippet:
+                "NOWA SUPER HYBRYDA JUZ OD 60 399 ZL BRUTTO W KREDYCIE 50/50 RRSO 0%. Calkowita kwota kredytu...",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Onet telecom marketing PL",
+        input: {
+            id: "fixture-onet-telecom-marketing-pl",
+            from: "T-Mobile Polska - Onet <mailing_reklamowy@onet.pl>",
+            subject: "Razem najlepiej - internet i abonament w pakiecie!",
+            snippet:
+                "Oferta promocyjna internetu i abonamentu. Sprawdz oferte. Cena od 49 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "T-Mobile",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Sentinel Hub expired trial EN",
+        input: {
+            id: "fixture-sentinel-hub-expired-trial-en",
+            from: "Sentinel Hub <info@sentinel-hub.com>",
+            subject: "Sentinel Hub account has expired",
+            snippet:
+                "This is a notice that your Sentinel Hub trial has expired. To continue using our services without interruption, please consider a Subscription Plan...",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Adobe cancellation PL",
+        input: {
+            id: "fixture-adobe-cancellation-pl",
+            from: "Adobe <message@adobe.com>",
+            subject: "Przykro nam Cie pozegnac",
+            snippet:
+                "Ta wiadomosc stanowi potwierdzenie anulowania przez Ciebie subskrypcji Adobe Acrobat Pro. Zachowasz dostep do konca okresu rozliczeniowego...",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Adobe",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "InterviewMe reactivation marketing PL",
+        input: {
+            id: "fixture-interviewme-reactivation-marketing-pl",
+            from: "InterviewMe <biuletyn@mg.interviewme.pl>",
+            subject: "Nieograniczony dostep do InterviewMe tylko za 14,95 zl miesiecznie.",
+            snippet:
+                "Twoja subskrypcja InterviewMe wygasla jakis czas temu. Reaktywujac subskrypcje, zaplacisz tylko 14,95 zl miesiecznie...",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Tauron invoice PL",
+        input: {
+            id: "fixture-tauron-invoice-pl",
+            from: "TAURON <powiadomienia@tauron.pl>",
+            subject: "Wystawilismy fakture za prad",
+            snippet:
+                "Wystawilismy Ci fakture za prad. Numer faktury: E/TM2/8433843/24/1 Kwota do zaplaty: 216.39 zl Termin platnosci: 12.12.2024 r.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Tauron",
+            amountText: "216.39 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Uber One payment PL",
+        input: {
+            id: "fixture-uber-one-payment-pl",
+            from: "Uber One <uberone@uber.com>",
+            subject: "Potwierdzenie platnosci Uber One",
+            snippet:
+                "Platnosc za Uber One zostala zrealizowana. Dzieki subskrypcji Uber One zaoszczedzisz...",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Uber One",
+            name: "Uber One",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Amazon Prime price change active subscriber EN",
+        input: {
+            id: "fixture-amazon-prime-price-change-active-subscriber-en",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Your Prime Video Channels price is changing",
+            snippet:
+                "As an active subscriber, your price is changing. Your Prime Video Channels subscription will renew monthly at the updated price of 12.99 USD on your next billing date.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Prime Video",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "SkyShowtime on Prime Video active subscription PL",
+        input: {
+            id: "fixture-skyshowtime-on-prime-video-active-subscription-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Masz subskrypcje SkyShowtime w usludze Prime Video",
+            snippet:
+                "Masz subskrypcje SkyShowtime w usludze Prime Video. Subskrypcja odnawia sie automatycznie co miesiac. Nastepna platnosc 24,99 zl.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "SkyShowtime",
+            name: "SkyShowtime on Prime Video",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Apple TV on Prime Video active subscription EN",
+        input: {
+            id: "fixture-apple-tv-on-prime-video-active-subscription-en",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Apple TV on Prime Video",
+            snippet:
+                "Your subscription to Apple TV on Prime Video is active and renews automatically every month. You will be charged 9.99 USD on the next billing date.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Apple TV",
+            name: "Apple TV on Prime Video",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Google Play YouTube Music subscription receipt EN",
+        input: {
+            id: "fixture-google-play-youtube-music-subscription-receipt-en",
+            from: "Google Play <googleplay-noreply@google.com>",
+            subject: "Your Google Play receipt",
+            snippet:
+                "Thank you for your subscription to YouTube Music Premium. You have been charged 10.99 USD. The subscription renews monthly.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "YouTube Music",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Apple App Store Disney Plus subscription receipt EN",
+        input: {
+            id: "fixture-apple-app-store-disney-plus-subscription-receipt-en",
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your receipt from Apple",
+            snippet:
+                "Subscription receipt for Disney+. You have been charged 13.99 USD. Your subscription renews monthly and is billed through Apple.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Disney+",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Generic local ISP eFaktura PL",
+        input: {
+            id: "fixture-generic-local-isp-efaktura-pl",
+            from: "ebok@fiber-city.pl",
+            subject: "eFaktura Fiber City | 06 | 2026",
+            snippet:
+                "Numer klienta 778899. Twoja eFaktura za internet jest dostepna w eBOK. Kwota do zaplaty 89,90 zl. Termin platnosci 15.06.2026. Oplac fakture w panelu klienta.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Fiber City",
+            amountText: "89,90 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Autopay merchant recurring bill PL",
+        input: {
+            id: "fixture-autopay-merchant-recurring-bill-pl",
+            from: "Autopay <no-reply@autopay.pl>",
+            subject: "Przekazalismy Twoja platnosc do uslugodawcy - LocalNet",
+            snippet:
+                "Twoja platnosc cykliczna zostala przekazana do uslugodawcy - LocalNet. Kwota transakcji: 79,99 PLN. Odbiorca: LocalNet Sp. z o.o. Abonament za internet.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "LocalNet",
+            amountText: "79,99 PLN",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "AllTrails subscription renewal receipt EN",
+        input: {
+            id: "fixture-alltrails-subscription-renewal-receipt-en",
+            from: "AllTrails <billing@alltrails.com>",
+            subject: "Your AllTrails+ subscription renewed",
+            snippet:
+                "Your AllTrails+ subscription has renewed. You have been charged 35.99 USD. Your annual plan renews automatically.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "AllTrails",
+            name: "AllTrails+",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Prime Video recommendation EN",
+        input: {
+            id: "fixture-prime-video-recommendation-en",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Recommended for you on Prime Video",
+            snippet:
+                "Based on titles you watched, we recommend Max and Apple TV. Watch now on Prime Video.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Prime Video one-time rental EN",
+        input: {
+            id: "fixture-prime-video-one-time-rental-en",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Your Prime Video order",
+            snippet:
+                "Order number 123-456. This receipt is for a one-time rental of a movie on Prime Video. You have been charged 4.99 USD.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "SkyShowtime subscription ended EN",
+        input: {
+            id: "fixture-skyshowtime-subscription-ended-en",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Your SkyShowtime subscription has ended",
+            snippet:
+                "Your SkyShowtime subscription on Prime Video has ended. No further charges will apply.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "SkyShowtime",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Google Play one-time app purchase EN",
+        input: {
+            id: "fixture-google-play-one-time-app-purchase-en",
+            from: "Google Play <googleplay-noreply@google.com>",
+            subject: "Your Google Play order receipt",
+            snippet:
+                "Order number GPA.1234. Thank you for your one-time purchase of Photo Editor Pro. You have been charged 3.99 USD.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Google Play",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Apple security code EN",
+        input: {
+            id: "fixture-apple-security-code-en",
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your Apple verification code",
+            snippet:
+                "Use this verification code to sign in to your Apple Account. Your code is 123456.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Apple",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Onet marketing telecom ad duplicate PL",
+        input: {
+            id: "fixture-onet-marketing-telecom-ad-duplicate-pl",
+            from: "nju. - Onet <mailing_reklamowy@onet.pl>",
+            subject: "Abonament komorkowy od 19 zl miesiecznie",
+            snippet:
+                "Specjalna oferta promocyjna. Wybierz abonament i sprawdz szczegoly oferty. Cena od 19 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Credit loan ad PL",
+        input: {
+            id: "fixture-credit-loan-ad-pl",
+            from: "Bank Newsletter <newsletter@bank-example.pl>",
+            subject: "Kredyt gotowkowy z niska rata",
+            snippet:
+                "RRSO 11,20%. Calkowita kwota kredytu 20000 zl, oprocentowanie stale, miesieczne raty i prowizja 0%.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Ecommerce receipt PL",
+        input: {
+            id: "fixture-ecommerce-receipt-pl",
+            from: "Sklep Online <sklep@example-store.pl>",
+            subject: "Zamowienie nr 456789",
+            snippet:
+                "Dziekujemy za zakupy. Twoje zamowienie nr 456789 zostalo oplacone. Dostawa produktu nastapi w ciagu 2 dni. Kwota 129,99 zl.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Expired subscription reactivation marketing EN",
+        input: {
+            id: "fixture-expired-subscription-reactivation-marketing-en",
+            from: "Resume Builder <newsletter@resume-builder.example>",
+            subject: "Reactivate your subscription",
+            snippet:
+                "Your subscription expired some time ago. Reactivate your subscription today and get Premium for only 9.99 USD monthly.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Cancellation confirmation EN",
+        input: {
+            id: "fixture-cancellation-confirmation-en",
+            from: "Streaming Service <billing@streaming.example>",
+            subject: "Subscription cancelled",
+            snippet:
+                "This is confirmation that your subscription was cancelled. You will keep access until the end of your current billing period and no further charges will apply.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Uber One Eats savings upsell PL",
+        input: {
+            id: "fixture-uber-one-eats-savings-upsell-pl",
+            from: "Uber Eats <ubereats@uber.com>",
+            subject: "Subskrypcja Uber One pozwolilaby Ci zaoszczedzic 22 zl",
+            snippet:
+                "Korzystaj bezplatnie przez 4 tyg. Odblokuj korzysci i oszczedzaj z subskrypcja Uber One.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Uber One",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Uber One subscription savings newsletter PL",
+        input: {
+            id: "fixture-uber-one-subscription-savings-newsletter-pl",
+            from: "Uber One <uberone@uber.com>",
+            subject: "Miesieczna subskrypcja - duza oszczednosc",
+            snippet:
+                "Koszt subskrypcji? To Twoje oszczednosci. Sprawdz, ile mozesz zaoszczedzic z Uber One.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Uber One",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Uber One Eats cheaper upsell PL",
+        input: {
+            id: "fixture-uber-one-eats-cheaper-upsell-pl",
+            from: "Uber One <uberone@uber.com>",
+            subject: "Lukasz, korzystaj z Uber Eats taniej dzieki subskrypcji",
+            snippet:
+                "Korzystaj taniej z dostaw Uber Eats. Wyprobuj Uber One i oszczedzaj na zamowieniach.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Uber One",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "PlayStation free Prime Video app purchase PL",
+        input: {
+            id: "fixture-playstation-free-prime-video-app-purchase-pl",
+            from: "PlayStation <sony@txn-email03.playstation.com>",
+            subject: "Dziekujemy za zakup",
+            snippet:
+                "Twoja transakcja w sklepie PlayStation Store przebiegla pomyslnie. Szczegoly Cena Amazon Prime Video (Aplikacja) Suma: 0,00 zl",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Prime Video channel change raw header snippet PL",
+        input: {
+            id: "fixture-prime-video-channel-change-raw-header-snippet-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Zmiany w Twojej subskrypcji kanalu SkyShowtime",
+            snippet:
+                "Received: from mail.example by mx.example; Received-SPF: pass Authentication-Results: mx.example; DKIM-Signature: v=1; body headers only",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "SkyShowtime",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Uber One payment confirmation duplicate PL",
+        input: {
+            id: "fixture-uber-one-payment-confirmation-duplicate-pl",
+            from: "Uber One <uberone@uber.com>",
+            subject: "Potwierdzenie platnosci Uber One",
+            snippet:
+                "Platnosc za Uber One zostala zrealizowana. Dzieki subskrypcji Uber One zaoszczedzisz na dostawach.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Uber One",
+            name: "Uber One",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "SkyShowtime Prime Video trial started PL",
+        input: {
+            id: "fixture-skyshowtime-prime-video-trial-started-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Twoj bezplatny okres probny uslugi SkyShowtime wlasnie sie rozpoczal",
+            snippet:
+                "Dziekujemy za zakup subskrypcji SkyShowtime. Subskrypcja rozpocznie sie automatycznie po uplywie bezplatnego okresu probnego.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "SkyShowtime",
+            name: "SkyShowtime on Prime Video",
+            isTrial: true,
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "SkyShowtime Prime Video special offer continuation PL",
+        input: {
+            id: "fixture-skyshowtime-prime-video-special-offer-continuation-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Potwierdzenie - Oferta specjalna dotyczaca subskrypcji SkyShowtime",
+            snippet:
+                "Kontynuujac subskrypcje SkyShowtime w usludze Prime Video, metoda platnosci bedzie obciazana kwota 4,00 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "SkyShowtime",
+            name: "SkyShowtime on Prime Video",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Uber One subscription benefits upsell PL",
+        input: {
+            id: "fixture-uber-one-subscription-benefits-upsell-pl",
+            from: "Uber One <uberone@uber.com>",
+            subject: "Lukasz, korzystaj z Uber Eats taniej dzieki subskrypcji",
+            snippet:
+                "Zamawiaj ulubione jedzenie z wyjatkowymi korzysciami. Dzieki subskrypcji Uber One mozesz korzystac z benefitow i oszczedzac na Uber Eats.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Uber One",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Uber One four week free trial upsell PL",
+        input: {
+            id: "fixture-uber-one-four-week-free-trial-upsell-pl",
+            from: "Uber Eats <ubereats@uber.com>",
+            subject: "4 tyg. bezplatnie! Wyprobuj Uber One i zacznij oszczedzac",
+            snippet:
+                "Oszczedzaj na zamowieniach dzieki subskrypcji. Korzystaj bezplatnie przez 4 tygodnie i poznaj benefity Uber One.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Uber One",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Amazon Prime price change active customer PL",
+        input: {
+            id: "fixture-amazon-prime-price-change-active-customer-pl",
+            from: "Amazon Prime <prime@amazon.pl>",
+            subject: "Wymagane dzialanie: Przejrzyj nowa cene Amazon Prime",
+            snippet:
+                "Przejrzyj i zaakceptuj nowa cene Amazon Prime. Cena planu rocznego zmienila sie na 69,00 zl. Dla Ciebie, aktualnego klienta Prime, zmiany wejda w zycie w nastepnej dacie odnowienia.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Amazon",
+            name: "Amazon",
+            amountText: "69,00 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "SkyShowtime Prime Video subscription ended PL",
+        input: {
+            id: "fixture-skyshowtime-prime-video-subscription-ended-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Twoja subskrypcja SkyShowtime zakonczyla sie",
+            snippet:
+                "Twoja subskrypcja SkyShowtime w usludze Prime Video zakonczyla sie. Dostep wygasl i nie beda naliczane dalsze oplaty.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "SkyShowtime",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Strava annual renewal EN",
+        input: {
+            id: "fixture-strava-annual-renewal-en",
+            from: "Strava <noreply@strava.com>",
+            subject: "Your Strava subscription renews soon",
+            snippet:
+                "Your Strava subscription will automatically renew on June 15, 2026. Your payment method will be charged 79.99 USD for the annual plan.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Strava",
+            amountText: "79.99 USD",
+            billingCycle: "yearly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Duolingo Super yearly renewal EN",
+        input: {
+            id: "fixture-duolingo-super-yearly-renewal-en",
+            from: "Duolingo <no-reply@duolingo.com>",
+            subject: "Your Super Duolingo subscription renews soon",
+            snippet:
+                "Your Super Duolingo subscription renews automatically on July 1, 2026. The annual plan price is 83.99 USD.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Duolingo",
+            billingCycle: "yearly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "iCloud Plus storage renewal EN",
+        input: {
+            id: "fixture-icloud-plus-storage-renewal-en",
+            from: "Apple <no_reply@email.apple.com>",
+            subject: "Your iCloud+ storage plan renews soon",
+            snippet:
+                "Your iCloud+ subscription will renew automatically. Your payment method will be charged 9.99 USD monthly on the next billing date.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "iCloud",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "PGE invoice PL",
+        input: {
+            id: "fixture-pge-invoice-pl",
+            from: "PGE <ebok@pge.pl>",
+            subject: "Wystawiono fakture za energie",
+            snippet:
+                "Twoja faktura za energie elektryczna jest dostepna w eBOK. Kwota do zaplaty: 184,20 zl. Termin platnosci: 18.06.2026.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "PGE",
+            amountText: "184,20 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Energa invoice PL",
+        input: {
+            id: "fixture-energa-invoice-pl",
+            from: "Energa <faktury@energa.pl>",
+            subject: "Nowa eFaktura Energa",
+            snippet:
+                "Numer klienta 882211. eFaktura Energa za prad jest dostepna. Kwota do zaplaty 92,44 zl. Termin platnosci 21.06.2026.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Energa",
+            amountText: "92,44 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Stripe one-time ecommerce receipt EN",
+        input: {
+            id: "fixture-stripe-one-time-ecommerce-receipt-en",
+            from: "Stripe <receipts@stripe.com>",
+            subject: "Your receipt from Random Shop",
+            snippet:
+                "Receipt for your one-time purchase. Order number 99321. Shipping and product details. Total 49.00 USD.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Przelewy24 random shop order PL",
+        input: {
+            id: "fixture-przelewy24-random-shop-order-pl",
+            from: "Przelewy24 <serwis@przelewy24.pl>",
+            subject: "Potwierdzenie platnosci za zamowienie",
+            snippet:
+                "Platnosc za zamowienie w sklepie internetowym zostala przyjeta. Sprzedawca: Sklep Ogrodowy. Kwota 129,99 PLN.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Wolt Plus payment EN",
+        input: {
+            id: "fixture-wolt-plus-payment-en",
+            from: "Wolt <no-reply@wolt.com>",
+            subject: "Your Wolt+ payment confirmation",
+            snippet:
+                "Your payment for Wolt+ has been completed. Your membership renews monthly and your card was charged 9.99 EUR.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Wolt+",
+            amountText: "9.99 EUR",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Glovo Prime marketing PL",
+        input: {
+            id: "fixture-glovo-prime-marketing-pl",
+            from: "Glovo <newsletter@glovoapp.com>",
+            subject: "Wyprobuj Glovo Prime i oszczedzaj",
+            snippet:
+                "Oferta specjalna tylko dla Ciebie. Korzystaj z benefitow Glovo Prime i zamawiaj taniej. Sprawdz oferte.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Allegro Smart active renewal PL",
+        input: {
+            id: "fixture-allegro-smart-active-renewal-pl",
+            from: "Allegro <powiadomienia@allegro.pl>",
+            subject: "Twoj Allegro Smart! zostanie przedluzony",
+            snippet:
+                "Twoja usluga Allegro Smart! odnowi sie automatycznie 30.06.2026. Metoda platnosci bedzie obciazana kwota 59,90 zl rocznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Allegro Smart",
+            amountText: "59,90 zl",
+            billingCycle: "yearly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Allegro Smart marketing false PL",
+        input: {
+            id: "fixture-allegro-smart-marketing-false-pl",
+            from: "Allegro <powiadomienia@allegro.pl>",
+            subject: "Aktywuj Allegro Smart! i odbieraj bezplatne dostawy",
+            snippet:
+                "Promocja dla Ciebie. Aktywuj Allegro Smart! i sprawdz szczegoly oferty. Korzystaj taniej przez pierwszy miesiac.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "PayPal automatic payment to Netflix EN",
+        input: {
+            id: "fixture-paypal-automatic-payment-netflix-en",
+            from: "PayPal <service@paypal.com>",
+            subject: "Automatic payment to Netflix",
+            snippet:
+                "You sent an automatic payment to Netflix. Merchant: Netflix. Amount 15.49 USD. This billing agreement is active.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Netflix",
+            amountText: "15.49 USD",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "PayPal suspicious invoice unknown merchant EN",
+        input: {
+            id: "fixture-paypal-suspicious-invoice-unknown-merchant-en",
+            from: "PayPal Billing <notice@random-paypal.example>",
+            subject: "Invoice waiting for payment",
+            snippet:
+                "Your invoice is waiting. Click to pay now. Amount due 499.00 USD.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Unknown ISP invoice from domain PL",
+        input: {
+            id: "fixture-unknown-isp-invoice-from-domain-pl",
+            from: "Faktury <faktury@internet-domowy.example>",
+            subject: "Faktura za internet 05/2026",
+            snippet:
+                "Numer klienta 120055. Faktura za internet jest dostepna w panelu klienta. Kwota do zaplaty 89,00 zl. Termin platnosci 15.06.2026.",
+        },
+        expected: {
+            isCandidate: true,
+            amountText: "89,00 zl",
+            minConfidence: 0.55,
+        },
+    },
 ];

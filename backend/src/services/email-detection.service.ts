@@ -28,13 +28,128 @@ export type ParsedDetectedAmount = {
     currency?: string;
 };
 
+type ProviderCategory =
+    | "streaming_video"
+    | "music_audio"
+    | "cloud_storage"
+    | "productivity_office"
+    | "ai_tools"
+    | "design_creative"
+    | "developer_tools"
+    | "vpn_security"
+    | "password_manager"
+    | "gaming"
+    | "education_learning"
+    | "fitness_health"
+    | "dating_social"
+    | "delivery_membership"
+    | "transport_membership"
+    | "telecom_mobile"
+    | "internet_isp"
+    | "utilities_energy"
+    | "hosting_domains"
+    | "finance_accounting"
+    | "news_media"
+    | "ecommerce_membership"
+    | "app_store_marketplace"
+    | "payment_processor"
+    | "unknown_recurring_bill";
+
+type ProviderRegistryEntry = {
+    canonicalName: string;
+    category: ProviderCategory;
+    aliases: string[];
+    trustedDomains: string[];
+    suspiciousDomainPolicy: "strict" | "marketplace_allowed" | "processor_allowed" | "relaxed";
+    marketplaceAllowedDomains: string[];
+    billingKeywords: string[];
+    subscriptionKeywords: string[];
+    invoiceKeywords: string[];
+    noiseKeywords: string[];
+    canBeBilledViaMarketplace: boolean;
+    canBeBilledViaProcessor: boolean;
+};
+
+type MessageType =
+    | "invoice"
+    | "payment_due"
+    | "payment_confirmation"
+    | "processor_payment"
+    | "marketplace_subscription"
+    | "recurring_bill"
+    | "subscription_started"
+    | "trial_started_auto_renew"
+    | "trial_ending"
+    | "subscription_active_notice"
+    | "price_change_active"
+    | "renewal_notice"
+    | "payment_failed"
+    | "cancellation"
+    | "expired_trial"
+    | "reactivation_marketing"
+    | "marketing_offer"
+    | "newsletter"
+    | "security_login"
+    | "security"
+    | "login"
+    | "one_time_purchase"
+    | "rental"
+    | "ecommerce_order"
+    | "loan_credit_marketing"
+    | "recommendation"
+    | "refund"
+    | "unknown";
+
+type MessageClassification = {
+    messageType: MessageType;
+    positiveEvidence: string[];
+    negativeEvidence: string[];
+    trustEvidence: string[];
+    riskEvidence: string[];
+    extractedProvider?: string;
+    category?: ProviderCategory;
+    billingChannel?: string;
+    marketplaceProvider?: string;
+    merchant?: string;
+    amountText?: string;
+    currency?: string;
+    billingCycle?: BillingCycleDetection;
+    isTrial?: boolean;
+    isFinalBlock?: boolean;
+    finalBlockReason?: string;
+};
+
+export type EmailDetectionDebugDetails = {
+    messageType: MessageType;
+    provider?: string;
+    name?: string;
+    category?: ProviderCategory;
+    billingChannel?: string;
+    marketplaceProvider?: string;
+    merchant?: string;
+    amountText?: string;
+    currency?: string;
+    billingCycle?: BillingCycleDetection;
+    isTrial?: boolean;
+    positiveEvidence: string[];
+    negativeEvidence: string[];
+    trustEvidence: string[];
+    riskEvidence: string[];
+    evidenceTiers: string[];
+    finalDecision: "candidate" | "rejected";
+    finalBlockReason?: string;
+};
+
 type DetectionSignals = {
     provider?: string;
     providerFromPaymentProcessor?: string;
     planName?: string;
+    billingChannel?: string;
+    providerCategory?: ProviderCategory;
     billingCycle?: BillingCycleDetection;
     trialEndDateText?: string;
     amountText?: string;
+    currency?: string;
     hasReceiptEvidence: boolean;
     hasInvoiceEvidence: boolean;
     hasPaymentEvidence: boolean;
@@ -51,6 +166,15 @@ type DetectionSignals = {
     hasBillingDateEvidence: boolean;
     hasTransportTicketEvidence: boolean;
     hasPhoneTopUpEvidence: boolean;
+    hasMarketingIntermediaryEvidence: boolean;
+    hasSubscriptionUpsellEvidence: boolean;
+    hasCreditLoanMarketingEvidence: boolean;
+    hasExpiredReactivationEvidence: boolean;
+    hasMarketplaceBillingEvidence: boolean;
+    hasTrustedSenderEvidence: boolean;
+    hasOneTimePurchaseEvidence: boolean;
+    hasFreeAppStorePurchaseEvidence: boolean;
+    hasNewsletterRecommendationEvidence: boolean;
     hasAccountSecurityEvidence: boolean;
     hasAccountSecurityCodeEvidence: boolean;
     hasVerificationEvidence: boolean;
@@ -69,43 +193,225 @@ type DetectionSignals = {
     hasActiveRenewalPaymentEvidence: boolean;
     hasPaymentReceiptTrialChargeEvidence: boolean;
     hasUnreadableEncodedEvidence: boolean;
+    hasRawHeaderSnippetEvidence: boolean;
     hasSuspiciousSenderEvidence: boolean;
     hasHighRiskProviderSuspiciousSenderEvidence: boolean;
 };
 
-const PROVIDER_CATALOG = [
-    { name: "Google Play", patterns: ["google play", "play.google.com"] },
-    { name: "Google One", patterns: ["google one", "one.google.com"] },
-    { name: "YouTube", patterns: ["youtube", "youtube.com"] },
-    { name: "Netflix", patterns: ["netflix"] },
-    { name: "Spotify", patterns: ["spotify"] },
-    { name: "Apple", patterns: ["apple"] },
-    { name: "OpenAI", patterns: ["openai", "chatgpt", "chat gpt"] },
-    { name: "Canva", patterns: ["canva"] },
-    { name: "Adobe", patterns: ["adobe"] },
-    { name: "Microsoft", patterns: ["microsoft"] },
-    { name: "Amazon", patterns: ["amazon"] },
-    { name: "Disney", patterns: ["disney"] },
-    { name: "HBO", patterns: ["hbo"] },
-    { name: "Max", patterns: ["max"] },
-    { name: "Dropbox", patterns: ["dropbox"] },
-    { name: "Notion", patterns: ["notion"] },
-    { name: "Figma", patterns: ["figma"] },
-    { name: "GitHub", patterns: ["github"] },
-    { name: "Slack", patterns: ["slack"] },
-    { name: "Duolingo", patterns: ["duolingo"] },
-    { name: "NordVPN", patterns: ["nordvpn", "nord vpn"] },
-    { name: "T-Mobile", patterns: ["t-mobile", "tmobile"] },
-    { name: "Orange", patterns: ["orange.pl", "orange"] },
-    { name: "Play", patterns: ["play.pl", " play "] },
-    { name: "Plus", patterns: ["plus.pl", "faktura plus"] },
-    { name: "Netia", patterns: ["netia"] },
-    { name: "Vectra", patterns: ["vectra"] },
-    { name: "UPC", patterns: ["upc"] },
+function providerEntry(
+    canonicalName: string,
+    category: ProviderCategory,
+    aliases: string[] = [],
+    options: Partial<Omit<ProviderRegistryEntry, "canonicalName" | "category" | "aliases">> = {}
+): ProviderRegistryEntry {
+    return {
+        canonicalName,
+        category,
+        aliases: [canonicalName, ...aliases],
+        trustedDomains: options.trustedDomains ?? [],
+        suspiciousDomainPolicy: options.suspiciousDomainPolicy ?? "strict",
+        marketplaceAllowedDomains: options.marketplaceAllowedDomains ?? [],
+        billingKeywords: options.billingKeywords ?? [],
+        subscriptionKeywords: options.subscriptionKeywords ?? [],
+        invoiceKeywords: options.invoiceKeywords ?? [],
+        noiseKeywords: options.noiseKeywords ?? [],
+        canBeBilledViaMarketplace: options.canBeBilledViaMarketplace ?? true,
+        canBeBilledViaProcessor: options.canBeBilledViaProcessor ?? true,
+    };
+}
+
+function providerEntries(category: ProviderCategory, names: string[]) {
+    return names.map((name) => providerEntry(name, category));
+}
+
+const PROVIDER_REGISTRY: ProviderRegistryEntry[] = [
+    providerEntry("Uber One", "delivery_membership", ["uberone@uber.com"], {
+        trustedDomains: ["uber.com"],
+        canBeBilledViaMarketplace: false,
+    }),
+    providerEntry("Amazon", "ecommerce_membership", ["amazon prime", "prime@amazon.pl"], {
+        trustedDomains: ["amazon.pl", "amazon.com", "amazon.co.uk", "amazon.de"],
+        canBeBilledViaMarketplace: false,
+    }),
+    providerEntry("Prime Video", "app_store_marketplace", ["primevideo", "amazon prime video"], {
+        trustedDomains: ["primevideo.com", "channels.primevideo.com", "bounces.primevideo.com"],
+        suspiciousDomainPolicy: "marketplace_allowed",
+    }),
+    providerEntry("Google Play", "app_store_marketplace", ["play.google.com", "googleplay-noreply@google.com"], {
+        trustedDomains: ["google.com"],
+        suspiciousDomainPolicy: "marketplace_allowed",
+    }),
+    providerEntry("Apple", "app_store_marketplace", ["app store", "apple services"], {
+        trustedDomains: ["apple.com", "email.apple.com", "mzstore.com"],
+        suspiciousDomainPolicy: "marketplace_allowed",
+    }),
+    providerEntry("YouTube", "streaming_video", ["youtube.com"]),
+    ...providerEntries("streaming_video", [
+        "Netflix", "Disney+", "Max", "HBO Max", "HBO", "SkyShowtime", "Apple TV", "Apple TV+",
+        "Canal+", "Canal+ Online", "Player", "Player.pl", "Polsat Box Go", "TVP VOD",
+        "CDA Premium", "Megogo", "Viaplay", "FilmBox+", "Rakuten TV", "Chili", "Mubi",
+        "Crunchyroll", "YouTube Premium", "Twitch", "DAZN", "Eleven Sports", "Eurosport",
+        "Discovery+", "Peacock", "Paramount+", "Hulu", "Starz", "MGM+", "BritBox",
+        "CuriosityStream", "Nebula", "Dropout",
+    ]),
+    ...providerEntries("music_audio", [
+        "Spotify", "Apple Music", "YouTube Music", "Tidal", "Deezer", "Amazon Music",
+        "SoundCloud", "Audible", "Storytel", "Legimi", "Empik Go", "Audioteka", "BookBeat",
+        "Pocket Casts", "Podimo", "Calm", "Headspace",
+    ]),
+    ...providerEntries("cloud_storage", [
+        "Google One", "Google Drive", "iCloud", "iCloud+", "Dropbox", "Microsoft OneDrive",
+        "Box", "pCloud", "MEGA", "Sync.com", "Proton Drive", "NordLocker", "Backblaze", "iDrive",
+    ]),
+    ...providerEntries("productivity_office", [
+        "Microsoft 365", "Google Workspace", "Notion", "Evernote", "Todoist", "Trello",
+        "Asana", "ClickUp", "Monday.com", "Slack", "Zoom", "Calendly", "Miro", "Airtable",
+        "Coda", "Grammarly", "LanguageTool", "Readwise", "Pocket", "Instapaper",
+    ]),
+    ...providerEntries("ai_tools", [
+        "OpenAI", "ChatGPT", "ChatGPT Plus", "ChatGPT Pro", "Claude", "Anthropic",
+        "Perplexity", "Gemini", "Google AI", "Midjourney", "Runway", "ElevenLabs",
+        "HeyGen", "Synthesia", "Cursor", "Windsurf", "GitHub Copilot", "Lovable",
+        "Replit", "Poe", "Jasper", "Copy.ai",
+    ]),
+    ...providerEntries("design_creative", [
+        "Adobe", "Adobe Creative Cloud", "Adobe Acrobat Pro", "Canva", "Figma", "Framer",
+        "Webflow", "Sketch", "Envato", "Freepik", "Shutterstock", "Getty Images",
+        "Epidemic Sound", "Artlist", "Motion Array", "CapCut", "Picsart", "Lightroom",
+    ]),
+    ...providerEntries("developer_tools", [
+        "GitHub", "GitLab", "Bitbucket", "JetBrains", "Vercel", "Netlify", "Supabase",
+        "Firebase", "Railway", "Render", "Heroku", "DigitalOcean", "AWS", "Google Cloud",
+        "Microsoft Azure", "Cloudflare", "Sentry", "Datadog", "Logtail", "Better Stack",
+        "Postman", "Docker", "npm", "Stripe", "Clerk", "Auth0",
+    ]),
+    ...providerEntries("vpn_security", [
+        "NordVPN", "Surfshark", "ExpressVPN", "Proton VPN", "Malwarebytes", "Norton",
+        "McAfee", "Avast", "AVG", "Kaspersky", "ESET", "Bitdefender",
+    ]),
+    ...providerEntries("password_manager", [
+        "NordPass", "Proton Pass", "1Password", "Bitwarden", "Dashlane", "LastPass",
+        "Keeper", "RoboForm",
+    ]),
+    ...providerEntries("education_learning", [
+        "Duolingo", "Babbel", "Busuu", "Memrise", "Coursera", "Udemy", "Skillshare",
+        "MasterClass", "Brilliant", "Codecademy", "DataCamp", "LinkedIn Learning",
+        "Pluralsight", "Domestika", "Yousician", "LingQ", "Preply", "Cambly",
+    ]),
+    ...providerEntries("fitness_health", [
+        "Strava", "AllTrails", "Fitbit", "Garmin", "Whoop", "MyFitnessPal", "Lifesum",
+        "Freeletics", "Fitbod", "Peloton", "Zwift", "Nike Training Club", "BetterMe", "Flo", "Clue",
+    ]),
+    ...providerEntries("dating_social", [
+        "Tinder", "Bumble", "Badoo", "Hinge", "Grindr", "OkCupid", "Match",
+        "Discord Nitro", "Telegram Premium", "X Premium", "LinkedIn Premium",
+        "Snapchat+", "Reddit Premium", "Patreon", "OnlyFans", "Substack",
+    ]),
+    ...providerEntries("delivery_membership", [
+        "Wolt+", "Bolt Plus", "Glovo Prime", "Allegro Smart", "Empik Premium",
+        "Zabka Nano", "Zappka", "Carrefour", "Frisco",
+    ]),
+    ...providerEntries("telecom_mobile", [
+        "Play", "Orange", "T-Mobile", "Plus", "Polkomtel", "Nju Mobile", "Plush",
+        "Heyah", "Lajt Mobile", "Virgin Mobile", "Mobile Vikings", "Premium Mobile",
+        "Red Bull Mobile", "Fakt Mobile", "Otvarta", "a2mobile", "Lycamobile",
+        "Vectra mobile", "Netia mobile",
+    ]),
+    ...providerEntries("internet_isp", [
+        "UPC", "Netia", "Vectra", "Multimedia", "TOYA", "INEA", "JMDI", "Fiberhost",
+        "Swiatlowod Inwestycje", "East & West", "Chopin Telewizja Kablowa", "Elsat",
+        "Korbank", "Petrus", "Sat Film", "Telkab", "Promax", "Asta-Net", "Sferanet",
+        "Limes", "Leon", "Airmax", "RFC", "LocalNet",
+    ]),
+    ...providerEntries("utilities_energy", [
+        "Tauron", "PGE", "E.ON", "Energa", "Enea", "PGNiG", "Polenergia",
+        "Fortum", "Veolia", "Innogy",
+    ]),
+    ...providerEntries("hosting_domains", [
+        "home.pl", "nazwa.pl", "cyber_Folks", "OVH", "LH.pl", "Domeny.tv",
+        "Aftermarket", "GoDaddy", "Namecheap", "Bluehost", "SiteGround", "Hostinger",
+        "Webh", "Zenbox", "dhosting", "MyDevil",
+    ]),
+    ...providerEntries("finance_accounting", [
+        "inFakt", "Fakturownia", "iFirma", "wFirma", "Taxeon", "Firmao",
+        "Comarch ERP XT", "Symfonia", "SaldeoSMART", "Baselinker", "Shopify",
+        "Mailchimp", "GetResponse", "FreshMail", "Brevo", "ConvertKit",
+    ]),
+    ...providerEntries("payment_processor", [
+        "PayPal", "Stripe", "Paddle", "FastSpring", "Braintree", "Adyen",
+        "Checkout.com", "Recurly", "Chargebee", "2Checkout", "Verifone",
+        "PayU", "Przelewy24", "Autopay", "Tpay", "BLIK",
+    ]),
 ];
 
+const PROVIDER_CATALOG = PROVIDER_REGISTRY.map((provider) => ({
+    name: provider.canonicalName,
+    patterns: provider.aliases.map((alias) => alias.toLowerCase()),
+}));
+
+function normalizeProviderForPublicResult(provider: string | undefined) {
+    if (!provider) {
+        return undefined;
+    }
+
+    const legacyProviderNames: Record<string, string> = {
+        "YouTube Premium": "YouTube",
+        "YouTube Music": "YouTube",
+        "Disney+": "Disney",
+        "Microsoft 365": "Microsoft",
+        "Microsoft OneDrive": "Microsoft",
+    };
+
+    return legacyProviderNames[provider] ?? provider;
+}
+
+function getProviderRegistryEntry(provider: string | undefined) {
+    const normalizedProvider = normalizeProviderForPublicResult(provider);
+
+    return PROVIDER_REGISTRY.find(
+        (entry) =>
+            entry.canonicalName === provider ||
+            entry.canonicalName === normalizedProvider ||
+            entry.aliases.some(
+                (alias) => alias.toLowerCase() === provider?.toLowerCase()
+            )
+    );
+}
+
+function repairPolishMojibake(value: string) {
+    const replacements: Array<[RegExp, string]> = [
+        [/─ů/g, "ą"],
+        [/─ä/g, "Ą"],
+        [/─ç/g, "ć"],
+        [/─ć/g, "Ć"],
+        [/─Ö/g, "ę"],
+        [/─ś/g, "Ę"],
+        [/┼é/g, "ł"],
+        [/┼ü/g, "Ł"],
+        [/┼ä/g, "ń"],
+        [/┼â/g, "Ń"],
+        [/├│/g, "ó"],
+        [/├ô/g, "Ó"],
+        [/┼Ť/g, "ś"],
+        [/┼Ü/g, "Ś"],
+        [/┼║/g, "ź"],
+        [/┼╣/g, "Ź"],
+        [/┼╝/g, "ż"],
+        [/┼╗/g, "Ż"],
+    ];
+
+    return replacements.reduce(
+        (text, [pattern, replacement]) => text.replace(pattern, replacement),
+        value
+    );
+}
+
 export function cleanText(value: string | null | undefined) {
-    return (value ?? "")
+    return repairPolishMojibake(
+        (value ?? "")
+        .replace(/ÔÇô|ÔÇö/g, "-")
+        .replace(/ÔÇ×|ÔÇŁ|ÔÇť/g, '"')
+        .replace(/ÔÇÖ/g, "'")
         .replace(/&#39;|&apos;/g, "'")
         .replace(/&quot;/g, '"')
         .replace(/&amp;/g, "&")
@@ -113,6 +419,7 @@ export function cleanText(value: string | null | undefined) {
         .replace(/&gt;/g, ">")
         .replace(/&#\d+;|&#x[\da-f]+;|&[a-z]+;/gi, "")
         .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    )
         .replace(/\s+/g, " ")
         .trim();
 }
@@ -260,6 +567,7 @@ function hasPriceChangeSignal(subjectAndSnippet: string) {
         /zaktualizowan[a\u0105] cen[e\u0119]/i,
         /ceny plan[o\u00f3]w premium rosn[a\u0105]/i,
         /aktualizujemy cen[e\u0119]/i,
+        /now[aą] cen[aeę]/i,
         /nowa cena/i,
         /\b(price change|updated price|price increase|your price is changing)\b/i,
     ]);
@@ -277,6 +585,9 @@ function hasActiveSubscriberSignal(subjectAndSnippet: string) {
         /zachowujesz dost[e\u0119]p/i,
         /aby pozosta[c\u0107] w planie/i,
         /pozostajesz w planie/i,
+        /kontynuuj[a\u0105]c subskrypcj[e\u0119]/i,
+        /kontynuujac subskrypcje/i,
+        /aktualn(ego|ym|y)\s+klient(a|em|owi)?/i,
         /\b(active subscriber|as a subscriber|keep your plan|continue your subscription)\b/i,
     ]);
 }
@@ -328,6 +639,348 @@ function hasPhoneTopUpSignal(subjectAndSnippet: string) {
     ]);
 }
 
+function hasMarketingIntermediarySignal(combinedText: string) {
+    return includesAny(combinedText, [
+        /mailing_reklamowy@onet\.pl/i,
+        /mailing_reklamowy@grupaonet\.pl/i,
+        /\b[^<\n\r]+ - onet\s*</i,
+        /dostarczone przez interi[eę]/i,
+        /mailing@interia\.pl/i,
+    ]);
+}
+
+function hasNewsletterRecommendationSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /specjalnie dla ciebie/i,
+        /na podstawie ogl[a\u0105]danych/i,
+        /na podstawie ogladanych/i,
+        /obejrzyj teraz/i,
+        /polecamy/i,
+        /zmiany w regulaminie/i,
+        /zmian[yę] w warunkach/i,
+        /aktualizacja warunk[oó]w/i,
+        /\bnewsletter\b/i,
+        /\brecommendation\b/i,
+        /\brecommended for you\b/i,
+    ]);
+}
+
+function hasOneTimePurchaseSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /zam[o\u00f3]wienie nr/i,
+        /zam[o\u00f3]wienie numer/i,
+        /zamowienie nr/i,
+        /zamowienie numer/i,
+        /dotyczy zam[o\u00f3]wienia/i,
+        /dotyczy zamowienia/i,
+        /przekazane do realizacji/i,
+        /zosta[lł]o wys[lł]ane/i,
+        /\border number\b/i,
+        /\bone-time purchase\b/i,
+        /\brental\b/i,
+        /wypo[z\u017c]yczenia/i,
+        /wypozyczenia/i,
+        /zakupy/i,
+        /dostawa/i,
+        /\bsklep\b/i,
+        /produkt/i,
+        /koszyk/i,
+        /receipt for (?:ride|order)/i,
+        /rachunek dla restauracji/i,
+        /twoje zam[o\u00f3]wienie/i,
+        /twoje zamowienie/i,
+    ]);
+}
+
+function hasSubscriptionUpsellSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /pozwoli[l\u0142]aby ci zaoszcz[e\u0119]dzi[c\u0107]/i,
+        /pozwolilaby ci zaoszczedzic/i,
+        /korzystaj taniej/i,
+        /korzystaj z .{0,80} dzi[e\u0119]ki subskrypcji/i,
+        /korzystaj z .{0,80} dzieki subskrypcji/i,
+        /dzi[e\u0119]ki subskrypcji mo[z\u017c]esz/i,
+        /dzieki subskrypcji mozesz/i,
+        /zamawiaj .{0,80} z wyj[a\u0105]tkowymi korzy[s\u015b]ciami/i,
+        /zamawiaj .{0,80} z wyjatkowymi korzysciami/i,
+        /korzystaj z benefit[o\u00f3]w/i,
+        /korzystaj z benefitow/i,
+        /oszcz[e\u0119]dzaj dzi[e\u0119]ki subskrypcji/i,
+        /oszczedzaj dzieki subskrypcji/i,
+        /koszt subskrypcji\??\s*to twoje oszcz[e\u0119]dno[s\u015b]ci/i,
+        /koszt subskrypcji\??\s*to twoje oszczednosci/i,
+        /korzystaj bezp[l\u0142]atnie przez \d+ tyg/i,
+        /korzystaj bezplatnie przez \d+ tyg/i,
+        /wypr[o\u00f3]buj/i,
+        /wyprobuj/i,
+        /\b(start your free trial|try free|try it free)\b/i,
+        /oferta specjalna tylko dla ciebie/i,
+        /\b(unlock benefits|save with subscription|enjoy benefits with subscription|subscription benefits|get more with subscription)\b/i,
+    ]);
+}
+
+function hasFreeAppStorePurchaseSignal(subjectAndSnippet: string) {
+    return (
+        includesAny(subjectAndSnippet, [
+            /playstation store/i,
+            /app store/i,
+            /google play/i,
+            /microsoft store/i,
+            /\bsklepie playstation\b/i,
+        ]) &&
+        includesAny(subjectAndSnippet, [
+            /\b(aplikacja|app)\b/i,
+            /\(aplikacja\)/i,
+            /one-time app purchase/i,
+        ]) &&
+        includesAny(subjectAndSnippet, [
+            /\b0[,.]00\s*z[l\u0142]\b/i,
+            /\b0[,.]00\s*(PLN|USD|EUR|GBP)\b/i,
+            /\bfree\b/i,
+            /bezp[l\u0142]atn/i,
+        ])
+    );
+}
+
+function hasRawHeaderSnippetSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\bReceived:\s/i,
+        /\bReceived-SPF:/i,
+        /\bAuthentication-Results:/i,
+        /\bDKIM-Signature:/i,
+    ]);
+}
+
+function hasStrongActiveBillingConfirmationSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(payment confirmed|payment confirmation|charged|invoice issued|subscription started|trial started|your free trial has started)\b/i,
+        /potwierdzenie p[\u0142l]atno[s\u015b]ci/i,
+        /p[\u0142l]atno[s\u015b][c\u0107].{0,40}zrealizowana/i,
+        /zosta[l\u0142]a zrealizowana/i,
+        /wystawili[s\u015b]my faktur[e\u0119]/i,
+        /bezp[l\u0142]atny okres pr[o\u00f3]bny .*rozpocz[a\u0105][l\u0142]/i,
+        /okres pr[o\u00f3]bny .*rozpocz[a\u0105][l\u0142]/i,
+        /subskrypcja .*rozpocznie si[e\u0119] automatycznie/i,
+        /kontynuuj[a\u0105]c subskrypcj[e\u0119]/i,
+        /metoda p[\u0142l]atno[s\u015b]ci .*obci[a\u0105][z\u017c]ana/i,
+    ]);
+}
+
+function hasCreditLoanMarketingSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\bRRSO\b/i,
+        /rzeczywista roczna stopa oprocentowania/i,
+        /po[zż]yczka/i,
+        /pozyczka/i,
+        /kredyt/i,
+        /ca[lł]kowita kwota po[zż]yczki/i,
+        /calkowita kwota pozyczki/i,
+        /ca[lł]kowita kwota kredytu/i,
+        /calkowita kwota kredytu/i,
+        /oprocentowanie/i,
+        /prowizja/i,
+        /\brat[ay]\b/i,
+        /miesi[eę]czne raty/i,
+        /miesieczne raty/i,
+        /leasing/i,
+        /kredyt 50\/50/i,
+    ]);
+}
+
+function hasExpiredReactivationSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\btrial has expired\b/i,
+        /\baccount has expired\b/i,
+        /\bsubscription expired\b/i,
+        /\bhas ended\b/i,
+        /\bended\b/i,
+        /zako[n\u0144]czy[l\u0142]a si[e\u0119]/i,
+        /zakonczyla sie/i,
+        /twoja subskrypcja wygas[lł]a/i,
+        /wygas[lł]a jaki[sś] czas temu/i,
+        /reaktywuj[aą]c subskrypcj[eę]/i,
+        /\bconsider a subscription plan\b/i,
+    ]);
+}
+
+function detectBillingChannel(from: string, subjectAndSnippet: string) {
+    const text = `${from} ${subjectAndSnippet}`;
+
+    if (
+        includesAny(from, [
+            /primevideo\.com/i,
+            /channels\.primevideo\.com/i,
+            /bounces\.primevideo\.com/i,
+        ])
+    ) {
+        return "Prime Video";
+    }
+
+    if (
+        includesAny(subjectAndSnippet, [
+            /\bprime video channels\b/i,
+            /\bon prime video\b/i,
+            /w us[l\u0142]udze prime video/i,
+            /w usludze prime video/i,
+            /subskrypcj[ae\u0119].{0,80}prime video/i,
+            /subskrypcja.{0,80}prime video/i,
+        ])
+    ) {
+        return "Prime Video";
+    }
+
+    if (
+        includesAny(text, [
+            /googleplay-noreply@google\.com/i,
+            /play\.google\.com/i,
+            /\bgoogle play\b/i,
+        ])
+    ) {
+        return "Google Play";
+    }
+
+    if (
+        includesAny(text, [
+            /@(?:email\.)?apple\.com/i,
+            /mzstatic\.com/i,
+            /\bapple receipt\b/i,
+            /\bbilled through apple\b/i,
+            /rachunek apple/i,
+        ])
+    ) {
+        return "Apple";
+    }
+
+    if (/\b(paypal|stripe|autopay|tpay|payu|przelewy24)\b/i.test(text)) {
+        return "Payment Processor";
+    }
+
+    return undefined;
+}
+
+function hasMarketplaceBillingSignal(from: string, subjectAndSnippet: string) {
+    return Boolean(detectBillingChannel(from, subjectAndSnippet));
+}
+
+function cleanExtractedProvider(value: string | undefined) {
+    const cleaned = cleanInferredProviderName(value)
+        ?.replace(/\b(on|w|us[l\u0142]udze|usludze|prime|video)\b/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    return cleaned || undefined;
+}
+
+function inferProviderFromMarketplaceBilling(subjectAndSnippet: string) {
+    const patterns = [
+        /masz subskrypcj[e\u0119]\s+(.{2,80}?)\s+w us[l\u0142]udze prime video/i,
+        /subskrypcj[aię]\s+(.{2,80}?)\s+w us[l\u0142]udze prime video/i,
+        /zmiany w twojej subskrypcji kana[l\u0142]u\s+(.{2,80})/i,
+        /subskrypcji kana[l\u0142]u\s+(.{2,80})/i,
+        /dzi[e\u0119]kujemy za zakup subskrypcji\s+(.{2,80}?)(?:[.!,]|$)/i,
+        /dziekujemy za zakup subskrypcji\s+(.{2,80}?)(?:[.!,]|$)/i,
+        /your\s+(.{2,80}?)\s+subscription on prime video/i,
+        /subscription channel\s+(.{2,80}?)(?:[.!,]|$)/i,
+        /\b(.{2,60}?)\s+on prime video\b/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = subjectAndSnippet.match(pattern);
+        const provider = cleanExtractedProvider(match?.[1]);
+
+        if (provider) {
+            return provider;
+        }
+    }
+
+    return undefined;
+}
+
+function normalizeMarketplaceProviderName(provider: string) {
+    return provider
+        .replace(/\s+Premium\b/i, "")
+        .replace(/\s+Standard\b/i, "")
+        .replace(/\s+Individual\b/i, "")
+        .trim();
+}
+
+function detectMarketplaceServiceProvider(subjectAndSnippet: string) {
+    const planName = detectPlanName(subjectAndSnippet);
+
+    if (planName) {
+        return normalizeMarketplaceProviderName(planName);
+    }
+
+    if (/disney\+/i.test(subjectAndSnippet)) {
+        return "Disney+";
+    }
+
+    const provider = detectProvider(subjectAndSnippet);
+
+    if (
+        provider &&
+        !["Apple", "Google Play", "Prime Video", "Amazon"].includes(provider)
+    ) {
+        return normalizeMarketplaceProviderName(provider);
+    }
+
+    const subscriptionTo = subjectAndSnippet.match(
+        /\bsubscription to\s+(.{2,60}?)(?:\.|,|$)/i
+    )?.[1];
+    const cleaned = cleanExtractedProvider(subscriptionTo);
+
+    return cleaned ? normalizeMarketplaceProviderName(cleaned) : undefined;
+}
+
+function inferProviderFromPaymentProcessorText(from: string, subjectAndSnippet: string) {
+    if (!isTrustedPaymentProcessorText(from)) {
+        return undefined;
+    }
+
+    const patterns = [
+        /do us[\u0142l]ugodawcy\s*-\s*([^\n\r|:;.,]+)/i,
+        /odbiorca:\s*([^\n\r|:;.,]+)/i,
+        /us[\u0142l]ugodawca:\s*([^\n\r|:;.,]+)/i,
+        /sprzedawca:\s*([^\n\r|:;.,]+)/i,
+        /merchant:\s*([^\n\r|:;.,]+)/i,
+        /seller:\s*([^\n\r|:;.,]+)/i,
+        /payment to\s+([^\n\r|:;.,]+)/i,
+        /automatic payment to\s+([^\n\r|:;.,]+)/i,
+        /paid to\s+([^\n\r|:;.,]+)/i,
+        /payment for\s+([^\n\r|:;.,]+)/i,
+        /receipt from\s+([^\n\r|:;.,]+)/i,
+        /transakcja dla\s+([^\n\r|:;.,]+)/i,
+        /p[\u0142l]atno[s\u015b][c\u0107]\s+automatyczna\s+do\s+([^\n\r|:;.,]+)/i,
+        /platnosc automatyczna do\s+([^\n\r|:;.,]+)/i,
+        /p[\u0142l]atno[s\u015b][c\u0107]\s+cykliczna\s+za\s+([^\n\r|:;.,]+)/i,
+        /platnosc cykliczna za\s+([^\n\r|:;.,]+)/i,
+        /p[\u0142l]atno[s\u015b][c\u0107]\s+za\s+([^\n\r|:;.,]+)/i,
+        /platnosc za\s+([^\n\r|:;.,]+)/i,
+        /invoice from\s+([^\n\r|:;.,]+)/i,
+        /billing agreement with\s+([^\n\r|:;.,]+)/i,
+        /opis zam[o\u00f3]wienia w\s+([^\n\r|:;.,]+)/i,
+    ];
+
+    for (const pattern of patterns) {
+        const match = subjectAndSnippet.match(pattern);
+        const provider = cleanInferredProviderName(match?.[1]);
+        const cleanedProvider = provider
+            ?.replace(/\b(Twoja|Platnosc|Płatnosc|Zostala|Została).*$/i, "")
+            .trim();
+
+        if (
+            cleanedProvider &&
+            !/\b(terg|astarium|koleo|media expert|zamowienie|zam[o\u00f3]wienie|sklep|shop|random shop)\b/i.test(
+                cleanedProvider
+            )
+        ) {
+            return cleanedProvider;
+        }
+    }
+
+    return undefined;
+}
+
 function hasPromotionalTrialSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
         /\bstart a free trial today\b/i,
@@ -346,6 +999,10 @@ function hasActiveTrialSubscriptionSignal(subjectAndSnippet: string) {
         /\b(trial ends in|trial ends soon|trial will end|trial ends on|trial will end on)\b/i,
         /\b(subscription will renew|will renew monthly|will renew automatically)\b/i,
         /\bsubskrypcja .{0,40}jest aktywna\b/i,
+        /okres pr[o\u00f3]bny .*w[l\u0142]a[s\u015b]nie si[e\u0119] rozpocz[a\u0105][l\u0142]/i,
+        /okres probny .*wlasnie sie rozpoczal/i,
+        /subskrypcja .*rozpocznie si[e\u0119] automatycznie/i,
+        /subskrypcja .*rozpocznie sie automatycznie/i,
         /\bokres pr[o\u00f3]bny .{0,60}ko[n\u0144]czy/i,
         /\bbedziemy obciazac\b/i,
         /\bb[e\u0119]dziemy obci[a\u0105][z\u017c]a[c\u0107]\b/i,
@@ -389,6 +1046,13 @@ function hasCancellationSignal(subjectAndSnippet: string) {
         /anulowano subskrypcj[e\u0119]/i,
         /subskrypcja zosta[l\u0142]a anulowana/i,
         /anulowana subskrypcja/i,
+        /potwierdzenie anulowania .*subskrypcji/i,
+        /przykro nam ci[e\u0119] po[z\u017c]egna[c\u0107]/i,
+        /przykro nam cie pozegnac/i,
+        /zachowasz dost[e\u0119]p do ko[n\u0144]ca okresu rozliczeniowego/i,
+        /zachowasz dostep do konca okresu rozliczeniowego/i,
+        /\bno further charges\b/i,
+        /\bscheduled for cancellation\b/i,
         /nie zostanie naliczona op[l\u0142]ata/i,
     ]);
 }
@@ -429,7 +1093,9 @@ function hasUnreadableEncodedEvidenceSignal(subjectAndSnippet: string) {
 }
 
 function isTrustedPaymentProcessorText(text: string) {
-    return /\b(paypal|stripe|google|payu|przelewy24|autopay|tpay)\b/i.test(text);
+    return /(?:@|\.)paypal\.com\b|(?:@|\.)stripe\.com\b|(?:@|\.)payu\.(?:com|pl)\b|(?:@|\.)przelewy24\.pl\b|(?:@|\.)autopay\.pl\b|(?:@|\.)tpay\.com\b|(?:@|\.)google\.com\b|payments-noreply@google\.com/i.test(
+        text
+    );
 }
 
 function isSuspiciousSenderForProvider(from: string, provider: string | undefined) {
@@ -545,8 +1211,38 @@ export function detectProvider(text: string) {
     const normalizedText = text.toLowerCase();
 
     return PROVIDER_CATALOG.find((provider) =>
-        provider.patterns.some((pattern) => normalizedText.includes(pattern))
+        provider.patterns.some((pattern) => matchesProviderPattern(normalizedText, pattern))
     )?.name;
+}
+
+function matchesProviderPattern(normalizedText: string, pattern: string) {
+    const normalizedPattern = pattern.toLowerCase().trim();
+
+    if (!normalizedPattern) {
+        return false;
+    }
+
+    if (
+        normalizedPattern.includes(".") ||
+        normalizedPattern.includes("+") ||
+        normalizedPattern.includes("@")
+    ) {
+        return normalizedText.includes(normalizedPattern);
+    }
+
+    if (normalizedPattern.length <= 3) {
+        return new RegExp(`\\b${escapeRegExp(normalizedPattern)}\\b`, "i").test(
+            normalizedText
+        );
+    }
+
+    return new RegExp(`\\b${escapeRegExp(normalizedPattern)}\\b`, "i").test(
+        normalizedText
+    );
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function cleanInferredProviderName(value: string | undefined) {
@@ -566,7 +1262,7 @@ function cleanInferredProviderName(value: string | undefined) {
         .filter(Boolean)
         .slice(0, 3)
         .map((part) =>
-            part.length <= 4
+            part.length <= 4 && part === part.toUpperCase()
                 ? part.toUpperCase()
                 : part.charAt(0).toUpperCase() + part.slice(1)
         )
@@ -622,7 +1318,7 @@ function inferProviderFromInvoiceContext(from: string, subjectAndSnippet: string
 }
 
 function isPaymentProcessorText(text: string) {
-    return /\b(paypal|stripe|google payments|payments-noreply|receipts\+acct)\b/i.test(
+    return /\b(paypal|stripe|payu|przelewy24|autopay|tpay|google payments|payments-noreply|receipts\+acct)\b/i.test(
         text
     );
 }
@@ -652,6 +1348,22 @@ function detectPlanName(text: string) {
         {
             name: "YouTube Premium",
             pattern: /\byoutube\s+premium\b/i,
+        },
+        {
+            name: "SkyShowtime",
+            pattern: /\bsky\s?showtime\b/i,
+        },
+        {
+            name: "Apple TV",
+            pattern: /\bapple\s+tv\+?\b/i,
+        },
+        {
+            name: "AllTrails+",
+            pattern: /\balltrails\+?\b/i,
+        },
+        {
+            name: "Uber One",
+            pattern: /\buber\s+one\b/i,
         },
         {
             name: "YouTube Premium Lite",
@@ -888,9 +1600,28 @@ function collectDetectionSignals(params: {
     combinedText: string;
 }): DetectionSignals {
     const detectedCatalogProvider = detectProvider(params.combinedText);
-    const provider =
+    const billingChannel = detectBillingChannel(params.from, params.subjectAndSnippet);
+    const marketplaceProvider = inferProviderFromMarketplaceBilling(
+        params.subjectAndSnippet
+    );
+    const marketplaceServiceProvider =
+        billingChannel && billingChannel !== "Payment Processor"
+            ? detectMarketplaceServiceProvider(params.subjectAndSnippet)
+            : undefined;
+    const paymentProcessorProvider = inferProviderFromPaymentProcessorText(
+        params.from,
+        params.subjectAndSnippet
+    );
+    const rawProvider =
+        marketplaceServiceProvider ??
+        marketplaceProvider ??
         detectedCatalogProvider ??
+        paymentProcessorProvider ??
         inferProviderFromInvoiceContext(params.from, params.subjectAndSnippet);
+    const provider =
+        billingChannel && billingChannel !== "Payment Processor" && marketplaceServiceProvider
+            ? rawProvider
+            : normalizeProviderForPublicResult(rawProvider);
     const planName = detectPlanName(params.combinedText);
     const billingCycle = detectBillingCycle(params.subjectAndSnippet);
     const trialEndDateText = detectTrialEndDateText(params.subjectAndSnippet);
@@ -907,6 +1638,36 @@ function collectDetectionSignals(params: {
         params.combinedText
     );
     const hasPhoneTopUpEvidence = hasPhoneTopUpSignal(params.combinedText);
+    const hasMarketingIntermediaryEvidence = hasMarketingIntermediarySignal(
+        params.combinedText
+    );
+    const hasSubscriptionUpsellEvidence = hasSubscriptionUpsellSignal(
+        params.subjectAndSnippet
+    );
+    const hasCreditLoanMarketingEvidence = hasCreditLoanMarketingSignal(
+        params.subjectAndSnippet
+    );
+    const hasExpiredReactivationEvidence = hasExpiredReactivationSignal(
+        params.subjectAndSnippet
+    );
+    const hasMarketplaceBillingEvidence = hasMarketplaceBillingSignal(
+        params.from,
+        params.subjectAndSnippet
+    );
+    const providerEntry = getProviderRegistryEntry(provider);
+    const hasTrustedSenderEvidence =
+        Boolean(provider) &&
+        providerEntry?.category !== "payment_processor" &&
+        !isSuspiciousSenderForProvider(params.from, provider);
+    const hasOneTimePurchaseEvidence = hasOneTimePurchaseSignal(
+        params.subjectAndSnippet
+    );
+    const hasFreeAppStorePurchaseEvidence = hasFreeAppStorePurchaseSignal(
+        params.subjectAndSnippet
+    );
+    const hasNewsletterRecommendationEvidence = hasNewsletterRecommendationSignal(
+        params.subjectAndSnippet
+    );
     const hasNegatedSubscriptionEvidence = hasNegatedSubscriptionSignal(
         params.subjectAndSnippet
     );
@@ -915,7 +1676,7 @@ function collectDetectionSignals(params: {
     );
     const hasPaymentDueEvidence =
         !hasNegatedBillingEvidence && hasPaymentDueSignal(params.subjectAndSnippet);
-    const hasMarketingEvidence = includesAny(params.subjectAndSnippet, [
+    const hasMarketingEvidence = hasMarketingIntermediaryEvidence || hasSubscriptionUpsellEvidence || includesAny(params.subjectAndSnippet, [
         /\b(newsletter|sale|promo|offer|deal|limited time offer|special offer|discover|promotional email|try it|upgrade to|switch to|activate|send-premium|referral|refer a friend)\b/i,
         /\b(oferta|oferte|oferty|wyj[a\u0105]tkowa oferta|wyjatkowa oferta|sprawd[z\u017a] szczeg[o\u00f3][l\u0142]y oferty|sprawdz szczegoly oferty|oferta specjalna|kup na|przejd[z\u017a] na|przejdz na|aktywuj|wypr[o\u00f3]buj|wyprobuj|wybierz abonament|smartfonem|rabatach|zgody marketingowe|promocyjne|promocje|marketingowe|promocyjna|poznaj)\b/i,
         /kod polecaj[a\u0105]cy/i,
@@ -963,6 +1724,8 @@ function collectDetectionSignals(params: {
     const hasChargedEvidence = includesAny(params.subjectAndSnippet, [
         /\b(charged|automatically charged|charged for)\b/i,
         /\b(b[e\u0119]dziemy\s+obci[a\u0105][z\u017c]a[c\u0107]|bedziemy\s+obciazac|obci[a\u0105][z\u017c]a[c\u0107]|obciazac|obci[a\u0105][z\u017c]ymy|obciazymy|obci[a\u0105][z\u017c]enie|obciazenie)\b/i,
+        /metoda p[\u0142l]atno[s\u015b]ci .*b[e\u0119]dzie obci[a\u0105][z\u017c]ana/i,
+        /bedzie obciazana/i,
     ]);
     const hasRecurringEvidence = includesAny(params.subjectAndSnippet, [
         /\b(renewal|renews|renewed|will renew|renew automatically|automatically|automatic payment|recurring)\b/i,
@@ -1029,6 +1792,9 @@ function collectDetectionSignals(params: {
     const hasUnreadableEncodedEvidence = hasUnreadableEncodedEvidenceSignal(
         params.subjectAndSnippet
     );
+    const hasRawHeaderSnippetEvidence = hasRawHeaderSnippetSignal(
+        params.subjectAndSnippet
+    );
     const hasSuspiciousSenderEvidence = isSuspiciousSenderForProvider(
         params.from,
         provider
@@ -1041,12 +1807,14 @@ function collectDetectionSignals(params: {
 
     return {
         provider,
-        providerFromPaymentProcessor:
-            isPaymentProcessorText(params.from) && provider ? provider : undefined,
+        providerFromPaymentProcessor: paymentProcessorProvider,
         planName,
+        billingChannel,
+        providerCategory: providerEntry?.category,
         billingCycle,
         trialEndDateText,
         amountText,
+        currency: detectCurrency(params.subjectAndSnippet),
         hasReceiptEvidence,
         hasInvoiceEvidence,
         hasPaymentEvidence,
@@ -1063,6 +1831,15 @@ function collectDetectionSignals(params: {
         hasBillingDateEvidence,
         hasTransportTicketEvidence,
         hasPhoneTopUpEvidence,
+        hasMarketingIntermediaryEvidence,
+        hasSubscriptionUpsellEvidence,
+        hasCreditLoanMarketingEvidence,
+        hasExpiredReactivationEvidence,
+        hasMarketplaceBillingEvidence,
+        hasTrustedSenderEvidence,
+        hasOneTimePurchaseEvidence,
+        hasFreeAppStorePurchaseEvidence,
+        hasNewsletterRecommendationEvidence,
         hasAccountSecurityEvidence,
         hasAccountSecurityCodeEvidence,
         hasVerificationEvidence,
@@ -1081,6 +1858,7 @@ function collectDetectionSignals(params: {
         hasActiveRenewalPaymentEvidence,
         hasPaymentReceiptTrialChargeEvidence,
         hasUnreadableEncodedEvidence,
+        hasRawHeaderSnippetEvidence,
         hasSuspiciousSenderEvidence,
         hasHighRiskProviderSuspiciousSenderEvidence,
     };
@@ -1107,6 +1885,297 @@ function hasRealActiveBillingEvidence(signals: DetectionSignals) {
         hasActivePriceChangeEvidence ||
         (signals.hasSubscriptionEvidence &&
             (signals.hasRecurringEvidence || signals.hasBillingCycleEvidence))
+    );
+}
+
+function hasTrustedInvoicePaymentDueEvidence(signals: DetectionSignals) {
+    return (
+        (signals.hasReceiptEvidence || signals.hasInvoiceEvidence) &&
+        (signals.hasPaymentDueEvidence ||
+            signals.hasChargedEvidence ||
+            signals.hasActiveRenewalPaymentEvidence ||
+            Boolean(signals.amountText))
+    );
+}
+
+function hasExplicitActiveBillingEvidence(signals: DetectionSignals) {
+    const hasActivePriceChangeEvidence =
+        signals.hasPaidTierEvidence &&
+        signals.hasPriceChangeEvidence &&
+        (signals.hasActiveSubscriberEvidence ||
+            signals.hasBillingDateEvidence ||
+            signals.hasBillingCycleEvidence ||
+            Boolean(signals.amountText));
+
+    return Boolean(
+        signals.hasReceiptEvidence ||
+            signals.hasInvoiceEvidence ||
+            signals.hasPaymentDueEvidence ||
+            signals.hasChargedEvidence ||
+            signals.hasPaymentFailedEvidence ||
+            signals.hasActiveRenewalPaymentEvidence ||
+            signals.hasActiveTrialSubscriptionEvidence ||
+            hasActivePriceChangeEvidence ||
+            (signals.hasActiveSubscriberEvidence &&
+                (signals.hasBillingDateEvidence ||
+                    signals.hasChargedEvidence ||
+                    signals.hasPaymentEvidence))
+    );
+}
+
+function classifyMessage(signals: DetectionSignals): MessageClassification {
+    const positiveEvidence: string[] = [];
+    const negativeEvidence: string[] = [];
+    const trustEvidence: string[] = [];
+    const riskEvidence: string[] = [];
+    let messageType: MessageType = "unknown";
+
+    if (signals.hasInvoiceEvidence || signals.hasPaymentDueEvidence) {
+        messageType = "invoice";
+        positiveEvidence.push("active billing invoice/payment due evidence");
+    } else if (signals.hasPaymentEvidence || signals.hasChargedEvidence) {
+        messageType = "payment_confirmation";
+        positiveEvidence.push("payment confirmation/charged evidence");
+    } else if (signals.hasPaymentFailedEvidence) {
+        messageType = "payment_failed";
+        positiveEvidence.push("payment failed evidence");
+    } else if (signals.hasPriceChangeEvidence && signals.hasActiveSubscriberEvidence) {
+        messageType = "price_change_active";
+        positiveEvidence.push("active subscriber price change evidence");
+    } else if (signals.hasActiveSubscriberEvidence || signals.hasBillingDateEvidence) {
+        messageType = "subscription_active_notice";
+        positiveEvidence.push("active subscription/billing date evidence");
+    } else if (signals.hasSubscriptionEvidence && signals.hasRecurringEvidence) {
+        messageType = "renewal_notice";
+        positiveEvidence.push("subscription renewal evidence");
+    } else if (signals.hasTrialEvidence && signals.hasActiveTrialSubscriptionEvidence) {
+        messageType = "subscription_started";
+        positiveEvidence.push("active trial/subscription started evidence");
+    }
+
+    if (signals.hasCancellationEvidence) {
+        messageType = "cancellation";
+        negativeEvidence.push("cancellation confirmation evidence");
+    } else if (signals.hasExpiredReactivationEvidence) {
+        messageType = signals.hasMarketingEvidence
+            ? "reactivation_marketing"
+            : "expired_trial";
+        negativeEvidence.push("expired trial/subscription reactivation evidence");
+    } else if (signals.hasRefundEvidence) {
+        messageType = "refund";
+        negativeEvidence.push("refund evidence");
+    } else if (signals.hasAccountSecurityEvidence) {
+        messageType = "security_login";
+        negativeEvidence.push("security/login/code evidence");
+    } else if (signals.hasOneTimePurchaseEvidence || signals.hasTransportTicketEvidence) {
+        messageType = "one_time_purchase";
+        negativeEvidence.push("one-time purchase/order/rental/ticket evidence");
+    } else if (signals.hasNewsletterRecommendationEvidence) {
+        messageType = "recommendation";
+        negativeEvidence.push("newsletter/recommendation evidence");
+    } else if (signals.hasMarketingEvidence) {
+        messageType = "marketing_offer";
+        negativeEvidence.push("marketing/offer evidence");
+    }
+
+    if (signals.provider) {
+        trustEvidence.push(`provider detected: ${signals.provider}`);
+    }
+
+    if (signals.billingChannel) {
+        trustEvidence.push(`billing channel: ${signals.billingChannel}`);
+    }
+
+    if (signals.hasTrustedSenderEvidence) {
+        trustEvidence.push("sender trusted for provider");
+    }
+
+    if (signals.hasSuspiciousSenderEvidence) {
+        riskEvidence.push("sender domain does not match detected provider");
+    }
+
+    if (signals.hasRawHeaderSnippetEvidence || signals.hasUnreadableEncodedEvidence) {
+        riskEvidence.push("body is raw headers or unreadable encoded content");
+    }
+
+    if (signals.providerFromPaymentProcessor) {
+        trustEvidence.push("trusted payment processor provider extraction");
+    }
+
+    const isFinalBlock =
+        negativeEvidence.length > 0 &&
+        [
+            "cancellation",
+            "expired_trial",
+            "reactivation_marketing",
+            "refund",
+            "security_login",
+            "one_time_purchase",
+            "recommendation",
+        ].includes(messageType) &&
+        !(
+            hasTrustedInvoicePaymentDueEvidence(signals) ||
+            (signals.hasPaidTierEvidence &&
+                (signals.hasInvoiceEvidence || signals.hasReceiptEvidence) &&
+                (signals.hasSubscriptionEvidence ||
+                    !["Google Play", "Prime Video", "Apple"].includes(
+                        signals.provider ?? ""
+                    )) &&
+                Boolean(signals.provider)) ||
+            signals.hasActiveRenewalPaymentEvidence ||
+            (signals.hasMarketplaceBillingEvidence &&
+                (signals.hasPaymentEvidence || signals.hasChargedEvidence) &&
+                (signals.hasSubscriptionEvidence ||
+                    signals.hasRecurringEvidence ||
+                    signals.hasActiveTrialSubscriptionEvidence))
+        );
+
+    return {
+        messageType,
+        positiveEvidence,
+        negativeEvidence,
+        trustEvidence,
+        riskEvidence,
+        extractedProvider: signals.provider,
+        category: signals.providerCategory,
+        billingChannel: signals.billingChannel,
+        marketplaceProvider:
+            signals.billingChannel && signals.billingChannel !== "Payment Processor"
+                ? signals.provider
+                : undefined,
+        merchant: signals.providerFromPaymentProcessor,
+        amountText: signals.amountText,
+        currency: signals.currency,
+        billingCycle: signals.billingCycle,
+        isTrial: signals.hasTrialEvidence || undefined,
+        isFinalBlock,
+        finalBlockReason: isFinalBlock ? negativeEvidence[0] : undefined,
+    };
+}
+
+function isTrustedBillingContext(signals: DetectionSignals) {
+    return Boolean(
+        signals.hasTrustedSenderEvidence ||
+            (signals.billingChannel && signals.billingChannel !== "Payment Processor") ||
+            signals.providerFromPaymentProcessor ||
+            signals.hasRecurringBillEvidence
+    );
+}
+
+function hasActiveSubscriptionDecisionEvidence(signals: DetectionSignals) {
+    return Boolean(
+        signals.hasActiveSubscriberEvidence &&
+            (signals.hasRecurringEvidence ||
+                signals.hasBillingCycleEvidence ||
+                signals.hasBillingDateEvidence ||
+                Boolean(signals.amountText) ||
+                signals.hasPriceChangeEvidence)
+    );
+}
+
+function isCandidateByDecisionPolicy(
+    signals: DetectionSignals,
+    classification: MessageClassification,
+    candidateFromPositiveEvidence: boolean,
+    normalizedConfidence: number
+) {
+    if (classification.isFinalBlock) {
+        return false;
+    }
+
+    if (
+        (signals.hasMarketingIntermediaryEvidence ||
+            signals.hasMarketingEvidence ||
+            signals.hasCreditLoanMarketingEvidence) &&
+        !hasRealActiveBillingEvidence(signals)
+    ) {
+        return false;
+    }
+
+    if (
+        signals.hasSubscriptionUpsellEvidence &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
+        return false;
+    }
+
+    if (
+        signals.hasFreeAppStorePurchaseEvidence &&
+        !signals.hasSubscriptionEvidence &&
+        !signals.hasRecurringEvidence &&
+        !signals.hasBillingCycleEvidence
+    ) {
+        return false;
+    }
+
+    if (
+        signals.hasRawHeaderSnippetEvidence &&
+        !signals.hasPaymentEvidence &&
+        !signals.hasChargedEvidence &&
+        !signals.hasActiveTrialSubscriptionEvidence &&
+        !hasStrongActiveBillingConfirmationSignal(
+            `${classification.extractedProvider ?? ""} ${classification.billingChannel ?? ""}`
+        )
+    ) {
+        return false;
+    }
+
+    if (
+        signals.hasSuspiciousSenderEvidence &&
+        !signals.hasMarketplaceBillingEvidence &&
+        !signals.providerFromPaymentProcessor
+    ) {
+        return false;
+    }
+
+    if (
+        hasTrustedInvoicePaymentDueEvidence(signals) &&
+        (isTrustedBillingContext(signals) || signals.hasRecurringBillEvidence)
+    ) {
+        return true;
+    }
+
+    if (
+        signals.hasPaidTierEvidence &&
+        signals.hasInvoiceEvidence &&
+        Boolean(signals.provider) &&
+        isTrustedBillingContext(signals)
+    ) {
+        return true;
+    }
+
+    if (
+        hasActiveSubscriptionDecisionEvidence(signals) &&
+        isTrustedBillingContext(signals)
+    ) {
+        return true;
+    }
+
+    if (
+        signals.hasRecurringBillEvidence &&
+        (signals.hasInvoiceEvidence || signals.hasPaymentDueEvidence) &&
+        (signals.amountText || signals.hasBillingCycleEvidence)
+    ) {
+        return true;
+    }
+
+    if (
+        signals.hasMarketplaceBillingEvidence &&
+        signals.billingChannel !== "Payment Processor" &&
+        (signals.hasSubscriptionEvidence ||
+            signals.hasReceiptEvidence ||
+            signals.hasPaymentEvidence ||
+            signals.hasChargedEvidence ||
+            signals.hasRecurringEvidence) &&
+        normalizedConfidence >= 0.45
+    ) {
+        return true;
+    }
+
+    return (
+        candidateFromPositiveEvidence &&
+        normalizedConfidence >= 0.45 &&
+        (isTrustedBillingContext(signals) || normalizedConfidence >= 0.75)
     );
 }
 
@@ -1154,6 +2223,107 @@ function isCandidateFromPositiveEvidence(signals: DetectionSignals) {
     );
 }
 
+function collectEvidenceTiers(signals: DetectionSignals) {
+    const tiers: string[] = [];
+
+    if (
+        signals.hasPaymentEvidence ||
+        signals.hasChargedEvidence ||
+        signals.hasActiveRenewalPaymentEvidence ||
+        signals.hasActiveTrialSubscriptionEvidence ||
+        (signals.hasSubscriptionEvidence &&
+            (signals.hasRecurringEvidence ||
+                signals.hasBillingDateEvidence ||
+                signals.hasBillingCycleEvidence))
+    ) {
+        tiers.push("Tier A active subscription/payment evidence");
+    }
+
+    if (
+        signals.hasInvoiceEvidence ||
+        signals.hasPaymentDueEvidence ||
+        signals.hasRecurringBillEvidence
+    ) {
+        tiers.push("Tier B invoice/recurring bill evidence");
+    }
+
+    if (
+        signals.hasPriceChangeEvidence &&
+        (signals.hasActiveSubscriberEvidence ||
+            signals.hasBillingDateEvidence ||
+            signals.hasBillingCycleEvidence ||
+            Boolean(signals.amountText))
+    ) {
+        tiers.push("Tier C active price-change evidence");
+    }
+
+    if (
+        signals.billingChannel === "Payment Processor" &&
+        signals.providerFromPaymentProcessor &&
+        Boolean(signals.amountText) &&
+        (signals.hasSubscriptionEvidence ||
+            signals.hasRecurringEvidence ||
+            signals.hasInvoiceEvidence ||
+            signals.hasPaymentDueEvidence ||
+            signals.hasRecurringBillEvidence)
+    ) {
+        tiers.push("Tier D payment processor merchant billing evidence");
+    }
+
+    if (
+        signals.hasMarketplaceBillingEvidence &&
+        signals.billingChannel &&
+        signals.billingChannel !== "Payment Processor" &&
+        (signals.hasSubscriptionEvidence ||
+            signals.hasRecurringEvidence ||
+            signals.hasPaymentEvidence ||
+            signals.hasChargedEvidence ||
+            signals.hasActiveTrialSubscriptionEvidence)
+    ) {
+        tiers.push("Tier D marketplace billing evidence");
+    }
+
+    return tiers;
+}
+
+export function debugAnalyzeMessageForSubscription(
+    input: EmailDetectionInput
+): EmailDetectionDebugDetails {
+    const from = cleanText(input.from);
+    const subject = cleanText(input.subject);
+    const snippet = cleanText(input.snippet);
+    const combinedText = `${from} ${subject} ${snippet}`;
+    const subjectAndSnippet = `${subject} ${snippet}`;
+    const signals = collectDetectionSignals({
+        from,
+        subjectAndSnippet,
+        combinedText,
+    });
+    const classification = classifyMessage(signals);
+    const analysis = analyzeMessageForSubscription(input);
+
+    return {
+        messageType: classification.messageType,
+        provider: analysis.detected.provider ?? classification.extractedProvider,
+        name: analysis.detected.name,
+        category: classification.category,
+        billingChannel: classification.billingChannel,
+        marketplaceProvider: classification.marketplaceProvider,
+        merchant: classification.merchant,
+        amountText: analysis.detected.amountText ?? classification.amountText,
+        currency: analysis.detected.currency ?? classification.currency,
+        billingCycle: analysis.detected.billingCycle ?? classification.billingCycle,
+        isTrial: analysis.detected.isTrial ?? classification.isTrial,
+        positiveEvidence: classification.positiveEvidence,
+        negativeEvidence: classification.negativeEvidence,
+        trustEvidence: classification.trustEvidence,
+        riskEvidence: classification.riskEvidence,
+        evidenceTiers: collectEvidenceTiers(signals),
+        finalDecision: analysis.isCandidate ? "candidate" : "rejected",
+        finalBlockReason: classification.finalBlockReason,
+    };
+}
+
 export function analyzeMessageForSubscription(
     input: EmailDetectionInput
 ): EmailDetectionResult {
@@ -1169,6 +2339,7 @@ export function analyzeMessageForSubscription(
         subjectAndSnippet,
         combinedText,
     });
+    const classification = classifyMessage(signals);
     let confidence = 0;
 
     if (signals.provider) {
@@ -1184,8 +2355,29 @@ export function analyzeMessageForSubscription(
         );
     }
 
+    if (classification.billingChannel) {
+        reasons.push(`+ marketplace billing channel: ${classification.billingChannel}`);
+    }
+
+    if (classification.messageType !== "unknown") {
+        reasons.push(`+ message type: ${classification.messageType}`);
+    }
+
+    for (const evidenceTier of collectEvidenceTiers(signals)) {
+        reasons.push(`+ ${evidenceTier}`);
+    }
+
     if (signals.planName) {
         detected.name = signals.planName;
+    }
+
+    if (
+        classification.billingChannel === "Prime Video" &&
+        signals.provider &&
+        signals.provider !== "Prime Video" &&
+        signals.provider !== "Amazon"
+    ) {
+        detected.name = `${signals.provider} on Prime Video`;
     }
 
     if (signals.hasReceiptEvidence || signals.hasInvoiceEvidence) {
@@ -1272,7 +2464,8 @@ export function analyzeMessageForSubscription(
         includesAny(subjectAndSnippet, [
             /\b(welcome to|thanks for joining|your account is ready|start using|you're all set|you\u2019re all set|witamy|konto gotowe|rozpocznij korzystanie)\b/i,
         ]) &&
-        signals.provider
+        signals.provider &&
+        signals.providerCategory !== "payment_processor"
     ) {
         confidence += 0.15;
         reasons.push("+0.15 known provider onboarding signal");
@@ -1374,9 +2567,25 @@ export function analyzeMessageForSubscription(
         reasons.push("-0.20 marketing/upsell signal without active billing evidence");
     }
 
+    if (
+        signals.hasSubscriptionUpsellEvidence &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.7;
+        reasons.push("-0.70 subscription marketing/upsell without active billing evidence");
+    }
+
     if (signals.hasUnreadableEncodedEvidence && !hasRealActiveBillingEvidence(signals)) {
         confidence -= 0.35;
         reasons.push("-0.35 unreadable encoded/raw message signal");
+    }
+
+    if (
+        signals.hasRawHeaderSnippetEvidence &&
+        !hasStrongActiveBillingConfirmationSignal(subjectAndSnippet)
+    ) {
+        confidence -= 0.55;
+        reasons.push("-0.55 raw header snippet without strong billing confirmation");
     }
 
     if (signals.hasSuspiciousSenderEvidence) {
@@ -1421,6 +2630,80 @@ export function analyzeMessageForSubscription(
         reasons.push("-0.60 phone top-up purchase signal");
     }
 
+    if (
+        (signals.hasNewsletterRecommendationEvidence ||
+            signals.hasOneTimePurchaseEvidence) &&
+        !hasRealActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.5;
+        reasons.push("-0.50 non-subscription newsletter/order signal");
+    }
+
+    if (
+        signals.hasOneTimePurchaseEvidence &&
+        !(
+            signals.hasPaidTierEvidence &&
+            (signals.hasInvoiceEvidence || signals.hasReceiptEvidence) &&
+            (signals.hasSubscriptionEvidence ||
+                !["Google Play", "Prime Video", "Apple"].includes(
+                    signals.provider ?? ""
+                )) &&
+            signals.provider
+        ) &&
+        !signals.hasSubscriptionEvidence &&
+        !signals.hasRecurringEvidence &&
+        !signals.hasPaymentDueEvidence &&
+        !signals.hasRecurringBillEvidence
+    ) {
+        confidence -= 0.7;
+        reasons.push("-0.70 one-time purchase/order without subscription signal");
+    }
+
+    if (
+        signals.hasFreeAppStorePurchaseEvidence &&
+        !signals.hasSubscriptionEvidence &&
+        !signals.hasRecurringEvidence &&
+        !signals.hasBillingCycleEvidence
+    ) {
+        confidence -= 0.8;
+        reasons.push("-0.80 free app/store purchase without subscription billing");
+    }
+
+    if (
+        signals.hasMarketingIntermediaryEvidence &&
+        !hasTrustedInvoicePaymentDueEvidence(signals)
+    ) {
+        confidence -= 0.7;
+        reasons.push("-0.70 marketing intermediary signal without active billing evidence");
+    }
+
+    if (
+        signals.hasCreditLoanMarketingEvidence &&
+        (signals.hasMarketingEvidence ||
+            signals.hasMarketingIntermediaryEvidence ||
+            !hasTrustedInvoicePaymentDueEvidence(signals))
+    ) {
+        confidence -= 0.8;
+        reasons.push("-0.80 loan/credit marketing signal");
+    }
+
+    if (
+        signals.hasExpiredReactivationEvidence &&
+        !signals.hasActiveRenewalPaymentEvidence
+    ) {
+        confidence -= 0.8;
+        reasons.push("-0.80 expired trial/subscription reactivation signal");
+    }
+
+    if (
+        signals.providerCategory === "payment_processor" &&
+        signals.billingChannel === "Payment Processor" &&
+        !signals.providerFromPaymentProcessor
+    ) {
+        confidence -= 0.8;
+        reasons.push("-0.80 payment processor without merchant/subscription context");
+    }
+
     const normalizedConfidence = Math.max(0, Math.min(1, confidence));
     const isBlockedAccountMessage =
         (signals.hasAccountSecurityEvidence ||
@@ -1446,6 +2729,9 @@ export function analyzeMessageForSubscription(
         signals.hasFreePlanEvidence && !signals.hasPaymentReceiptTrialChargeEvidence;
     const isBlockedMarketingMessage =
         signals.hasMarketingEvidence && !hasRealActiveBillingEvidence(signals);
+    const isBlockedSubscriptionUpsellMessage =
+        signals.hasSubscriptionUpsellEvidence &&
+        !hasExplicitActiveBillingEvidence(signals);
     const isBlockedMarketingNegatedMessage =
         signals.hasMarketingEvidence && signals.hasNegatedSubscriptionEvidence;
     const isBlockedPromotionalTrialMessage =
@@ -1485,6 +2771,58 @@ export function analyzeMessageForSubscription(
         signals.hasTransportTicketEvidence &&
         !(signals.hasInvoiceEvidence && signals.hasRecurringBillEvidence);
     const isBlockedPhoneTopUpMessage = signals.hasPhoneTopUpEvidence;
+    const isBlockedNewsletterRecommendationMessage =
+        signals.hasNewsletterRecommendationEvidence &&
+        !hasRealActiveBillingEvidence(signals);
+    const hasExplicitOneTimeStoreOrderEvidence = includesAny(subjectAndSnippet, [
+        /\bone-time purchase\b/i,
+        /\bone-time app purchase\b/i,
+        /\brental\b/i,
+        /zam[o\u00f3]wienie/i,
+        /zamowienie/i,
+        /\border number\b/i,
+        /\border confirmation\b/i,
+        /zam[oó]wienie numer/i,
+        /zamowienie numer/i,
+        /dotyczy zam[oó]wienia/i,
+        /dotyczy zamowienia/i,
+        /przekazane do realizacji/i,
+        /zosta[lł]o wys[lł]ane/i,
+    ]);
+    const isBlockedOneTimePurchaseMessage =
+        signals.hasOneTimePurchaseEvidence &&
+        hasExplicitOneTimeStoreOrderEvidence &&
+        !(
+            signals.hasSubscriptionEvidence &&
+            !includesAny(subjectAndSnippet, [
+                /\bone-time purchase\b/i,
+                /\bone-time app purchase\b/i,
+                /\brental\b/i,
+            ])
+        );
+    const isBlockedFreeAppStorePurchaseMessage =
+        signals.hasFreeAppStorePurchaseEvidence &&
+        !signals.hasSubscriptionEvidence &&
+        !signals.hasRecurringEvidence &&
+        !signals.hasBillingCycleEvidence;
+    const isBlockedMarketingIntermediaryMessage =
+        signals.hasMarketingIntermediaryEvidence &&
+        !hasTrustedInvoicePaymentDueEvidence(signals);
+    const isBlockedCreditLoanMarketingMessage =
+        signals.hasCreditLoanMarketingEvidence &&
+        (signals.hasMarketingEvidence ||
+            signals.hasMarketingIntermediaryEvidence ||
+            !hasTrustedInvoicePaymentDueEvidence(signals));
+    const isBlockedExpiredReactivationMessage =
+        signals.hasExpiredReactivationEvidence &&
+        !signals.hasActiveRenewalPaymentEvidence;
+    const isBlockedRawHeaderSnippetMessage =
+        signals.hasRawHeaderSnippetEvidence &&
+        !hasStrongActiveBillingConfirmationSignal(subjectAndSnippet);
+    const isBlockedPaymentProcessorWithoutMerchantMessage =
+        signals.providerCategory === "payment_processor" &&
+        signals.billingChannel === "Payment Processor" &&
+        !signals.providerFromPaymentProcessor;
 
     if (isBlockedAccountSecurityCodeMessage) {
         reasons.push("-blocked: account/security code message without billing signal");
@@ -1503,7 +2841,7 @@ export function analyzeMessageForSubscription(
     }
 
     if (isBlockedCanceledSubscriptionMessage) {
-        reasons.push("-blocked: canceled subscription message");
+        reasons.push("-blocked: cancellation message");
     }
 
     if (isBlockedRefundMessage) {
@@ -1516,6 +2854,10 @@ export function analyzeMessageForSubscription(
 
     if (isBlockedMarketingMessage) {
         reasons.push("-blocked: marketing upsell without active billing evidence");
+    }
+
+    if (isBlockedSubscriptionUpsellMessage) {
+        reasons.push("-blocked: subscription marketing/upsell without active billing evidence");
     }
 
     if (isBlockedMarketingNegatedMessage) {
@@ -1552,7 +2894,47 @@ export function analyzeMessageForSubscription(
         reasons.push("-blocked: phone top-up purchase");
     }
 
+    if (isBlockedNewsletterRecommendationMessage) {
+        reasons.push("-blocked: recommendation/newsletter message");
+    }
+
+    if (isBlockedOneTimePurchaseMessage) {
+        reasons.push("-blocked: one-time purchase/order message");
+    }
+
+    if (isBlockedFreeAppStorePurchaseMessage) {
+        reasons.push("-blocked: free app/store purchase without subscription billing");
+    }
+
+    if (isBlockedMarketingIntermediaryMessage) {
+        reasons.push(
+            "-blocked: marketing intermediary message without active billing evidence"
+        );
+    }
+
+    if (isBlockedCreditLoanMarketingMessage) {
+        reasons.push("-blocked: loan/credit marketing message");
+    }
+
+    if (isBlockedExpiredReactivationMessage) {
+        reasons.push("-blocked: expired trial/subscription reactivation message");
+    }
+
+    if (isBlockedRawHeaderSnippetMessage) {
+        reasons.push("-blocked: insufficient body evidence / raw header snippet");
+    }
+
+    if (isBlockedPaymentProcessorWithoutMerchantMessage) {
+        reasons.push("-blocked: payment processor message without merchant/subscription context");
+    }
+
     const candidateFromPositiveEvidence = isCandidateFromPositiveEvidence(signals);
+    const candidateByDecisionPolicy = isCandidateByDecisionPolicy(
+        signals,
+        classification,
+        candidateFromPositiveEvidence,
+        normalizedConfidence
+    );
 
     return {
         isCandidate:
@@ -1563,6 +2945,7 @@ export function analyzeMessageForSubscription(
             !isBlockedRefundMessage &&
             !isBlockedFreePlanMessage &&
             !isBlockedMarketingMessage &&
+            !isBlockedSubscriptionUpsellMessage &&
             !isBlockedMarketingNegatedMessage &&
             !isBlockedPromotionalTrialMessage &&
             !isBlockedPaymentSetupMessage &&
@@ -1572,8 +2955,15 @@ export function analyzeMessageForSubscription(
             !isBlockedProgressReportMessage &&
             !isBlockedTransportTicketMessage &&
             !isBlockedPhoneTopUpMessage &&
-            candidateFromPositiveEvidence &&
-            normalizedConfidence >= 0.45,
+            !isBlockedNewsletterRecommendationMessage &&
+            !isBlockedOneTimePurchaseMessage &&
+            !isBlockedFreeAppStorePurchaseMessage &&
+            !isBlockedMarketingIntermediaryMessage &&
+            !isBlockedCreditLoanMarketingMessage &&
+            !isBlockedExpiredReactivationMessage &&
+            !isBlockedRawHeaderSnippetMessage &&
+            !isBlockedPaymentProcessorWithoutMerchantMessage &&
+            candidateByDecisionPolicy,
         confidence: normalizedConfidence,
         reasons,
         detected,
