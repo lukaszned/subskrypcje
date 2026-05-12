@@ -58,6 +58,41 @@ type ImapRecurringGroup = {
     isRecurringCandidate: boolean;
 };
 
+type AmountSemantics = {
+    raw: string;
+    normalized?: string;
+    kind:
+        | "charged"
+        | "due"
+        | "current_price"
+        | "future_price"
+        | "new_price"
+        | "old_price"
+        | "promo_price"
+        | "regular_price"
+        | "trial_then_price"
+        | "savings"
+        | "credit_amount"
+        | "one_time_purchase"
+        | "unknown";
+    confidence: number;
+    context: string;
+};
+
+type DateSemantics = {
+    raw: string;
+    kind:
+        | "charged_date"
+        | "due_date"
+        | "next_renewal_date"
+        | "trial_end_date"
+        | "effective_date"
+        | "invoice_date"
+        | "unknown";
+    confidence: number;
+    context: string;
+};
+
 type ImapCanonicalSubscription = {
     subscriptionKey: string;
     displayName: string;
@@ -65,9 +100,30 @@ type ImapCanonicalSubscription = {
     billingChannel?: string;
     category?: string;
     confidence: number;
-    status: "active" | "trial" | "price_change" | "invoice" | "unknown";
+    status: "active" | "trial" | "price_change" | "cancelled" | "expired" | "invoice" | "unknown";
     billingCycle?: string;
     amount?: string;
+    displayAmount?: string;
+    chargedAmount?: string;
+    dueAmount?: string;
+    currentAmount?: string;
+    latestAmount?: string;
+    futureAmount?: string;
+    promoAmount?: string;
+    regularAmount?: string;
+    trialThenAmount?: string;
+    ignoredAmounts?: string[];
+    amountKind?: AmountSemantics["kind"];
+    billingDateText?: string;
+    dueDateText?: string;
+    nextBillingDateText?: string;
+    nextRenewalDateText?: string;
+    trialEndDateText?: string;
+    effectiveDateText?: string;
+    amountSemantics?: AmountSemantics[];
+    dateSemantics?: DateSemantics[];
+    sourceTypes: string[];
+    statusReason?: string;
     amounts: string[];
     firstSeen: string;
     lastSeen: string;
@@ -669,6 +725,8 @@ function canonicalKeyForGroup(group: ImapRecurringGroup) {
 function statusRank(status: ImapCanonicalSubscription["status"]) {
     return {
         unknown: 0,
+        expired: 0,
+        cancelled: 0,
         invoice: 1,
         price_change: 2,
         trial: 3,
@@ -679,6 +737,14 @@ function statusRank(status: ImapCanonicalSubscription["status"]) {
 function statusForMessage(message: ImapDebugMessage): ImapCanonicalSubscription["status"] {
     const reasons = message.reasons.join(" ");
     const debugType = message.debug?.messageType ?? "";
+
+    if (/cancellation|cancelled|canceled|-blocked: cancellation/i.test(debugType + reasons)) {
+        return "cancelled";
+    }
+
+    if (/expired|reactivation/i.test(debugType + reasons)) {
+        return "expired";
+    }
 
     if (
         message.detected.isTrial &&
@@ -727,14 +793,444 @@ function isZeroAmount(amount: string | undefined) {
     return Boolean(amount && /\b0+[,.]00\s?(?:pln|usd|eur|gbp|z[lł])?\b/i.test(amount));
 }
 
-function selectCanonicalAmount(messages: ImapDebugMessage[], amounts: string[]) {
+function uniqueBy<T>(items: T[], keyFor: (item: T) => string) {
+    const seen = new Set<string>();
+    const result: T[] = [];
+
+    for (const item of items) {
+        const key = keyFor(item);
+
+        if (!seen.has(key)) {
+            seen.add(key);
+            result.push(item);
+        }
+    }
+
+    return result;
+}
+
+function classifyAmountKind(context: string): Pick<AmountSemantics, "kind" | "confidence"> {
+    const tests: Array<[AmountSemantics["kind"], number, RegExp]> = [
+        ["credit_amount", 0.95, /\b(rrso|loan|credit|po[zż]yczka|pozyczka|kredyt|rata|raty|leasing|oprocentowanie)\b/i],
+        ["savings", 0.95, /\b(save|savings|zaoszcz[eę]dzisz|zaoszczedzisz|oszcz[eę]dno[sś][cć]|oszczednosc|pozwoli[lł]aby ci zaoszcz[eę]dzi[cć])\b/i],
+        ["one_time_purchase", 0.9, /\b(order|zam[oó]wienie|zamowienie|purchase|rental|wypo[zż]yczenie|wypozyczenie|jednorazowo|app purchase)\b/i],
+        ["trial_then_price", 0.9, /\b(after trial|after your trial|po okresie pr[oó]bnym|po zak[oó]czeniu.*okresu pr[oó]bnego|trial ends.*then|zostanie naliczona op[lł]ata)\b/i],
+        ["promo_price", 0.88, /\b(promo|promotional|special offer|oferta specjalna|promocj|cena promocyjna|pierwszy miesi[aą]c|pierwszy miesiac|przez kolejny okres|przez \d+ miesi)\b/i],
+        ["regular_price", 0.86, /\b(regular price|standard price|cena regularna|po okresie promocji|po up[lł]ywie okresu promocji|after promotional period|after the promotional period|nast[eę]pnie|nastepnie|potem)\b/i],
+        ["old_price", 0.86, /\b(old price|dotychczasowa cena|obecna cena|aktualna cena)\b/i],
+        ["current_price", 0.84, /\b(current price|current plan price|aktualna cena|obecna cena)\b/i],
+        ["new_price", 0.9, /\b(new price|nowa cena|zaktualizowana cena|updated price|cena zmieni si[eę] na|price will change to)\b/i],
+        ["future_price", 0.88, /\b(future price|odnowiona w cenie|will renew at|b[eę]dzie obci[aą][zż]ana kwot[aą]|bedzie obciazana kwota|payment method will be charged|next renewal price)\b/i],
+        ["due", 0.9, /\b(amount due|kwota do zap[lł]aty|do zap[lł]aty|invoice total|termin p[lł]atno[sś]ci|faktura na kwot[eę]|na kwot[eę].{0,80}dost[eę]pna)\b/i],
+        ["charged", 0.88, /\b(charged|paid|payment processed|payment confirmation|pobrano|zap[lł]acono|p[lł]atno[sś][cć] zosta[lł]a zrealizowana|obci[aą][zż]yli[sś]my|zosta[lł]a naliczona op[lł]ata|payment method was charged)\b/i],
+    ];
+
+    for (const [kind, confidence, pattern] of tests) {
+        if (pattern.test(context)) {
+            return { kind, confidence };
+        }
+    }
+
+    return { kind: "unknown", confidence: 0.3 };
+}
+
+function classifyAmountByImmediateContext(before: string, after: string): Pick<AmountSemantics, "kind" | "confidence"> | undefined {
+    const left = cleanText(before);
+    const right = cleanText(after);
+    const both = `${left} ${right}`;
+    const asciiLeft = left.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const asciiBoth = both.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    if (/(promo|promotional|special offer|oferta specjalna|promocj|promocyjna|rabat|discount|cena promocyjna)/i.test(asciiBoth)) {
+        return { kind: "promo_price", confidence: 0.94 };
+    }
+
+    if (/(przez pierwszy miesiac|przez kolejny okres|przez \d+ miesi)/i.test(asciiBoth)) {
+        return { kind: "promo_price", confidence: 0.92 };
+    }
+
+    if (/(po uplywie okresu promocji|po okresie promocji|after promotional period|after the promotional period)/i.test(asciiBoth)) {
+        return { kind: "regular_price", confidence: 0.93 };
+    }
+
+    if (/(nowa cena(?: planu)?|new price|zaktualizowana cena|updated price|cena zmieni sie na|price will change to)\s*:?\s*$/i.test(asciiLeft)) {
+        return { kind: "new_price", confidence: 0.97 };
+    }
+
+    if (/(aktualna cena(?: planu)?|obecna cena(?: planu)?|dotychczasowa cena|current price|current plan price|old price)\s*:?\s*$/i.test(asciiLeft)) {
+        return { kind: "current_price", confidence: 0.95 };
+    }
+
+    if (/(cena pakietu|package price|plan price|monthly price)\s*:?\s*$/i.test(asciiLeft)) {
+        return { kind: "regular_price", confidence: 0.9 };
+    }
+
+    if (/(zostala naliczona oplata w wysokosci|naliczona oplata w wysokosci|charged|payment method was charged|pobrano|zaplacono)\s*:?\s*$/i.test(asciiLeft)) {
+        return { kind: "charged", confidence: 0.94 };
+    }
+
+    if (/(bedzie obciazana kwota|will be charged|will renew at|odnowiona w cenie)\s*:?\s*$/i.test(asciiLeft)) {
+        return { kind: "future_price", confidence: 0.94 };
+    }
+
+    if (/(kwota do zaplaty|amount due|do zaplaty|invoice total)\s*:?\s*$/i.test(asciiLeft)) {
+        return { kind: "due", confidence: 0.95 };
+    }
+
+    if (/(nowa cena|new price|zaktualizowana cena|updated price|cena zmieni si[eÄ™] na|price will change to)\s*:?\s*$/i.test(left)) {
+        return { kind: "new_price", confidence: 0.96 };
+    }
+
+    if (/(aktualna cena|obecna cena|dotychczasowa cena|current price|current plan price|old price)\s*:?\s*$/i.test(left)) {
+        return { kind: "current_price", confidence: 0.94 };
+    }
+
+    if (/(cena pakietu|package price|plan price|monthly price)\s*:?\s*$/i.test(left)) {
+        return { kind: "regular_price", confidence: 0.88 };
+    }
+
+    if (/(zosta[lĹ‚]a naliczona op[lĹ‚]ata w wysoko[sĹ›]ci|charged|payment method was charged|pobrano|zap[lĹ‚]acono)\s*:?\s*$/i.test(left)) {
+        return { kind: "charged", confidence: 0.92 };
+    }
+
+    if (/(b[eÄ™]dzie obci[aÄ…][zĹĽ]ana kwot[aÄ…]|bedzie obciazana kwota|will be charged|will renew at|odnowiona w cenie)\s*:?\s*$/i.test(left)) {
+        return { kind: "future_price", confidence: 0.93 };
+    }
+
+    if (/(kwota do zap[lĹ‚]aty|amount due|do zap[lĹ‚]aty|invoice total)\s*:?\s*$/i.test(left)) {
+        return { kind: "due", confidence: 0.94 };
+    }
+
+    if (/(promo|promotional|special offer|oferta specjalna|promocj|promocyjna|rabat|discount|cena promocyjna)/i.test(both)) {
+        return { kind: "promo_price", confidence: 0.9 };
+    }
+
+    return undefined;
+}
+
+function normalizeAmount(raw: string) {
+    return cleanText(raw).replace(/\s+/g, " ").trim();
+}
+
+function extractAmountSemantics(text: string) {
+    const amountPattern = /(?:[$€£]\s?\d+(?:[.,]\d{2})?|\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP|z[lł]))/gi;
+    const results: AmountSemantics[] = [];
+
+    for (const match of text.matchAll(amountPattern)) {
+        const raw = match[0];
+        const index = match.index ?? 0;
+        const before = text.slice(Math.max(0, index - 90), index);
+        const after = text.slice(index + raw.length, Math.min(text.length, index + raw.length + 110));
+        const context = cleanText(text.slice(Math.max(0, index - 140), Math.min(text.length, index + raw.length + 160)));
+        const classification = classifyAmountByImmediateContext(before, after) ?? classifyAmountKind(context);
+
+        results.push({
+            raw: cleanText(raw),
+            normalized: normalizeAmount(raw),
+            kind: classification.kind,
+            confidence: classification.confidence,
+            context,
+        });
+    }
+
+    return uniqueBy(results, (item) => `${item.raw}|${item.kind}|${item.context.slice(0, 40)}`);
+}
+
+function classifyDateKind(context: string): Pick<DateSemantics, "kind" | "confidence"> {
+    const tests: Array<[DateSemantics["kind"], number, RegExp]> = [
+        ["due_date", 0.9, /\b(termin p[lł]atno[sś]ci|due date|pay by|op[lł]acenie do|op[lł]aci[cć] do)\b/i],
+        ["next_renewal_date", 0.9, /\b(next renewal|next billing date|nast[eę]pna data przed[lł]u[zż]enia|dzie[nń] rozliczeniowy|renewal date)\b/i],
+        ["trial_end_date", 0.88, /\b(trial ends|koniec okresu pr[oó]bnego|po zako[nń]czeniu okresu pr[oó]bnego|trial end)\b/i],
+        ["effective_date", 0.82, /\b(effective from|od dnia|wejdzie w [zż]ycie|wejdzie w zycie)\b/i],
+        ["charged_date", 0.78, /\b(payment date|data p[lł]atno[sś]ci|charged on)\b/i],
+        ["invoice_date", 0.72, /\b(invoice date|data faktury|wystawiono|wystawili[sś]my)\b/i],
+    ];
+
+    for (const [kind, confidence, pattern] of tests) {
+        if (pattern.test(context)) {
+            return { kind, confidence };
+        }
+    }
+
+    return { kind: "unknown", confidence: 0.25 };
+}
+
+function extractDateSemantics(text: string) {
+    const datePattern = /\b(?:\d{1,2}[./-]\d{1,2}[./-]\d{2,4}|\d{4}[./-]\d{1,2}[./-]\d{1,2})\b/g;
+    const results: DateSemantics[] = [];
+
+    for (const match of text.matchAll(datePattern)) {
+        const raw = match[0];
+        const index = match.index ?? 0;
+        const context = cleanText(text.slice(Math.max(0, index - 120), Math.min(text.length, index + raw.length + 140)));
+        const classification = classifyDateKind(context);
+
+        results.push({
+            raw: cleanText(raw),
+            kind: classification.kind,
+            confidence: classification.confidence,
+            context,
+        });
+    }
+
+    return uniqueBy(results, (item) => `${item.raw}|${item.kind}|${item.context.slice(0, 40)}`);
+}
+
+function firstAmountOfKind(semantics: AmountSemantics[], kinds: AmountSemantics["kind"][]) {
+    return semantics
+        .filter((item) => kinds.includes(item.kind) && !isZeroAmount(item.raw))
+        .sort((a, b) => b.confidence - a.confidence)[0]?.raw;
+}
+
+function hasExplicitPromoContext(item: AmountSemantics) {
+    const context = item.context.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+    return /\b(promo|promotional|special offer|oferta specjalna|promocj|promocyjna|rabat|discount|cena promocyjna|przez pierwszy miesiac|przez kolejny okres|przez \d+ miesi|po okresie promocji|po uplywie okresu promocji)\b/i.test(context);
+}
+
+function amountKindPriority(item: AmountSemantics) {
+    const priority: Record<AmountSemantics["kind"], number> = {
+        charged: 90,
+        due: 80,
+        new_price: 70,
+        old_price: 63,
+        current_price: 60,
+        regular_price: 55,
+        trial_then_price: 50,
+        promo_price: hasExplicitPromoContext(item) ? 58 : 45,
+        future_price: 40,
+        unknown: 0,
+        one_time_purchase: -10,
+        savings: -20,
+        credit_amount: -30,
+    };
+
+    return priority[item.kind] ?? 0;
+}
+
+function resolveAmountSemantics(semantics: AmountSemantics[]) {
+    const byAmount = new Map<string, AmountSemantics>();
+
+    for (const item of semantics) {
+        const key = item.normalized ?? normalizeAmount(item.raw);
+        const current = byAmount.get(key);
+
+        if (
+            !current ||
+            amountKindPriority(item) > amountKindPriority(current) ||
+            (amountKindPriority(item) === amountKindPriority(current) && item.confidence > current.confidence)
+        ) {
+            byAmount.set(key, item);
+        }
+    }
+
+    return [...byAmount.values()];
+}
+
+function firstDateOfKind(semantics: DateSemantics[], kinds: DateSemantics["kind"][]) {
+    return semantics
+        .filter((item) => kinds.includes(item.kind))
+        .sort((a, b) => b.confidence - a.confidence)[0]?.raw;
+}
+
+function chooseDisplayAmount(args: {
+    status: ImapCanonicalSubscription["status"];
+    amountSemantics: AmountSemantics[];
+    latestAmount?: string;
+    fallbackAmounts: string[];
+}) {
+    const { status, amountSemantics, latestAmount, fallbackAmounts } = args;
+    const ignoredAmounts = amountSemantics
+        .filter((item) => ["savings", "credit_amount", "one_time_purchase"].includes(item.kind))
+        .map((item) => item.raw);
+
+    if (status === "price_change") {
+        const future = firstAmountOfKind(amountSemantics, ["new_price", "future_price"]);
+        if (future) return { displayAmount: future, amountKind: "new_price" as const, ignoredAmounts };
+
+        const current = firstAmountOfKind(amountSemantics, ["current_price", "old_price"]);
+
+        if (latestAmount && !isZeroAmount(latestAmount) && latestAmount !== current) {
+            return { displayAmount: latestAmount, amountKind: "new_price" as const, ignoredAmounts };
+        }
+
+        const fallbackFuture = fallbackAmounts.find((item) => !isZeroAmount(item) && item !== current);
+
+        if (fallbackFuture) {
+            return { displayAmount: fallbackFuture, amountKind: "new_price" as const, ignoredAmounts };
+        }
+    }
+
+    const promo = firstAmountOfKind(amountSemantics, ["promo_price"]);
+    if (promo) return { displayAmount: promo, amountKind: "promo_price" as const, ignoredAmounts };
+
+    if (status === "trial") {
+        const trialThen = firstAmountOfKind(amountSemantics, ["trial_then_price", "future_price"]);
+        if (trialThen) return { displayAmount: trialThen, amountKind: "trial_then_price" as const, ignoredAmounts };
+    }
+
+    const due = firstAmountOfKind(amountSemantics, ["due"]);
+    if (due) return { displayAmount: due, amountKind: "due" as const, ignoredAmounts };
+
+    const charged = firstAmountOfKind(amountSemantics, ["charged"]);
+    if (charged) return { displayAmount: charged, amountKind: "charged" as const, ignoredAmounts };
+
+    const regular = firstAmountOfKind(amountSemantics, ["regular_price"]);
+    if (regular) return { displayAmount: regular, amountKind: "regular_price" as const, ignoredAmounts };
+
+    if (latestAmount && !isZeroAmount(latestAmount)) {
+        return { displayAmount: latestAmount, amountKind: "unknown" as const, ignoredAmounts };
+    }
+
+    const fallback = fallbackAmounts.find((item) => !isZeroAmount(item));
+    return { displayAmount: fallback, amountKind: fallback ? "unknown" as const : undefined, ignoredAmounts };
+}
+
+type AmountContext = {
+    currentAmount?: string;
+    latestAmount?: string;
+    futureAmount?: string;
+    promoAmount?: string;
+    regularAmount?: string;
+    invoiceDueAmount?: string;
+    billingDateText?: string;
+    nextBillingDateText?: string;
+    trialEndDateText?: string;
+};
+
+function amountPatternSource() {
+    return String.raw`(?:[$€£]\s?\d+(?:[.,]\d{2})?|\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP|z[lł]))`;
+}
+
+function firstCleanMatch(text: string, pattern: RegExp) {
+    return cleanText(text.match(pattern)?.[1] ?? "");
+}
+
+function extractDateLikeText(text: string, patterns: RegExp[]) {
+    for (const pattern of patterns) {
+        const value = firstCleanMatch(text, pattern);
+
+        if (value) {
+            return value;
+        }
+    }
+
+    return undefined;
+}
+
+function extractAmountContextFromText(text: string): AmountContext {
+    const amount = amountPatternSource();
+    const currentAmount =
+        firstCleanMatch(text, new RegExp(`(?:aktualna cena planu|current price)\\s*:?\\s*(${amount})`, "i")) ||
+        undefined;
+    const futureAmount =
+        firstCleanMatch(text, new RegExp(`(?:nowa cena planu|new price|updated price)\\s*:?\\s*(${amount})`, "i")) ||
+        firstCleanMatch(text, new RegExp(`(?:zostanie automatycznie odnowiona w cenie|regular price|after the promotional period|po up[lł]ywie okresu promocji)[\\s\\S]{0,80}?(${amount})`, "i")) ||
+        undefined;
+    const promoAmount =
+        firstCleanMatch(text, new RegExp(`(?:oferta specjalna|special offer|promo|promocj|promocyjn|kwot[aą])?[\\s\\S]{0,80}?(${amount})[\\s\\S]{0,80}?(?:przez kolejny okres|1 miesi[aą]c|one month|special offer|promo|promocj)`, "i")) ||
+        undefined;
+    const regularAmount =
+        firstCleanMatch(text, new RegExp(`(?:regular price|regularna cena|po up[lł]ywie okresu promocji|after the promotional period|zostanie automatycznie odnowiona w cenie)[\\s\\S]{0,100}?(${amount})`, "i")) ||
+        undefined;
+    const invoiceDueAmount =
+        firstCleanMatch(text, new RegExp(`(?:kwota do zap[lł]aty|amount due)\\s*:?\\s*(${amount})`, "i")) ||
+        firstCleanMatch(text, new RegExp(`na kwot[eę]\\s*(${amount})`, "i")) ||
+        undefined;
+    const nextBillingDateText = extractDateLikeText(text, [
+        /(?:nast[eę]pna data przed[lł]u[zż]enia|next billing date|next renewal date)\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4}|[A-Za-ząćęłńóśźżĄĆĘŁŃÓŚŹŻ]+\s+\d{1,2},?\s+\d{4})/i,
+        /w dniu rozliczeniowym\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4})/i,
+    ]);
+    const billingDateText = extractDateLikeText(text, [
+        /(?:termin p[lł]atno[sś]ci|due date)\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4})/i,
+        /(?:dzie[nń] rozliczeniowy|billing date)\s*:?\s*([0-9]{1,2}[./-][0-9]{1,2}[./-][0-9]{2,4})/i,
+    ]);
+
+    return {
+        currentAmount,
+        futureAmount,
+        promoAmount,
+        regularAmount,
+        invoiceDueAmount,
+        billingDateText,
+        nextBillingDateText,
+    };
+}
+
+function mergeAmountContexts(contexts: AmountContext[]) {
+    return contexts.reduce<AmountContext>((merged, context) => ({
+        currentAmount: context.currentAmount ?? merged.currentAmount,
+        latestAmount: context.latestAmount ?? merged.latestAmount,
+        futureAmount: context.futureAmount ?? merged.futureAmount,
+        promoAmount: context.promoAmount ?? merged.promoAmount,
+        regularAmount: context.regularAmount ?? merged.regularAmount,
+        invoiceDueAmount: context.invoiceDueAmount ?? merged.invoiceDueAmount,
+        billingDateText: context.billingDateText ?? merged.billingDateText,
+        nextBillingDateText: context.nextBillingDateText ?? merged.nextBillingDateText,
+        trialEndDateText: context.trialEndDateText ?? merged.trialEndDateText,
+    }), {});
+}
+
+function selectCanonicalAmount(
+    status: ImapCanonicalSubscription["status"],
+    messages: ImapDebugMessage[],
+    amounts: string[],
+    context: AmountContext
+) {
+    if (status === "price_change" && context.futureAmount) {
+        return {
+            amount: context.futureAmount,
+            amountKind: "future" as const,
+        };
+    }
+
+    if (context.promoAmount) {
+        return {
+            amount: context.promoAmount,
+            amountKind: "promo" as const,
+        };
+    }
+
+    if (context.invoiceDueAmount) {
+        return {
+            amount: context.invoiceDueAmount,
+            amountKind: "invoice_due" as const,
+        };
+    }
+
     const datedAmounts = messages
         .filter((message) => message.detected.amountText && !isZeroAmount(message.detected.amountText))
         .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
         .map((message) => message.detected.amountText)
         .filter((amount): amount is string => Boolean(amount));
 
-    return datedAmounts[0] ?? amounts.find((amount) => !isZeroAmount(amount));
+    if (datedAmounts[0]) {
+        return {
+            amount: datedAmounts[0],
+            amountKind: status === "invoice" ? "invoice_due" as const : "latest" as const,
+        };
+    }
+
+    if (context.futureAmount) {
+        return {
+            amount: context.futureAmount,
+            amountKind: "future" as const,
+        };
+    }
+
+    if (context.regularAmount) {
+        return {
+            amount: context.regularAmount,
+            amountKind: "regular" as const,
+        };
+    }
+
+    const fallback = amounts.find((value) => !isZeroAmount(value));
+
+    return {
+        amount: fallback,
+        amountKind: fallback ? "unknown" as const : undefined,
+    };
 }
 
 function evidenceTypesForMessage(message: ImapDebugMessage) {
@@ -793,6 +1289,9 @@ function buildCanonicalSubscriptions(
         reasons: string[];
         groupCadences: ImapRecurringGroup["cadence"][];
         sourceMessages: ImapDebugMessage[];
+        sourceTypes: string[];
+        amountSemantics: AmountSemantics[];
+        dateSemantics: DateSemantics[];
     };
     const drafts = new Map<string, Draft>();
 
@@ -818,6 +1317,9 @@ function buildCanonicalSubscriptions(
             reasons: [],
             groupCadences: [],
             sourceMessages: [],
+            sourceTypes: [],
+            amountSemantics: [],
+            dateSemantics: [],
         };
         drafts.set(key, created);
         return created;
@@ -847,8 +1349,15 @@ function buildCanonicalSubscriptions(
         draft.subjects.push(message.subject);
         draft.senders.push(message.from);
         draft.sourceMessages.push(message);
+        draft.sourceTypes.push(message.source, message.debug?.messageType ?? "message");
         draft.reasons.push(...message.reasons);
         draft.evidence.push(...evidenceTypesForMessage(message));
+        draft.amountSemantics.push(
+            ...extractAmountSemantics(`${message.subject} ${message.snippet} ${message.reasons.join(" ")}`)
+        );
+        draft.dateSemantics.push(
+            ...extractDateSemantics(`${message.subject} ${message.snippet}`)
+        );
 
         if (message.detected.billingCycle) {
             draft.billingCycles.push({
@@ -881,6 +1390,15 @@ function buildCanonicalSubscriptions(
         draft.reasons.push(...group.reasons, "representative of recurring group");
         draft.evidence.push(...group.reasons);
         draft.groupCadences.push(group.cadence);
+        draft.sourceTypes.push("recurring_group");
+        draft.amountSemantics.push(
+            ...extractAmountSemantics(
+                `${group.sampleSubjects.join(" ")} ${group.sampleSnippets.join(" ")} ${group.amounts.join(" ")}`
+            )
+        );
+        draft.dateSemantics.push(
+            ...extractDateSemantics(`${group.sampleSubjects.join(" ")} ${group.sampleSnippets.join(" ")}`)
+        );
 
         if (group.cadence === "monthly") {
             draft.billingCycles.push({
@@ -916,6 +1434,43 @@ function buildCanonicalSubscriptions(
                 1,
                 draft.confidence + Math.min(uniqueMessageIds.length - 1, 3) * 0.05
             );
+            const uniqueAmountSemantics = resolveAmountSemantics(
+                uniqueBy(
+                    draft.amountSemantics,
+                    (item) => `${item.raw}|${item.kind}|${item.context.slice(0, 60)}`
+                )
+            ).slice(0, 20);
+            const uniqueDateSemantics = uniqueBy(
+                draft.dateSemantics,
+                (item) => `${item.raw}|${item.kind}|${item.context.slice(0, 60)}`
+            ).slice(0, 20);
+            const latestAmount = draft.amountMessages
+                .filter((message) => message.detected.amountText && !isZeroAmount(message.detected.amountText))
+                .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0]
+                ?.detected.amountText;
+            const amountChoice = chooseDisplayAmount({
+                status,
+                amountSemantics: uniqueAmountSemantics,
+                latestAmount,
+                fallbackAmounts: uniqueAmounts,
+            });
+            const chargedAmount = firstAmountOfKind(uniqueAmountSemantics, ["charged"]);
+            const dueAmount = firstAmountOfKind(uniqueAmountSemantics, ["due"]);
+            const currentAmount = firstAmountOfKind(uniqueAmountSemantics, ["current_price", "old_price"]);
+            const futureAmount = firstAmountOfKind(uniqueAmountSemantics, ["new_price", "future_price", "trial_then_price"]);
+            const promoAmount = firstAmountOfKind(uniqueAmountSemantics, ["promo_price"]);
+            const regularAmount = firstAmountOfKind(uniqueAmountSemantics, ["regular_price"]);
+            const trialThenAmount = firstAmountOfKind(uniqueAmountSemantics, ["trial_then_price"]);
+            const statusReason =
+                status === "active"
+                    ? "active payment, continuation, renewal, or invoice evidence"
+                    : status === "trial"
+                    ? "trial evidence without later active payment/continuation"
+                    : status === "price_change"
+                    ? "active price-change evidence"
+                    : status === "invoice"
+                    ? "invoice or recurring bill evidence"
+                    : undefined;
 
             return {
                 subscriptionKey: draft.key,
@@ -930,7 +1485,32 @@ function buildCanonicalSubscriptions(
                 confidence,
                 status,
                 billingCycle: sortedCycles[0]?.value,
-                amount: selectCanonicalAmount(draft.amountMessages, uniqueAmounts),
+                amount: amountChoice.displayAmount,
+                displayAmount: amountChoice.displayAmount,
+                chargedAmount,
+                dueAmount,
+                currentAmount,
+                latestAmount,
+                futureAmount,
+                promoAmount,
+                regularAmount,
+                trialThenAmount,
+                ignoredAmounts: [...new Set(amountChoice.ignoredAmounts)].slice(0, 10),
+                amountKind: amountChoice.amountKind,
+                dueDateText: firstDateOfKind(uniqueDateSemantics, ["due_date"]),
+                billingDateText: firstDateOfKind(uniqueDateSemantics, ["charged_date", "invoice_date"]),
+                nextBillingDateText: firstDateOfKind(uniqueDateSemantics, ["next_renewal_date"]),
+                nextRenewalDateText: firstDateOfKind(uniqueDateSemantics, ["next_renewal_date"]),
+                trialEndDateText:
+                    draft.sourceMessages
+                        .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+                        .find((message) => message.detected.trialEndDateText)?.detected.trialEndDateText ??
+                    firstDateOfKind(uniqueDateSemantics, ["trial_end_date"]),
+                effectiveDateText: firstDateOfKind(uniqueDateSemantics, ["effective_date"]),
+                amountSemantics: uniqueAmountSemantics,
+                dateSemantics: uniqueDateSemantics,
+                sourceTypes: [...new Set(draft.sourceTypes)].slice(0, 10),
+                statusReason,
                 amounts: uniqueAmounts,
                 firstSeen: sortedDates[0] ?? "",
                 lastSeen: sortedDates[sortedDates.length - 1] ?? "",
@@ -1104,7 +1684,21 @@ function printHumanSummary(result: ImapScanSpikeResult) {
         optionalLine("category", subscription.category);
         optionalLine("billingCycle", subscription.billingCycle);
         optionalLine("amount", subscription.amount);
+        optionalLine("amountKind", subscription.amountKind);
+        optionalLine("chargedAmount", subscription.chargedAmount);
+        optionalLine("dueAmount", subscription.dueAmount);
+        optionalLine("currentAmount", subscription.currentAmount);
+        optionalLine("futureAmount", subscription.futureAmount);
+        optionalLine("promoAmount", subscription.promoAmount);
+        optionalLine("regularAmount", subscription.regularAmount);
+        optionalLine("trialThenAmount", subscription.trialThenAmount);
+        optionalLine("latestAmount", subscription.latestAmount);
         optionalLine("amounts", subscription.amounts.join(", "));
+        optionalLine("dueDateText", subscription.dueDateText);
+        optionalLine("nextRenewalDateText", subscription.nextRenewalDateText);
+        optionalLine("trialEndDateText", subscription.trialEndDateText);
+        optionalLine("effectiveDateText", subscription.effectiveDateText);
+        optionalLine("statusReason", subscription.statusReason);
         console.log(`   messages: ${subscription.messageCount}`);
         optionalLine("firstSeen", subscription.firstSeen.slice(0, 10));
         optionalLine("lastSeen", subscription.lastSeen.slice(0, 10));

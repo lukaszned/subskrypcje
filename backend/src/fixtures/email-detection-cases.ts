@@ -2422,4 +2422,104 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
             minConfidence: 0.55,
         },
     },
+    {
+        name: "Generic promo then regular renewal PL",
+        input: {
+            id: "fixture-generic-promo-then-regular-renewal-pl",
+            from: "Streamly <billing@streamly.example>",
+            subject: "Potwierdzenie oferty specjalnej dotyczacej subskrypcji",
+            snippet:
+                "Kontynuujac subskrypcje, Twoja metoda platnosci bedzie obciazana kwota 4,00 zl miesiecznie przez 1 miesiac. Po uplywie okresu promocji subskrypcja zostanie automatycznie odnowiona w cenie 24,99 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Generic active price change PL",
+        input: {
+            id: "fixture-generic-active-price-change-pl",
+            from: "Prime Membership <prime@amazon.pl>",
+            subject: "Zmiana ceny planu",
+            snippet:
+                "Aktualna cena planu: 49,00 zl/rok. Nowa cena planu: 69,00 zl/rok. Dla aktualnego klienta zmiana wejdzie w zycie w nastepnej dacie odnowienia.",
+        },
+        expected: {
+            isCandidate: true,
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Generic invoice due semantics PL",
+        input: {
+            id: "fixture-generic-invoice-due-semantics-pl",
+            from: "Utility <faktury@utility.example>",
+            subject: "Faktura jest dostepna",
+            snippet:
+                "Faktura jest dostepna. Kwota do zaplaty: 216.39 zl. Termin platnosci: 12.12.2024.",
+        },
+        expected: {
+            isCandidate: true,
+            amountText: "216.39 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Generic trial then paid EN",
+        input: {
+            id: "fixture-generic-trial-then-paid-en",
+            from: "TrialApp <billing@trialapp.example>",
+            subject: "Your free trial has started",
+            snippet:
+                "Your free trial has started. After your trial ends, your subscription will automatically renew at $9.99/month.",
+        },
+        expected: {
+            isCandidate: true,
+            isTrial: true,
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Generic savings upsell PL",
+        input: {
+            id: "fixture-generic-savings-upsell-pl",
+            from: "Delivery Club <newsletter@delivery.example>",
+            subject: "Subskrypcja pozwolilaby Ci zaoszczedzic 22 zl",
+            snippet:
+                "Subskrypcja pozwolilaby Ci zaoszczedzic 22 zl. Wyprobuj bezplatnie i korzystaj z benefitow.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Generic loan credit amount PL",
+        input: {
+            id: "fixture-generic-loan-credit-amount-pl",
+            from: "Bank Newsletter <newsletter@bank.example>",
+            subject: "Pozyczka z niskim RRSO",
+            snippet:
+                "RRSO 9,91%, calkowita kwota pozyczki 16900 zl, 23 miesieczne raty i promocyjne oprocentowanie.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Generic one-time rental order EN",
+        input: {
+            id: "fixture-generic-one-time-rental-order-en",
+            from: "Video Store <orders@videostore.example>",
+            subject: "Your order was completed",
+            snippet:
+                "Your order was completed. Movie rental PLN 9.99. This is a one-time purchase.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
 ];
