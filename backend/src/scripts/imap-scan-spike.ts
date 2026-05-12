@@ -58,11 +58,33 @@ type ImapRecurringGroup = {
     isRecurringCandidate: boolean;
 };
 
+type ImapCanonicalSubscription = {
+    subscriptionKey: string;
+    displayName: string;
+    provider?: string;
+    billingChannel?: string;
+    category?: string;
+    confidence: number;
+    status: "active" | "trial" | "price_change" | "invoice" | "unknown";
+    billingCycle?: string;
+    amount?: string;
+    amounts: string[];
+    firstSeen: string;
+    lastSeen: string;
+    messageCount: number;
+    sourceMessageIds: string[];
+    sourceSubjects: string[];
+    sourceSenders: string[];
+    evidenceTypes: string[];
+    reasons: string[];
+};
+
 type ImapScanSpikeResult = {
     mailbox: string;
     scannedMessages: number;
     candidatesFound: number;
     rejectedMessages: number;
+    canonicalSubscriptions: ImapCanonicalSubscription[];
     recurringGroups: ImapRecurringGroup[];
     debugMessages: ImapDebugMessage[];
 };
@@ -572,6 +594,361 @@ function titleFromSubjectFamily(subjectFamily: string) {
         .join(" ");
 }
 
+function normalizeSubscriptionKeyPart(value: string | undefined) {
+    return cleanText(value)
+        .toLowerCase()
+        .replace(/\bon prime video\b/g, " ")
+        .replace(/\bvia\b/g, " ")
+        .replace(/[^a-z0-9ąćęłńóśźż]+/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function extractBillingChannel(message: ImapDebugMessage) {
+    if (message.debug?.billingChannel) {
+        return message.debug.billingChannel;
+    }
+
+    const channelReason = message.reasons.find((reason) =>
+        /\+ marketplace billing channel:/i.test(reason)
+    );
+    const channel = channelReason?.split(":").slice(1).join(":").trim();
+
+    if (channel) {
+        return channel;
+    }
+
+    const text = `${message.from} ${message.subject} ${message.snippet}`;
+
+    if (/paypal/i.test(text)) return "PayPal";
+    if (/stripe/i.test(text)) return "Stripe";
+    if (/autopay/i.test(text)) return "Autopay";
+    if (/tpay/i.test(text)) return "Tpay";
+    if (/payu/i.test(text)) return "PayU";
+    if (/przelewy24/i.test(text)) return "Przelewy24";
+
+    return undefined;
+}
+
+function isMarketplaceChannel(channel: string | undefined) {
+    return Boolean(channel && /prime video|google play|apple/i.test(channel));
+}
+
+function canonicalKeyForMessage(message: ImapDebugMessage) {
+    const provider = message.detected.provider ?? message.debug?.provider;
+    const displayName =
+        message.detected.name && message.detected.name !== provider
+            ? message.detected.name
+            : provider;
+    const billingChannel = extractBillingChannel(message);
+    const providerKey = normalizeSubscriptionKeyPart(provider ?? displayName);
+
+    if (providerKey) {
+        const channelKey = isMarketplaceChannel(billingChannel)
+            ? normalizeSubscriptionKeyPart(billingChannel)
+            : "";
+        return [providerKey, channelKey].filter(Boolean).join("|");
+    }
+
+    const domain = extractSenderDomain(message.from);
+    const subjectFamily = normalizeSubjectFamily(message.subject);
+
+    return [domain, subjectFamily].filter(Boolean).join("|");
+}
+
+function canonicalKeyForGroup(group: ImapRecurringGroup) {
+    const providerKey = normalizeSubscriptionKeyPart(group.provider ?? group.suggestedName);
+
+    if (providerKey) {
+        return providerKey;
+    }
+
+    return normalizeSubscriptionKeyPart(group.groupKey);
+}
+
+function statusRank(status: ImapCanonicalSubscription["status"]) {
+    return {
+        unknown: 0,
+        invoice: 1,
+        price_change: 2,
+        trial: 3,
+        active: 4,
+    }[status];
+}
+
+function statusForMessage(message: ImapDebugMessage): ImapCanonicalSubscription["status"] {
+    const reasons = message.reasons.join(" ");
+    const debugType = message.debug?.messageType ?? "";
+
+    if (
+        message.detected.isTrial &&
+        !/subscription_continuation|payment_confirmation|charged|future charge|payment\/charged/i.test(
+            debugType + reasons
+        )
+    ) {
+        return "trial";
+    }
+
+    if (
+        /subscription_continuation|payment_confirmation|subscription_active|renewal_notice/i.test(
+            debugType
+        ) ||
+        /Tier A active|payment confirmation|future charge|subscription continuation|charged|payment\/charged|recurring\/renewal/i.test(
+            reasons
+        )
+    ) {
+        return "active";
+    }
+
+    if (message.detected.isTrial || /trial started|trial evidence/i.test(reasons)) {
+        return "trial";
+    }
+
+    if (/active_price_change|price_change_active|price change/i.test(debugType + reasons)) {
+        return "price_change";
+    }
+
+    if (/invoice|payment_due|recurring bill|eFaktura/i.test(debugType + reasons)) {
+        return "invoice";
+    }
+
+    return "unknown";
+}
+
+function statusForGroup(group: ImapRecurringGroup): ImapCanonicalSubscription["status"] {
+    if (/invoice|faktura|payment due|recurring/i.test(group.reasons.join(" "))) {
+        return "invoice";
+    }
+
+    return "unknown";
+}
+
+function isZeroAmount(amount: string | undefined) {
+    return Boolean(amount && /\b0+[,.]00\s?(?:pln|usd|eur|gbp|z[lł])?\b/i.test(amount));
+}
+
+function selectCanonicalAmount(messages: ImapDebugMessage[], amounts: string[]) {
+    const datedAmounts = messages
+        .filter((message) => message.detected.amountText && !isZeroAmount(message.detected.amountText))
+        .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
+        .map((message) => message.detected.amountText)
+        .filter((amount): amount is string => Boolean(amount));
+
+    return datedAmounts[0] ?? amounts.find((amount) => !isZeroAmount(amount));
+}
+
+function evidenceTypesForMessage(message: ImapDebugMessage) {
+    const evidence = new Set<string>();
+    const reasons = message.reasons.join(" ");
+    const debugType = message.debug?.messageType;
+
+    if (debugType) {
+        evidence.add(debugType.replace(/_/g, " "));
+    }
+
+    if (message.detected.isTrial || /trial/i.test(reasons)) {
+        evidence.add("trial started");
+    }
+
+    if (/subscription continuation|future charge|will be charged|payment method will be charged/i.test(reasons)) {
+        evidence.add("subscription continuation/future charge");
+    }
+
+    if (/marketplace billing channel/i.test(reasons)) {
+        const channel = extractBillingChannel(message);
+        evidence.add(`marketplace billing channel: ${channel ?? "unknown"}`);
+    }
+
+    if (/invoice|recurring bill/i.test(reasons)) {
+        evidence.add("invoice/recurring bill");
+    }
+
+    if (/price change/i.test(reasons)) {
+        evidence.add("active price change");
+    }
+
+    return [...evidence];
+}
+
+function buildCanonicalSubscriptions(
+    debugMessages: ImapDebugMessage[],
+    recurringGroups: ImapRecurringGroup[]
+) {
+    type Draft = {
+        key: string;
+        provider?: string;
+        displayName?: string;
+        billingChannel?: string;
+        category?: string;
+        confidence: number;
+        statuses: ImapCanonicalSubscription["status"][];
+        billingCycles: Array<{ value: string; date: string }>;
+        amountMessages: ImapDebugMessage[];
+        amounts: string[];
+        dates: string[];
+        messageIds: string[];
+        subjects: string[];
+        senders: string[];
+        evidence: string[];
+        reasons: string[];
+        groupCadences: ImapRecurringGroup["cadence"][];
+        sourceMessages: ImapDebugMessage[];
+    };
+    const drafts = new Map<string, Draft>();
+
+    const getDraft = (key: string): Draft => {
+        const existing = drafts.get(key);
+
+        if (existing) {
+            return existing;
+        }
+
+        const created: Draft = {
+            key,
+            confidence: 0,
+            statuses: [],
+            billingCycles: [],
+            amountMessages: [],
+            amounts: [],
+            dates: [],
+            messageIds: [],
+            subjects: [],
+            senders: [],
+            evidence: [],
+            reasons: [],
+            groupCadences: [],
+            sourceMessages: [],
+        };
+        drafts.set(key, created);
+        return created;
+    };
+
+    for (const message of debugMessages.filter((item) => item.isCandidate)) {
+        if (/onboarding_only|marketing_offer|one_time_purchase|recommendation/i.test(message.debug?.messageType ?? "")) {
+            continue;
+        }
+
+        const key = canonicalKeyForMessage(message);
+        const draft = getDraft(key);
+        const billingChannel = extractBillingChannel(message);
+
+        draft.provider ??= message.detected.provider ?? message.debug?.provider;
+        draft.displayName ??=
+            message.detected.name ??
+            message.detected.provider ??
+            message.debug?.name ??
+            message.debug?.provider;
+        draft.billingChannel ??= isMarketplaceChannel(billingChannel) ? billingChannel : undefined;
+        draft.category ??= message.debug?.category;
+        draft.confidence = Math.max(draft.confidence, message.confidence);
+        draft.statuses.push(statusForMessage(message));
+        draft.dates.push(message.date);
+        draft.messageIds.push(message.id);
+        draft.subjects.push(message.subject);
+        draft.senders.push(message.from);
+        draft.sourceMessages.push(message);
+        draft.reasons.push(...message.reasons);
+        draft.evidence.push(...evidenceTypesForMessage(message));
+
+        if (message.detected.billingCycle) {
+            draft.billingCycles.push({
+                value: message.detected.billingCycle,
+                date: message.date,
+            });
+        }
+
+        if (message.detected.amountText) {
+            draft.amounts.push(message.detected.amountText);
+            draft.amountMessages.push(message);
+        }
+    }
+
+    for (const group of recurringGroups.filter(
+        (item) => item.isRecurringCandidate && item.confidence >= 0.75
+    )) {
+        const key = canonicalKeyForGroup(group);
+        const draft = getDraft(key);
+
+        draft.provider ??= group.provider;
+        draft.displayName ??= group.suggestedName;
+        draft.confidence = Math.max(draft.confidence, group.confidence);
+        draft.statuses.push(statusForGroup(group));
+        draft.dates.push(group.firstDate, group.lastDate);
+        draft.messageIds.push(...group.messageIds);
+        draft.subjects.push(...group.sampleSubjects);
+        draft.senders.push(group.fromSample);
+        draft.amounts.push(...group.amounts);
+        draft.reasons.push(...group.reasons, "representative of recurring group");
+        draft.evidence.push(...group.reasons);
+        draft.groupCadences.push(group.cadence);
+
+        if (group.cadence === "monthly") {
+            draft.billingCycles.push({
+                value: "monthly",
+                date: group.lastDate,
+            });
+        }
+
+        const matchingMessages = debugMessages.filter((message) =>
+            group.messageIds.includes(message.id)
+        );
+        draft.sourceMessages.push(...matchingMessages);
+        draft.amountMessages.push(...matchingMessages.filter((message) => message.detected.amountText));
+    }
+
+    return [...drafts.values()]
+        .filter((draft) => draft.messageIds.length > 0)
+        .map((draft): ImapCanonicalSubscription => {
+            const uniqueMessageIds = [...new Set(draft.messageIds)];
+            const uniqueAmounts = [...new Set(draft.amounts)].slice(0, 10);
+            const sortedDates = draft.dates
+                .filter(Boolean)
+                .sort((a, b) => Date.parse(a) - Date.parse(b));
+            const sortedCycles = draft.billingCycles.sort(
+                (a, b) => Date.parse(b.date) - Date.parse(a.date)
+            );
+            const status = draft.statuses.reduce(
+                (best, current) =>
+                    statusRank(current) > statusRank(best) ? current : best,
+                "unknown" as ImapCanonicalSubscription["status"]
+            );
+            const confidence = Math.min(
+                1,
+                draft.confidence + Math.min(uniqueMessageIds.length - 1, 3) * 0.05
+            );
+
+            return {
+                subscriptionKey: draft.key,
+                displayName:
+                    draft.displayName ??
+                    draft.provider ??
+                    titleFromSubjectFamily(draft.key) ??
+                    draft.key,
+                provider: draft.provider,
+                billingChannel: draft.billingChannel,
+                category: draft.category,
+                confidence,
+                status,
+                billingCycle: sortedCycles[0]?.value,
+                amount: selectCanonicalAmount(draft.amountMessages, uniqueAmounts),
+                amounts: uniqueAmounts,
+                firstSeen: sortedDates[0] ?? "",
+                lastSeen: sortedDates[sortedDates.length - 1] ?? "",
+                messageCount: uniqueMessageIds.length,
+                sourceMessageIds: uniqueMessageIds,
+                sourceSubjects: [...new Set(draft.subjects)].slice(0, 6),
+                sourceSenders: [...new Set(draft.senders)].slice(0, 6),
+                evidenceTypes: [...new Set(draft.evidence)].slice(0, 12),
+                reasons: [...new Set(draft.reasons)].slice(0, 14),
+            };
+        })
+        .sort(
+            (a, b) =>
+                b.confidence - a.confidence ||
+                Date.parse(b.lastSeen) - Date.parse(a.lastSeen)
+        );
+}
+
 function buildRecurringGroups(debugMessages: ImapDebugMessage[]) {
     const grouped = new Map<string, ImapDebugMessage[]>();
 
@@ -711,6 +1088,46 @@ function printHumanSummary(result: ImapScanSpikeResult) {
     console.log(`rejectedMessages: ${result.rejectedMessages}`);
     console.log("");
 
+    console.log("Canonical subscriptions:");
+
+    if (result.canonicalSubscriptions.length === 0) {
+        console.log("none");
+    }
+
+    result.canonicalSubscriptions.slice(0, 30).forEach((subscription, index) => {
+        console.log("");
+        console.log(`${index + 1}. ${subscription.displayName}`);
+        console.log(`   confidence: ${subscription.confidence.toFixed(2)}`);
+        console.log(`   status: ${subscription.status}`);
+        optionalLine("provider", subscription.provider);
+        optionalLine("billingChannel", subscription.billingChannel);
+        optionalLine("category", subscription.category);
+        optionalLine("billingCycle", subscription.billingCycle);
+        optionalLine("amount", subscription.amount);
+        optionalLine("amounts", subscription.amounts.join(", "));
+        console.log(`   messages: ${subscription.messageCount}`);
+        optionalLine("firstSeen", subscription.firstSeen.slice(0, 10));
+        optionalLine("lastSeen", subscription.lastSeen.slice(0, 10));
+
+        if (subscription.sourceSubjects.length > 0) {
+            console.log("   source subjects:");
+
+            for (const subject of subscription.sourceSubjects.slice(0, 4)) {
+                console.log(`   - ${subject}`);
+            }
+        }
+
+        if (subscription.evidenceTypes.length > 0) {
+            console.log("   evidence:");
+
+            for (const evidence of subscription.evidenceTypes.slice(0, 6)) {
+                console.log(`   - ${evidence}`);
+            }
+        }
+    });
+
+    console.log("");
+
     const strongRecurringGroups = result.recurringGroups.filter(
         (group) =>
             group.isRecurringCandidate &&
@@ -763,9 +1180,10 @@ function printHumanSummary(result: ImapScanSpikeResult) {
     }
 
     const candidates = [...dedupedCandidates.values()]
-        .sort((a, b) => b.confidence - a.confidence);
+        .sort((a, b) => b.confidence - a.confidence)
+        .slice(0, 20);
 
-    console.log("Potential subscriptions:");
+    console.log("Raw candidate messages:");
 
     if (candidates.length === 0) {
         console.log("none");
@@ -923,11 +1341,16 @@ async function main() {
             (message) => message.isCandidate
         ).length;
         const recurringGroups = buildRecurringGroups(debugMessages);
+        const canonicalSubscriptions = buildCanonicalSubscriptions(
+            debugMessages,
+            recurringGroups
+        );
         const result: ImapScanSpikeResult = {
             mailbox: config.mailbox,
             scannedMessages: debugMessages.length,
             candidatesFound,
             rejectedMessages: debugMessages.length - candidatesFound,
+            canonicalSubscriptions,
             recurringGroups,
             debugMessages,
         };

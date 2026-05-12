@@ -2324,4 +2324,102 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
             minConfidence: 0.55,
         },
     },
+    {
+        name: "Max welcome subscription started PL",
+        input: {
+            id: "fixture-max-welcome-subscription-started-pl",
+            from: "Max <no-reply@max.com>",
+            subject: "Witaj w Max",
+            snippet:
+                "Wlasnie rozpoczyna sie Twoja subskrypcja Max. Subskrypcja jest automatycznie przedluzana co miesiac. Nastepna data przedluzenia to 15.06.2026.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Max",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "SkyShowtime Prime Video continuation active PL",
+        input: {
+            id: "fixture-skyshowtime-prime-video-continuation-active-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Potwierdzenie - Oferta specjalna dotyczaca subskrypcji SkyShowtime",
+            snippet:
+                "Kontynuujac subskrypcje SkyShowtime w usludze Prime Video, Twoja metoda platnosci bedzie obciazana kwota 4,00 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "SkyShowtime",
+            name: "SkyShowtime on Prime Video",
+            amountText: "4,00 zl",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Adobe Acrobat onboarding only PL",
+        input: {
+            id: "fixture-adobe-acrobat-onboarding-only-pl",
+            from: "Adobe <message@adobe.com>",
+            subject: "Rozpoczynanie pracy z programem Acrobat Pro",
+            snippet:
+                "Witaj! Witamy w programie Adobe Acrobat Pro. Twoja subskrypcja umozliwia prace z plikami PDF z dowolnego miejsca. Pobierz oprogramowanie na komputer, aby rozpoczac.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Adobe",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Adobe purchase trial future charge PL",
+        input: {
+            id: "fixture-adobe-purchase-trial-future-charge-pl",
+            from: "Adobe <message@adobe.com>",
+            subject: "Dziekujemy za zakup!",
+            snippet:
+                "Dziekujemy za zakup subskrypcji Adobe Acrobat Pro. Bezplatny okres probny wlasnie sie rozpoczal. Po zakonczeniu okresu probnego metoda platnosci bedzie obciazana kwota 79,99 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Adobe",
+            name: "Adobe Acrobat Pro",
+            amountText: "79,99 zl",
+            billingCycle: "monthly",
+            isTrial: true,
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Generic onboarding only SaaS EN",
+        input: {
+            id: "fixture-generic-onboarding-only-saas-en",
+            from: "Projectly <hello@projectly.example>",
+            subject: "Getting started with Projectly Pro",
+            snippet:
+                "Welcome to Projectly Pro. Download the app and set up your account to start using team workspaces from anywhere.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Generic subscription started SaaS EN",
+        input: {
+            id: "fixture-generic-subscription-started-saas-en",
+            from: "Projectly <billing@projectly.example>",
+            subject: "Your Projectly Pro subscription has started",
+            snippet:
+                "Your subscription has started. Your Projectly Pro subscription will automatically renew monthly and your payment method will be charged 12.00 USD on the next billing date.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Projectly",
+            amountText: "12.00 USD",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
 ];

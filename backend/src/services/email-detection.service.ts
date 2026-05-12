@@ -78,10 +78,14 @@ type MessageType =
     | "marketplace_subscription"
     | "recurring_bill"
     | "subscription_started"
+    | "subscription_active"
+    | "subscription_continuation"
     | "trial_started_auto_renew"
     | "trial_ending"
     | "subscription_active_notice"
     | "price_change_active"
+    | "active_price_change"
+    | "onboarding_only"
     | "renewal_notice"
     | "payment_failed"
     | "cancellation"
@@ -196,6 +200,9 @@ type DetectionSignals = {
     hasRawHeaderSnippetEvidence: boolean;
     hasSuspiciousSenderEvidence: boolean;
     hasHighRiskProviderSuspiciousSenderEvidence: boolean;
+    hasOnboardingOnlyEvidence: boolean;
+    hasSubscriptionStartedEvidence: boolean;
+    hasSubscriptionContinuationEvidence: boolean;
 };
 
 function providerEntry(
@@ -360,6 +367,8 @@ function normalizeProviderForPublicResult(provider: string | undefined) {
         "Disney+": "Disney",
         "Microsoft 365": "Microsoft",
         "Microsoft OneDrive": "Microsoft",
+        "Adobe Acrobat Pro": "Adobe",
+        "Adobe Creative Cloud": "Adobe",
     };
 
     return legacyProviderNames[provider] ?? provider;
@@ -598,7 +607,48 @@ function hasBillingDateSignal(subjectAndSnippet: string) {
         /dniu rozliczeniowym/i,
         /do dnia rozliczenia/i,
         /pojawi si[e\u0119] w dniu rozliczeniowym/i,
+        /nast[e\u0119]pna data przed[l\u0142]u[z\u017c]enia/i,
+        /nastepna data przedluzenia/i,
         /\b(billing date|next billing date|renewal date)\b/i,
+        /\bnext renewal\b/i,
+    ]);
+}
+
+function hasSubscriptionStartedSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /w[l\u0142]a[s\u015b]nie rozpoczyna si[e\u0119] twoja subskrypcja/i,
+        /wlasnie rozpoczyna sie twoja subskrypcja/i,
+        /twoja subskrypcja .{0,40}rozpocz[e\u0119][l\u0142]a si[e\u0119]/i,
+        /twoja subskrypcja .{0,40}rozpoczela sie/i,
+        /subskrypcja .*rozpocznie si[e\u0119] automatycznie/i,
+        /subskrypcja .*rozpocznie sie automatycznie/i,
+        /\b(your subscription has started|your subscription started|subscription has started)\b/i,
+        /\b(you subscribed|you have subscribed|successfully subscribed)\b/i,
+    ]);
+}
+
+function hasSubscriptionContinuationSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /kontynuuj[a\u0105]c subskrypcj[e\u0119]/i,
+        /kontynuujac subskrypcje/i,
+        /automatycznie przed[l\u0142]u[z\u017c]ana/i,
+        /automatycznie przedluzana/i,
+        /automatycznie odnawiana/i,
+        /metoda p[\u0142l]atno[s\u015b]ci .*b[e\u0119]dzie obci[a\u0105][z\u017c]ana/i,
+        /metoda platnosci .*bedzie obciazana/i,
+        /\b(your payment method will be charged|will automatically renew|automatically renews|continue your subscription)\b/i,
+    ]);
+}
+
+function hasOnboardingOnlySignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /rozpoczynanie pracy/i,
+        /pobierz oprogramowanie/i,
+        /aby rozpocz[a\u0105][c\u0107]/i,
+        /aby rozpoczac/i,
+        /witamy w programie/i,
+        /witaj w programie/i,
+        /\b(getting started|welcome to|start using|download the app|download software|install the app|set up your account)\b/i,
     ]);
 }
 
@@ -981,6 +1031,44 @@ function inferProviderFromPaymentProcessorText(from: string, subjectAndSnippet: 
     return undefined;
 }
 
+function inferProviderFromSubscriptionContext(from: string, subjectAndSnippet: string) {
+    if (
+        !(
+            hasSubscriptionStartedSignal(subjectAndSnippet) ||
+            hasSubscriptionContinuationSignal(subjectAndSnippet) ||
+            hasActiveRenewalPaymentSignal(subjectAndSnippet)
+        )
+    ) {
+        return undefined;
+    }
+
+    const patterns = [
+        /your\s+(.{2,80}?)\s+subscription/i,
+        /(.{2,80}?)\s+subscription has started/i,
+        /subskrypcja\s+(.{2,80}?)(?:\s+rozpocz|\s+odnaw|\s+b[e\u0119]dzie|[.!,]|$)/i,
+    ];
+
+    for (const pattern of patterns) {
+        const provider = cleanInferredProviderName(
+            subjectAndSnippet.match(pattern)?.[1]
+        )
+            ?.replace(/\b(Pro|Premium|Plus|Standard|Individual|Family|Student)\b/gi, "")
+            .replace(/\s+/g, " ")
+            .trim();
+
+        if (provider && !/\b(your|twoja|subskrypcja)\b/i.test(provider)) {
+            return provider;
+        }
+    }
+
+    const displayName = from.match(/^([^<]+)</)?.[1];
+    const provider = cleanInferredProviderName(displayName);
+
+    return provider && !/\b(no reply|noreply|billing|support)\b/i.test(provider)
+        ? provider
+        : undefined;
+}
+
 function hasPromotionalTrialSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
         /\bstart a free trial today\b/i,
@@ -1006,6 +1094,10 @@ function hasActiveTrialSubscriptionSignal(subjectAndSnippet: string) {
         /\bokres pr[o\u00f3]bny .{0,60}ko[n\u0144]czy/i,
         /\bbedziemy obciazac\b/i,
         /\bb[e\u0119]dziemy obci[a\u0105][z\u017c]a[c\u0107]\b/i,
+        /w[l\u0142]a[s\u015b]nie rozpoczyna si[e\u0119] twoja subskrypcja/i,
+        /wlasnie rozpoczyna sie twoja subskrypcja/i,
+        /automatycznie przed[l\u0142]u[z\u017c]ana/i,
+        /automatycznie przedluzana/i,
     ]);
 }
 
@@ -1032,6 +1124,8 @@ function hasActiveRenewalPaymentSignal(subjectAndSnippet: string) {
         /\bpobralismy\s+platnosc\b/i,
         /\bobci[a\u0105][z\u017c]ymy\b/i,
         /\bobciazymy\b/i,
+        /metoda p[\u0142l]atno[s\u015b]ci .*b[e\u0119]dzie obci[a\u0105][z\u017c]ana/i,
+        /metoda platnosci .*bedzie obciazana/i,
     ]);
 }
 
@@ -1403,6 +1497,10 @@ function detectPlanName(text: string) {
             pattern: /\badobe\s+creative\s+cloud\b/i,
         },
         {
+            name: "Adobe Acrobat Pro",
+            pattern: /\badobe\s+acrobat\s+pro\b|\bacrobat\s+pro\b/i,
+        },
+        {
             name: "Netflix Premium",
             pattern: /\bnetflix\s+premium\b/i,
         },
@@ -1617,6 +1715,7 @@ function collectDetectionSignals(params: {
         marketplaceProvider ??
         detectedCatalogProvider ??
         paymentProcessorProvider ??
+        inferProviderFromSubscriptionContext(params.from, params.subjectAndSnippet) ??
         inferProviderFromInvoiceContext(params.from, params.subjectAndSnippet);
     const provider =
         billingChannel && billingChannel !== "Payment Processor" && marketplaceServiceProvider
@@ -1642,6 +1741,15 @@ function collectDetectionSignals(params: {
         params.combinedText
     );
     const hasSubscriptionUpsellEvidence = hasSubscriptionUpsellSignal(
+        params.subjectAndSnippet
+    );
+    const hasSubscriptionStartedEvidence = hasSubscriptionStartedSignal(
+        params.subjectAndSnippet
+    );
+    const hasSubscriptionContinuationEvidence = hasSubscriptionContinuationSignal(
+        params.subjectAndSnippet
+    );
+    const hasOnboardingOnlyEvidence = hasOnboardingOnlySignal(
         params.subjectAndSnippet
     );
     const hasCreditLoanMarketingEvidence = hasCreditLoanMarketingSignal(
@@ -1861,6 +1969,9 @@ function collectDetectionSignals(params: {
         hasRawHeaderSnippetEvidence,
         hasSuspiciousSenderEvidence,
         hasHighRiskProviderSuspiciousSenderEvidence,
+        hasOnboardingOnlyEvidence,
+        hasSubscriptionStartedEvidence,
+        hasSubscriptionContinuationEvidence,
     };
 }
 
@@ -1882,6 +1993,8 @@ function hasRealActiveBillingEvidence(signals: DetectionSignals) {
         signals.hasRecurringBillEvidence ||
         signals.hasActiveTrialSubscriptionEvidence ||
         signals.hasActiveRenewalPaymentEvidence ||
+        signals.hasSubscriptionStartedEvidence ||
+        signals.hasSubscriptionContinuationEvidence ||
         hasActivePriceChangeEvidence ||
         (signals.hasSubscriptionEvidence &&
             (signals.hasRecurringEvidence || signals.hasBillingCycleEvidence))
@@ -1911,10 +2024,16 @@ function hasExplicitActiveBillingEvidence(signals: DetectionSignals) {
         signals.hasReceiptEvidence ||
             signals.hasInvoiceEvidence ||
             signals.hasPaymentDueEvidence ||
+            (signals.hasPaymentEvidence &&
+                (signals.hasSubscriptionEvidence ||
+                    signals.hasRecurringEvidence ||
+                    signals.hasBillingCycleEvidence)) ||
             signals.hasChargedEvidence ||
             signals.hasPaymentFailedEvidence ||
             signals.hasActiveRenewalPaymentEvidence ||
             signals.hasActiveTrialSubscriptionEvidence ||
+            signals.hasSubscriptionStartedEvidence ||
+            signals.hasSubscriptionContinuationEvidence ||
             hasActivePriceChangeEvidence ||
             (signals.hasActiveSubscriberEvidence &&
                 (signals.hasBillingDateEvidence ||
@@ -1940,17 +2059,26 @@ function classifyMessage(signals: DetectionSignals): MessageClassification {
         messageType = "payment_failed";
         positiveEvidence.push("payment failed evidence");
     } else if (signals.hasPriceChangeEvidence && signals.hasActiveSubscriberEvidence) {
-        messageType = "price_change_active";
+        messageType = "active_price_change";
         positiveEvidence.push("active subscriber price change evidence");
+    } else if (signals.hasSubscriptionContinuationEvidence) {
+        messageType = "subscription_continuation";
+        positiveEvidence.push("active subscription continuation/future charge evidence");
+    } else if (
+        signals.hasSubscriptionStartedEvidence ||
+        (signals.hasTrialEvidence && signals.hasActiveTrialSubscriptionEvidence)
+    ) {
+        messageType = "subscription_started";
+        positiveEvidence.push("active subscription started evidence");
     } else if (signals.hasActiveSubscriberEvidence || signals.hasBillingDateEvidence) {
-        messageType = "subscription_active_notice";
+        messageType = "subscription_active";
         positiveEvidence.push("active subscription/billing date evidence");
     } else if (signals.hasSubscriptionEvidence && signals.hasRecurringEvidence) {
         messageType = "renewal_notice";
         positiveEvidence.push("subscription renewal evidence");
-    } else if (signals.hasTrialEvidence && signals.hasActiveTrialSubscriptionEvidence) {
-        messageType = "subscription_started";
-        positiveEvidence.push("active trial/subscription started evidence");
+    } else if (signals.hasOnboardingOnlyEvidence) {
+        messageType = "onboarding_only";
+        positiveEvidence.push("product onboarding evidence without billing confirmation");
     }
 
     if (signals.hasCancellationEvidence) {
@@ -1973,7 +2101,7 @@ function classifyMessage(signals: DetectionSignals): MessageClassification {
     } else if (signals.hasNewsletterRecommendationEvidence) {
         messageType = "recommendation";
         negativeEvidence.push("newsletter/recommendation evidence");
-    } else if (signals.hasMarketingEvidence) {
+    } else if (signals.hasMarketingEvidence && !hasExplicitActiveBillingEvidence(signals)) {
         messageType = "marketing_offer";
         negativeEvidence.push("marketing/offer evidence");
     }
@@ -2207,6 +2335,9 @@ function isCandidateFromPositiveEvidence(signals: DetectionSignals) {
                 signals.hasChargedEvidence ||
                 signals.hasBillingCycleEvidence)) ||
         (signals.hasTrialEvidence && hasProviderOrPlan) ||
+        ((signals.hasSubscriptionStartedEvidence ||
+            signals.hasSubscriptionContinuationEvidence) &&
+            hasProviderOrPlan) ||
         (signals.hasPaymentFailedEvidence &&
             (Boolean(signals.provider) || signals.hasSubscriptionEvidence)) ||
         (signals.hasRecurringBillEvidence &&
@@ -2231,6 +2362,8 @@ function collectEvidenceTiers(signals: DetectionSignals) {
         signals.hasChargedEvidence ||
         signals.hasActiveRenewalPaymentEvidence ||
         signals.hasActiveTrialSubscriptionEvidence ||
+        signals.hasSubscriptionStartedEvidence ||
+        signals.hasSubscriptionContinuationEvidence ||
         (signals.hasSubscriptionEvidence &&
             (signals.hasRecurringEvidence ||
                 signals.hasBillingDateEvidence ||
@@ -2439,6 +2572,16 @@ export function analyzeMessageForSubscription(
     if (signals.hasActiveSubscriberEvidence) {
         confidence += 0.2;
         reasons.push("+0.20 active subscriber evidence");
+    }
+
+    if (signals.hasSubscriptionStartedEvidence) {
+        confidence += 0.2;
+        reasons.push("+0.20 subscription started evidence");
+    }
+
+    if (signals.hasSubscriptionContinuationEvidence) {
+        confidence += 0.2;
+        reasons.push("+0.20 subscription continuation/future charge evidence");
     }
 
     if (signals.hasBillingDateEvidence) {
@@ -2704,6 +2847,14 @@ export function analyzeMessageForSubscription(
         reasons.push("-0.80 payment processor without merchant/subscription context");
     }
 
+    if (
+        signals.hasOnboardingOnlyEvidence &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.7;
+        reasons.push("-0.70 onboarding-only message without billing evidence");
+    }
+
     const normalizedConfidence = Math.max(0, Math.min(1, confidence));
     const isBlockedAccountMessage =
         (signals.hasAccountSecurityEvidence ||
@@ -2823,6 +2974,9 @@ export function analyzeMessageForSubscription(
         signals.providerCategory === "payment_processor" &&
         signals.billingChannel === "Payment Processor" &&
         !signals.providerFromPaymentProcessor;
+    const isBlockedOnboardingOnlyMessage =
+        signals.hasOnboardingOnlyEvidence &&
+        !hasExplicitActiveBillingEvidence(signals);
 
     if (isBlockedAccountSecurityCodeMessage) {
         reasons.push("-blocked: account/security code message without billing signal");
@@ -2928,6 +3082,10 @@ export function analyzeMessageForSubscription(
         reasons.push("-blocked: payment processor message without merchant/subscription context");
     }
 
+    if (isBlockedOnboardingOnlyMessage) {
+        reasons.push("-blocked: onboarding-only message without billing evidence");
+    }
+
     const candidateFromPositiveEvidence = isCandidateFromPositiveEvidence(signals);
     const candidateByDecisionPolicy = isCandidateByDecisionPolicy(
         signals,
@@ -2963,6 +3121,7 @@ export function analyzeMessageForSubscription(
             !isBlockedExpiredReactivationMessage &&
             !isBlockedRawHeaderSnippetMessage &&
             !isBlockedPaymentProcessorWithoutMerchantMessage &&
+            !isBlockedOnboardingOnlyMessage &&
             candidateByDecisionPolicy,
         confidence: normalizedConfidence,
         reasons,
