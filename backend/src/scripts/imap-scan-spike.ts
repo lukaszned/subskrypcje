@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { ImapFlow, MessageAddressObject } from "imapflow";
+import { simpleParser } from "mailparser";
 import {
     analyzeMessageForSubscription,
     cleanText,
@@ -30,11 +31,33 @@ type ImapDebugMessage = {
     detected: ReturnType<typeof analyzeMessageForSubscription>["detected"];
 };
 
+type ImapRecurringGroup = {
+    groupKey: string;
+    suggestedName: string;
+    confidence: number;
+    cadence: "monthly" | "weekly" | "unknown";
+    count: number;
+    firstDate: string;
+    lastDate: string;
+    amounts: string[];
+    provider?: string;
+    domain: string;
+    fromSample: string;
+    sampleSubjects: string[];
+    sampleSnippets: string[];
+    messageIds: string[];
+    candidateMessages: number;
+    evidenceMessages: number;
+    reasons: string[];
+    isRecurringCandidate: boolean;
+};
+
 type ImapScanSpikeResult = {
     mailbox: string;
     scannedMessages: number;
     candidatesFound: number;
     rejectedMessages: number;
+    recurringGroups: ImapRecurringGroup[];
     debugMessages: ImapDebugMessage[];
 };
 
@@ -129,12 +152,375 @@ function sourceToSnippet(source: Buffer | undefined) {
     return truncateEvidenceSnippet(cleanText(stripHtml(body)));
 }
 
+async function messageSourceToSnippet(source: Buffer | undefined) {
+    if (!source) {
+        return "";
+    }
+
+    try {
+        const parsed = await simpleParser(source);
+        const parsedBody = parsed.text || (parsed.html ? stripHtml(parsed.html) : "");
+
+        if (parsedBody) {
+            return truncateEvidenceSnippet(cleanText(parsedBody));
+        }
+    } catch {
+        return sourceToSnippet(source);
+    }
+
+    return sourceToSnippet(source);
+}
+
 function optionalLine(label: string, value: string | number | boolean | undefined) {
     if (value === undefined || value === "") {
         return;
     }
 
     console.log(`   ${label}: ${value}`);
+}
+
+function extractEmailAddress(from: string) {
+    return cleanText(from.match(/<([^>]+)>/)?.[1] ?? from).toLowerCase();
+}
+
+function extractSenderDomain(from: string) {
+    const email = extractEmailAddress(from);
+    return email.includes("@") ? email.split("@").pop() ?? email : email;
+}
+
+function normalizeSubjectFamily(subject: string) {
+    const cleanedSubject = cleanText(subject);
+    const efakturaMatch = cleanedSubject.match(
+        /\b(eko\s?faktura|e-faktura|efaktura)\s+([^|:\n\r]+)/i
+    );
+
+    if (efakturaMatch?.[1] && efakturaMatch?.[2]) {
+        return cleanText(`${efakturaMatch[1]} ${efakturaMatch[2]}`)
+            .toLowerCase()
+            .replace(/\s+/g, " ")
+            .trim();
+    }
+
+    return cleanedSubject
+        .toLowerCase()
+        .replace(/\b(?:stycznia|lutego|marca|kwietnia|maja|czerwca|lipca|sierpnia|wrze[sś]nia|pa[zź]dziernika|listopada|grudnia)\b/gi, " ")
+        .replace(/\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\b/gi, " ")
+        .replace(/\b\d{1,4}(?:[./-]\d{1,4})+\b/g, " ")
+        .replace(/\b\d+(?:[,.]\d{2})?\s?(?:pln|usd|eur|gbp|z[lł])\b/gi, " ")
+        .replace(/\b\d+\b/g, " ")
+        .replace(/[|:_#()[\]{}.,;!?/\\-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function extractAmounts(text: string) {
+    const matches =
+        text.match(/(?:[$€£]\s?\d+(?:[.,]\d{2})?|\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP|z[lł]))/gi) ??
+        [];
+    return [...new Set(matches.map((match) => cleanText(match)))];
+}
+
+function sanitizeSampleSnippet(snippet: string) {
+    return truncateEvidenceSnippet(
+        snippet.replace(/https?:\/\/\S+/gi, (url) => url.split("?")[0])
+    );
+}
+
+function hasRecurringGroupEvidence(message: ImapDebugMessage) {
+    const text = `${message.subject} ${message.snippet}`;
+
+    return (
+        Boolean(message.detected.amountText) ||
+        extractAmounts(text).length > 0 ||
+        message.reasons.some((reason) =>
+            /receipt|invoice|payment|recurring bill|amount|billing date|payment\/charged/i.test(
+                reason
+            )
+        ) ||
+        /\b(ekofaktura|e-faktura|efaktura|faktura|rachunek|payment due|invoice due|kwota do zap[lł]aty|op[lł]a[cć] faktur[eę]|op[lł]acenie do|termin p[lł]atno[sś]ci|abonenta|panel klienta|eboa|ebok|e-bok)\b/i.test(
+            text
+        )
+    );
+}
+
+function isInvoiceLikeFamily(subjectFamily: string, messages: ImapDebugMessage[]) {
+    const text = `${subjectFamily} ${messages
+        .map((message) => `${message.subject} ${message.snippet}`)
+        .join(" ")}`;
+
+    if (/do[lĹ‚]adowanie|doladowanie|top-up|phone top-up|mailing@interia\.pl|dostarczone przez interi/i.test(text)) {
+        return false;
+    }
+
+    return /\b(ekofaktura|e-faktura|efaktura|faktura|rachunek|payment due|invoice due|termin p[lł]atno[sś]ci|op[lł]a[cć] faktur[eę]|eboa|ebok|e-bok)\b/i.test(
+        text
+    );
+}
+
+function isStrongEfakturaFamily(subjectFamily: string) {
+    return /\b(ekofaktura|e-faktura|efaktura)\b/i.test(subjectFamily);
+}
+
+function isOneTimeOrNoiseGroup(messages: ImapDebugMessage[], subjectFamily: string) {
+    const text = `${subjectFamily} ${messages
+        .map((message) => `${message.from} ${message.subject} ${message.snippet}`)
+        .join(" ")}`;
+
+    const isStrongInvoiceGroup =
+        isStrongEfakturaFamily(subjectFamily) ||
+        isInvoiceLikeFamily(subjectFamily, messages);
+
+    if (/do[\u0142l]adowanie|top-up|phone top-up|mailing@interia\.pl|dostarczone przez interi/i.test(text)) {
+        return true;
+    }
+
+    const hasHardOneTimeNoise =
+        /\b(uber|uber eats|bolt|booking|media expert|allegro|olx|wizz air|koleo|restaurant|restauracji|przejazd|zam[oó]wienie|bilety kolejowe|progress report|weekly progress|security|login|logowanie)\b/i.test(
+            text
+        );
+
+    if (hasHardOneTimeNoise) {
+        return true;
+    }
+
+    const hasSoftMarketingNoise =
+        /\b(newsletter|marketing|promocj|oferta)\b/i.test(text);
+
+    return hasSoftMarketingNoise && !isStrongInvoiceGroup;
+}
+
+function detectCadence(messages: ImapDebugMessage[]) {
+    const dates = messages
+        .map((message) => Date.parse(message.date))
+        .filter((value) => !Number.isNaN(value))
+        .sort((a, b) => a - b);
+
+    if (dates.length < 2) {
+        return "unknown" as const;
+    }
+
+    const gaps = dates
+        .slice(1)
+        .map((date, index) => (date - dates[index]) / (1000 * 60 * 60 * 24))
+        .filter((gap) => gap > 0);
+
+    if (gaps.length === 0) {
+        return "unknown" as const;
+    }
+
+    const monthlyGaps = gaps.filter((gap) => gap >= 20 && gap <= 45).length;
+    const weeklyGaps = gaps.filter((gap) => gap >= 5 && gap <= 10).length;
+
+    if (monthlyGaps >= Math.ceil(gaps.length * 0.6)) {
+        return "monthly" as const;
+    }
+
+    if (weeklyGaps >= Math.ceil(gaps.length * 0.6)) {
+        return "weekly" as const;
+    }
+
+    return "unknown" as const;
+}
+
+function cleanGroupName(value: string | undefined) {
+    const cleaned = cleanText(value)
+        .replace(/\b\d+(?:[./-]\d+)*\b/g, " ")
+        .replace(/[|:,_#()[\]{}.!?/\\-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!cleaned) {
+        return undefined;
+    }
+
+    return cleaned
+        .split(" ")
+        .slice(0, 3)
+        .map((part) =>
+            part.length <= 4
+                ? part.toUpperCase()
+                : part.charAt(0).toUpperCase() + part.slice(1)
+        )
+        .join(" ");
+}
+
+function inferProviderFromGroup(messages: ImapDebugMessage[], subjectFamily: string) {
+    const subjectText = messages.map((message) => message.subject).join(" ");
+    const efakturaName = subjectText.match(
+        /\b(?:eko\s?faktura|e-faktura|efaktura)\s+([^|:\n\r]+)/i
+    )?.[1];
+
+    const serviceName = messages
+        .map((message) => message.subject)
+        .map(
+            (subject) =>
+                subject.match(/do us[\u0142l]ugodawcy\s*-\s*([^\n\r|:;.,]+)/i)?.[1]
+        )
+        .find(Boolean);
+
+    const explicitName = cleanGroupName(efakturaName ?? serviceName);
+
+    if (explicitName) {
+        return explicitName;
+    }
+
+    const domain = extractSenderDomain(messages[0].from);
+    const blockedDomains = [
+        "gmail.com",
+        "interia.pl",
+        "paypal.com",
+        "tpay.com",
+        "payu.com",
+        "payu.pl",
+        "autopay.pl",
+        "stripe.com",
+    ];
+
+    if (
+        /\b(ekofaktura|e-faktura|efaktura|faktura|rachunek)\b/i.test(subjectFamily) &&
+        !blockedDomains.some((blocked) => domain.endsWith(blocked))
+    ) {
+        return cleanGroupName(domain.split(".")[0]);
+    }
+
+    return undefined;
+}
+
+function titleFromSubjectFamily(subjectFamily: string) {
+    return subjectFamily
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 5)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+}
+
+function buildRecurringGroups(debugMessages: ImapDebugMessage[]) {
+    const grouped = new Map<string, ImapDebugMessage[]>();
+
+    for (const message of debugMessages) {
+        const subjectFamily = normalizeSubjectFamily(message.subject);
+
+        if (!subjectFamily) {
+            continue;
+        }
+
+        const domain = extractSenderDomain(message.from);
+        const key = `${domain}|${subjectFamily}`;
+        grouped.set(key, [...(grouped.get(key) ?? []), message]);
+    }
+
+    const groups: ImapRecurringGroup[] = [];
+
+    for (const [groupKey, messages] of grouped.entries()) {
+        if (messages.length < 2) {
+            continue;
+        }
+
+        const [domain, subjectFamily] = groupKey.split("|");
+        const sortedMessages = [...messages].sort(
+            (a, b) => Date.parse(a.date) - Date.parse(b.date)
+        );
+        const cadence = detectCadence(sortedMessages);
+        const evidenceMessages = sortedMessages.filter(hasRecurringGroupEvidence)
+            .length;
+        const candidateMessages = sortedMessages.filter((message) => message.isCandidate)
+            .length;
+        const invoiceLike = isInvoiceLikeFamily(subjectFamily, sortedMessages);
+        const strongEfakturaFamily = isStrongEfakturaFamily(subjectFamily);
+        const blockedNoise = isOneTimeOrNoiseGroup(sortedMessages, subjectFamily);
+        const isRecurringCandidate =
+            !blockedNoise &&
+            evidenceMessages >= 2 &&
+            (cadence !== "unknown" ||
+                invoiceLike ||
+                (strongEfakturaFamily && sortedMessages.length >= 3));
+        const reasons: string[] = [];
+
+        if (evidenceMessages >= 2) {
+            reasons.push("repeated similar invoice/payment-like emails");
+        }
+
+        if (cadence !== "unknown") {
+            reasons.push(`${cadence} cadence`);
+        }
+
+        if (invoiceLike) {
+            reasons.push("invoice/payment due subject or body evidence");
+        }
+
+        if (strongEfakturaFamily) {
+            reasons.push("strong eFaktura subject family");
+        }
+
+        if (candidateMessages > 0) {
+            reasons.push(`${candidateMessages} message-level candidates in group`);
+        }
+
+        if (blockedNoise) {
+            reasons.push("excluded ecommerce/transport/newsletter/security-like group");
+        }
+
+        const amounts = [
+            ...new Set(
+                sortedMessages.flatMap((message) => [
+                    ...(message.detected.amountText ? [message.detected.amountText] : []),
+                    ...extractAmounts(`${message.subject} ${message.snippet}`),
+                ])
+            ),
+        ].slice(0, 12);
+        const provider =
+            sortedMessages.find((message) => message.detected.provider)?.detected
+                .provider ?? inferProviderFromGroup(sortedMessages, subjectFamily);
+        const suggestedName =
+            provider ??
+            titleFromSubjectFamily(subjectFamily) ??
+            extractEmailAddress(sortedMessages[0].from);
+        const confidence = Math.max(
+            0,
+            Math.min(
+                1,
+                0.35 +
+                Math.min(sortedMessages.length, 5) * 0.08 +
+                evidenceMessages * 0.1 +
+                (cadence === "monthly" ? 0.2 : cadence === "weekly" ? 0.1 : 0) +
+                (invoiceLike ? 0.15 : 0) +
+                (strongEfakturaFamily ? 0.1 : 0) -
+                (blockedNoise ? 0.7 : 0)
+            )
+        );
+        const firstDate = sortedMessages[0].date;
+        const lastDate = sortedMessages[sortedMessages.length - 1].date;
+
+        groups.push({
+            groupKey,
+            suggestedName,
+            confidence,
+            cadence,
+            count: sortedMessages.length,
+            firstDate,
+            lastDate,
+            amounts,
+            provider,
+            domain,
+            fromSample: sortedMessages[0].from,
+            sampleSubjects: [
+                ...new Set(sortedMessages.map((message) => message.subject)),
+            ].slice(0, 3),
+            sampleSnippets: sortedMessages
+                .slice(-2)
+                .map((message) => sanitizeSampleSnippet(message.snippet)),
+            messageIds: sortedMessages.map((message) => message.id),
+            candidateMessages,
+            evidenceMessages,
+            reasons,
+            isRecurringCandidate,
+        });
+    }
+
+    return groups.sort(
+        (a, b) => b.confidence - a.confidence || b.count - a.count
+    );
 }
 
 function printHumanSummary(result: ImapScanSpikeResult) {
@@ -145,16 +531,45 @@ function printHumanSummary(result: ImapScanSpikeResult) {
     console.log(`rejectedMessages: ${result.rejectedMessages}`);
     console.log("");
 
+    const strongRecurringGroups = result.recurringGroups.filter(
+        (group) =>
+            group.isRecurringCandidate &&
+            group.confidence >= 0.75 &&
+            group.count >= 3 &&
+            (group.cadence !== "unknown" ||
+                isStrongEfakturaFamily(group.groupKey.split("|")[1] ?? ""))
+    );
+    const recurringMessageIds = new Set(
+        strongRecurringGroups.flatMap((group) => group.messageIds)
+    );
+    const representativeMessageIds = new Set(
+        strongRecurringGroups
+            .map((group) =>
+                result.debugMessages
+                    .filter(
+                        (message) =>
+                            group.messageIds.includes(message.id) &&
+                            message.isCandidate
+                    )
+                    .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0]
+            )
+            .filter((message): message is ImapDebugMessage => Boolean(message))
+            .map((message) => message.id)
+    );
     const candidates = result.debugMessages
-        .filter((message) => message.isCandidate)
+        .filter(
+            (message) =>
+                message.isCandidate &&
+                (!recurringMessageIds.has(message.id) ||
+                    representativeMessageIds.has(message.id))
+        )
         .sort((a, b) => b.confidence - a.confidence);
 
-    if (candidates.length === 0) {
-        console.log("Potential subscriptions: none");
-        return;
-    }
-
     console.log("Potential subscriptions:");
+
+    if (candidates.length === 0) {
+        console.log("none");
+    }
 
     candidates.forEach((message, index) => {
         const title =
@@ -177,6 +592,41 @@ function printHumanSummary(result: ImapScanSpikeResult) {
         console.log("   reasons:");
 
         for (const reason of message.reasons) {
+            console.log(`   - ${reason}`);
+        }
+    });
+
+    const recurringCandidates = result.recurringGroups
+        .filter((group) => group.isRecurringCandidate)
+        .sort((a, b) => b.confidence - a.confidence || b.count - a.count)
+        .slice(0, 20);
+
+    console.log("");
+    console.log("Recurring groups:");
+
+    if (recurringCandidates.length === 0) {
+        console.log("none");
+        return;
+    }
+
+    recurringCandidates.forEach((group, index) => {
+        console.log("");
+        const groupTitle =
+            group.suggestedName && group.fromSample.includes(group.suggestedName)
+                ? group.fromSample
+                : `${group.suggestedName} / ${group.fromSample}`;
+
+        console.log(`${index + 1}. ${groupTitle}`);
+        console.log(`   confidence: ${group.confidence.toFixed(2)}`);
+        console.log(`   cadence: ${group.cadence}`);
+        console.log(`   messages: ${group.count}`);
+        optionalLine("amounts", group.amounts.join(", "));
+        optionalLine("first", group.firstDate.slice(0, 10));
+        optionalLine("last", group.lastDate.slice(0, 10));
+        optionalLine("sample subject", group.sampleSubjects[0]);
+        console.log("   reasons:");
+
+        for (const reason of group.reasons) {
             console.log(`   - ${reason}`);
         }
     });
@@ -233,7 +683,7 @@ async function main() {
                     dateValue instanceof Date
                         ? dateValue.toISOString()
                         : cleanText(String(dateValue ?? ""));
-                const snippet = sourceToSnippet(message.source);
+                const snippet = await messageSourceToSnippet(message.source);
                 const analysis = analyzeMessageForSubscription({
                     id,
                     from,
@@ -259,11 +709,13 @@ async function main() {
         const candidatesFound = debugMessages.filter(
             (message) => message.isCandidate
         ).length;
+        const recurringGroups = buildRecurringGroups(debugMessages);
         const result: ImapScanSpikeResult = {
             mailbox: config.mailbox,
             scannedMessages: debugMessages.length,
             candidatesFound,
             rejectedMessages: debugMessages.length - candidatesFound,
+            recurringGroups,
             debugMessages,
         };
 

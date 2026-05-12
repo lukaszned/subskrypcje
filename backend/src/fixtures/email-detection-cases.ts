@@ -1162,4 +1162,379 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
             maxConfidence: 0.45,
         },
     },
+    {
+        name: "OpenAI ChatGPT Plus new plan EN",
+        input: {
+            id: "fixture-openai-chatgpt-plus-new-plan-en",
+            from: "OpenAI <noreply@tm.openai.com>",
+            subject: "ChatGPT - Your new plan",
+            snippet:
+                "You've successfully subscribed to ChatGPT Plus. Your subscription will automatically renew monthly. You can cancel at any time.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "OpenAI",
+            name: "ChatGPT Plus",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Play payment due invoice PL",
+        input: {
+            id: "fixture-play-payment-due-invoice-pl",
+            from: "Play <playfinanse@play.pl>",
+            subject: "Informacja o zblizajacym sie terminie platnosci",
+            snippet:
+                "Czy pamietasz, ze zbliza sie termin platnosci za fakture nr F/30006325/03/26? Termin mija 07/04/2026.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Play",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Play marketing 5G offer PL",
+        input: {
+            id: "fixture-play-marketing-5g-offer-pl",
+            from: "PLAY <play@promocjeplay.pl>",
+            subject:
+                "Mroz odpuszcza, a my rozgrzewamy oferte 5G. Abonament 5G ze smartfonem 5G od 60 zl/mies.",
+            snippet:
+                "Juz dzis skorzystaj z wyjatkowej oferty. Wybierz abonament 5G ze smartfonem 5G. Sprawdz szczegoly oferty. KUP NA PLAY.PL. Zgody marketingowe oraz e-faktura i terminowe platnosci daja rabaty.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Play",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Spotify Premium Family upsell PL",
+        input: {
+            id: "fixture-spotify-premium-family-upsell-pl",
+            from: "Spotify <no-reply@spotify.com>",
+            subject: "Przejdz na Premium Family.",
+            snippet:
+                "Aktywuj Premium Family. Wyprobuj najlepszy plan dla ponad 3 osob mieszkajacych razem. Przejdz na Premium Family, aby zyskac nawet 6 oddzielnych kont Premium.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Spotify",
+            name: "Spotify Premium",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Suspicious Amazon Prime Max encoded-like",
+        input: {
+            id: "fixture-suspicious-amazon-prime-max-encoded-like",
+            from: "AmazonPrime <info@ermcas.com>",
+            subject: "Podsumowanie Twojej subskrypcji Max Standard.",
+            snippet:
+                "PFRBQkxFIHN0eWxlPSJCQUNLR1JPVU5EOiAjZjVmNWY1IiBjZWxsU3BhY2luZz0wIGNlbGxQYWRkaW5nPTAgd2lkdGg9IjEwMCUi",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Suspicious Prime Max encoded-like",
+        input: {
+            id: "fixture-suspicious-prime-max-encoded-like",
+            from: "PRlME <Noreply@ckcapital.co.uk>",
+            subject: "Informacje o Twojej subskrypcji Max Standard",
+            snippet:
+                "PERJViBzdHlsZT0iTUFYLVdJRFRIOiA1MjBweDsgQkFDS0dST1VORDogI2ZmZmZmZjsgTUFSR0lO",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Suspicious Spotify payment failed wrong domain PL",
+        input: {
+            id: "fixture-suspicious-spotify-payment-failed-wrong-domain-pl",
+            from: "Spotify <service@ezp.com.tw>",
+            subject: "Problem z przetworzeniem platnosci",
+            snippet:
+                "Problem z platnoscia Spotify. Zaktualizuj metode platnosci, aby uniknac przerwy.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Spotify",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Canva account change code PL",
+        input: {
+            id: "fixture-canva-account-change-code-pl",
+            from: "Canva <no-reply@account.canva.com>",
+            subject: "Chcesz wprowadzic zmiany na swoim koncie Canva?",
+            snippet:
+                "Wprowadz ponizszy kod, aby wprowadzic zmiany na swoim koncie. Otrzymalismy od Ciebie prosbe o aktualizacje danych na Twoim koncie Canva. Twoj kod to: 604982. Ta wiadomosc nie ma charakteru marketingowego ani promocyjnego i nie zawiera linku do anulowania subskrypcji.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Canva",
+            maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "Suspicious Amazon Prime wrong domain with SendGrid PL",
+        input: {
+            id: "fixture-suspicious-amazon-prime-wrong-domain-sendgrid-pl",
+            from: "PRlME <Noreply@ckcapital.co.uk>",
+            subject: "Informacje o Twojej subskrypcji Max Standard",
+            snippet:
+                "Amazon Prime WITAMY W PROGRAMIE. Wlasnie aktywowalismy Twoja subskrypcje uslugi Prime. Przetworzenie platnosci przebieglo pomyslnie. Oplata miesieczna 34,99 PLN. Subskrypcja automatycznie przedluza sie co miesiac. Panel zarzadzania https://u44305150.ct.sendgrid.net/ls/click",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Suspicious Amazon Max wrong domain PL",
+        input: {
+            id: "fixture-suspicious-amazon-max-wrong-domain-pl",
+            from: "AmazonPrime <info@ermcas.com>",
+            subject: "Podsumowanie Twojej subskrypcji Max Standard.",
+            snippet:
+                "Max. Ostatnio wykupiles dostep do Max Standard poprzez PRlME-Video. Ta wiadomosc przedstawia informacje o Twojej subskrypcji. Oferta Max Standard 39.99 PIn/miesiac. Odnowienie automatyczne.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Amazon Prime trusted domain EN",
+        input: {
+            id: "fixture-amazon-prime-trusted-domain-en",
+            from: "Amazon <digital-no-reply@amazon.com>",
+            subject: "Your Prime membership has renewed",
+            snippet:
+                "Your Amazon Prime membership has renewed. You have been charged 14.99 USD. Your membership renews monthly.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Amazon",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Spotify price increase consent PL",
+        input: {
+            id: "fixture-spotify-price-increase-consent-pl",
+            from: "Spotify <no-reply@legal.spotify.com>",
+            subject: "Ceny planow Premium rosna - wymagana jest Twoja zgoda",
+            snippet:
+                "Wymagane dzialanie: Wyraz zgode na zaktualizowana cene planu do dnia 17 maja 2026, aby pozostac w planie Premium. Aktualizujemy cene Premium Individual z 23,99 zl do 26,99 zl miesiecznie. Poniewaz cenimy Cie jako subskrybenta Spotify Premium, oferujemy Ci trzy dodatkowe miesiace w obecnej cenie do dnia rozliczenia za maja.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Spotify",
+            name: "Spotify Premium",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Spotify price change accepted PL",
+        input: {
+            id: "fixture-spotify-price-change-accepted-pl",
+            from: "Spotify <no-reply@spotify.com>",
+            subject:
+                "Dziekujemy za wyrazenie zgody na zmiane ceny - zachowujesz dostep do wersji Premium",
+            snippet:
+                "Wyraziles zgode na zaktualizowana cene za Premium Individual. Cieszymy sie, ze nadal bedziesz korzystac z Spotify Premium. Nowa cena 26,99 zl pojawi sie w dniu rozliczeniowym za maja.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Spotify",
+            name: "Spotify Premium",
+            billingCycle: "monthly",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "Spotify referral premium free months PL",
+        input: {
+            id: "fixture-spotify-referral-premium-free-months-pl",
+            from: "Spotify <no-reply@spotify.com>",
+            subject: "Podziel sie ze znajomym muzyka bez reklam.",
+            snippet:
+                "Udostepnij kod polecajacy Premium. Polec plan znajomemu, a ten otrzyma 3 miesiace Premium za 0 zl. Trzy miesiace za darmo dostepne sa tylko dla uzytkownikow, ktorzy nie korzystali jeszcze z Premium.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Spotify",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Spotify legal terms update PL",
+        input: {
+            id: "fixture-spotify-legal-terms-update-pl",
+            from: "Spotify <no-reply@legal.spotify.com>",
+            subject: "Wazne zmiany w Warunkach Spotify",
+            snippet:
+                "Zaktualizowalismy nasze Warunki korzystania z uslugi. Nowa wersja Warunkow obowiazuje od 26 wrzesnia 2025 roku. Mozesz zapoznac sie z nimi tutaj.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Spotify",
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Duolingo weekly progress report EN",
+        input: {
+            id: "fixture-duolingo-weekly-progress-report-en",
+            from: "Duolingo <hello@duolingo.com>",
+            subject: "Progress report! You did great",
+            snippet:
+                "Weekly Progress. Take a look at your stats. Your Spanish progress cannot be stopped.",
+        },
+        expected: {
+            isCandidate: false,
+            provider: "Duolingo",
+            maxConfidence: 0.35,
+        },
+    },
+    {
+        name: "Generic eFaktura internet provider PL",
+        input: {
+            id: "fixture-generic-efaktura-internet-provider-pl",
+            from: "faktury@localnet.pl",
+            subject: "eFaktura LocalNet | 04 | 2026",
+            snippet:
+                "Kod abonenta: 12345. Twoja eFaktura za internet o numerze FV/04/2026 na kwote 79,99 zl jest juz dostepna w panelu klienta. Oplac fakture online. Masz czas na jej oplacenie do 15.04.2026 r.",
+        },
+        expected: {
+            isCandidate: true,
+            amountText: "79,99 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "TOYA ekoFaktura PL",
+        input: {
+            id: "fixture-toya-ekofaktura-pl",
+            from: "ekofaktura@toya.net.pl",
+            subject: "ekoFaktura TOYA | 05 | 2026",
+            snippet:
+                "Kod Abonenta: 01679519. Dzien dobry, Twoja ekoFaktura o numerze 6V/183570/05/2026 na kwote 55,13 zl jest juz dostepna w eBOA. Oplac fakture w eBOA. Masz czas na jej oplacenie do 20.05.2026 r. Pozdrawiamy Zespol TOYA.",
+        },
+        expected: {
+            isCandidate: true,
+            amountText: "55,13 zl",
+            minConfidence: 0.55,
+        },
+    },
+    {
+        name: "One-time shop invoice still false PL",
+        input: {
+            id: "fixture-one-time-shop-invoice-still-false-pl",
+            from: "Media Expert <sklep@mediaexpert.pl>",
+            subject: "Faktura VAT do zamowienia 02418348314",
+            snippet:
+                "Przesylamy fakture VAT do Twojego zamowienia. Dokument znajdziesz w zalaczniku. Dziekujemy za wybor naszego sklepu. Wybrane produkty.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Uber Eats receipt still false PL",
+        input: {
+            id: "fixture-uber-eats-receipt-still-false-pl",
+            from: "Rachunki Uber <noreply@uber.com>",
+            subject: "Twoje zamowienie z Uber Eats",
+            snippet:
+                "Dziekujemy za zlozenie zamowienia. Oto Twoj rachunek dla restauracji. Suma 82,84 zl.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "MPK periodic ticket purchase PL",
+        input: {
+            id: "fixture-mpk-periodic-ticket-purchase-pl",
+            from: "Elektroniczne Konto Pasazera <no-reply@ekp.mpk.krakow.pl>",
+            subject: "Potwierdzenie zakupu biletu",
+            snippet:
+                'Krakowska Karta Miejska. Potwierdzenie zakupu biletu. Dziekujemy za zakup biletu "Bilet ulg. mieszk. 3-mies. sieciowy st. I". Wazny od 19-04-2026 do 18-07-2026. Kwota transakcji 148,50 PLN. Numer klienta 42409118.',
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "MPK ticket payment pending PL",
+        input: {
+            id: "fixture-mpk-ticket-payment-pending-pl",
+            from: "Elektroniczne Konto Pasazera <no-reply@ekp.mpk.krakow.pl>",
+            subject: "Informacja o zakupie biletu",
+            snippet:
+                'Dziekujemy za zakup biletu "Bilet ulg. mieszk. 6-mies. sieciowy st. I". W chwili obecnej oczekujemy na zaksiegowanie Twojej platnosci. Wazny od 16-10-2025 do 15-04-2026. Cena 235,00 PLN.',
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "PayU phone top-up PL",
+        input: {
+            id: "fixture-payu-phone-top-up-pl",
+            from: "Doladowania PayU <no-reply@payu.com>",
+            subject: "Realizacja doladowania telefonu",
+            snippet:
+                "Realizacja doladowania telefonu. Doladowanie numeru telefonu zostalo zrealizowane. Kwota doladowania 10 zl.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Plush monthly offer marketing PL",
+        input: {
+            id: "fixture-plush-monthly-offer-marketing-pl",
+            from: "Plush - dostarczone przez Interie <mailing@interia.pl>",
+            subject: "Tylko 20 zl/mies. po rabatach za os.",
+            snippet:
+                "Oferta promocyjna. Wez abonament z kim chcesz i zyskaj. Tylko 20 zl/mies. po rabatach. Sprawdz szczegoly oferty.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "TOYA ekoFaktura should infer provider PL",
+        input: {
+            id: "fixture-toya-ekofaktura-should-infer-provider-pl",
+            from: "ekofaktura@toya.net.pl",
+            subject: "ekoFaktura TOYA | 05 | 2026",
+            snippet:
+                "Kod Abonenta: 01679519. Twoja ekoFaktura o numerze 6V/183570/05/2026 na kwote 55,13 z\u0142 jest juz dostepna w eBOA. Oplac fakture w eBOA. Masz czas na jej oplacenie do 20.05.2026 r.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "TOYA",
+            amountText: "55,13 z\u0142",
+            minConfidence: 0.55,
+        },
+    },
 ];

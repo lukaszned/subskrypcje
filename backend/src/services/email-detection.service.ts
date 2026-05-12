@@ -38,6 +38,7 @@ type DetectionSignals = {
     hasReceiptEvidence: boolean;
     hasInvoiceEvidence: boolean;
     hasPaymentEvidence: boolean;
+    hasPaymentDueEvidence: boolean;
     hasChargedEvidence: boolean;
     hasRecurringEvidence: boolean;
     hasSubscriptionEvidence: boolean;
@@ -45,13 +46,20 @@ type DetectionSignals = {
     hasPaidTierEvidence: boolean;
     hasBillingCycleEvidence: boolean;
     hasPaymentFailedEvidence: boolean;
+    hasPriceChangeEvidence: boolean;
+    hasActiveSubscriberEvidence: boolean;
+    hasBillingDateEvidence: boolean;
+    hasTransportTicketEvidence: boolean;
+    hasPhoneTopUpEvidence: boolean;
     hasAccountSecurityEvidence: boolean;
+    hasAccountSecurityCodeEvidence: boolean;
     hasVerificationEvidence: boolean;
     hasPasswordResetEvidence: boolean;
     hasCancellationEvidence: boolean;
     hasRefundEvidence: boolean;
     hasFreePlanEvidence: boolean;
     hasMarketingEvidence: boolean;
+    hasProgressReportEvidence: boolean;
     hasNegatedSubscriptionEvidence: boolean;
     hasNegatedBillingEvidence: boolean;
     hasPromotionalTrialEvidence: boolean;
@@ -60,6 +68,9 @@ type DetectionSignals = {
     hasRecurringBillEvidence: boolean;
     hasActiveRenewalPaymentEvidence: boolean;
     hasPaymentReceiptTrialChargeEvidence: boolean;
+    hasUnreadableEncodedEvidence: boolean;
+    hasSuspiciousSenderEvidence: boolean;
+    hasHighRiskProviderSuspiciousSenderEvidence: boolean;
 };
 
 const PROVIDER_CATALOG = [
@@ -154,6 +165,9 @@ function hasNegatedSubscriptionSignal(subjectAndSnippet: string) {
         /nie rozpoczeto subskrypcji/i,
         /to nie jest subskrypcja/i,
         /brak subskrypcji/i,
+        /nie zawiera linku do anulowania subskrypcji/i,
+        /wiadomo[s\u015b][c\u0107] nie ma charakteru marketingowego/i,
+        /nie ma charakteru marketingowego ani promocyjnego/i,
     ]);
 }
 
@@ -176,6 +190,28 @@ function hasNegatedBillingSignal(subjectAndSnippet: string) {
 
 function hasRecurringBillSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
+        /ekofaktura/i,
+        /e-faktura/i,
+        /efaktura/i,
+        /twoja ekofaktura/i,
+        /faktura jest ju[z\u017c] dost[e\u0119]pna/i,
+        /faktura dost[e\u0119]pna/i,
+        /jest ju[z\u017c] dost[e\u0119]pna w eboa/i,
+        /dost[e\u0119]pna w panelu klienta/i,
+        /op[l\u0142]a[c\u0107] faktur[e\u0119]/i,
+        /op[l\u0142]ac fakture/i,
+        /op[l\u0142]acenie do/i,
+        /op[l\u0142]acenia do/i,
+        /masz czas na jej op[l\u0142]acenie do/i,
+        /termin op[l\u0142]acenia/i,
+        /na kwot[e\u0119]/i,
+        /kod abonenta/i,
+        /numer klienta/i,
+        /numer abonenta/i,
+        /\babonent\b/i,
+        /panel klienta/i,
+        /\b(eBOA|eboa|ebok|e-bok)\b/i,
+        /moje konto klienta/i,
         /us[l\u0142]ugi telekomunikacyjne/i,
         /abonament telefoniczny/i,
         /internet domowy/i,
@@ -183,6 +219,12 @@ function hasRecurringBillSignal(subjectAndSnippet: string) {
         /faktura za pakiet internetowy/i,
         /rachunek za internet/i,
         /kwota do zap[l\u0142]aty/i,
+        /amount due/i,
+        /payment due/i,
+        /invoice due/i,
+        /zbli[z\u017c]a si[e\u0119] termin p[\u0142l]atno[s\u015b]ci/i,
+        /termin p[\u0142l]atno[s\u015b]ci za faktur[e\u0119]/i,
+        /termin mija/i,
         /termin p[\u0142l]atno[s\u015b]ci/i,
         /okres rozliczeniowy/i,
         /p[\u0142l]atno[s\u015b][c\u0107] cykliczna/i,
@@ -193,6 +235,96 @@ function hasRecurringBillSignal(subjectAndSnippet: string) {
         /rozliczane miesi[e\u0119]cznie/i,
         /us[l\u0142]uga rozliczana jest co miesi[a\u0105]c/i,
         /us[l\u0142]ugi s[a\u0105] rozliczane miesi[e\u0119]cznie/i,
+    ]);
+}
+
+function hasPaymentDueSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /zbli[z\u017c]a si[e\u0119] termin p[\u0142l]atno[s\u015b]ci/i,
+        /termin p[\u0142l]atno[s\u015b]ci za faktur[e\u0119]/i,
+        /termin mija/i,
+        /kwota do zap[l\u0142]aty/i,
+        /op[l\u0142]a[c\u0107] faktur[e\u0119]/i,
+        /op[l\u0142]ac fakture/i,
+        /op[l\u0142]acenie do/i,
+        /op[l\u0142]acenia do/i,
+        /masz czas na jej op[l\u0142]acenie do/i,
+        /termin op[l\u0142]acenia/i,
+        /\b(amount due|payment due|invoice due)\b/i,
+    ]);
+}
+
+function hasPriceChangeSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /zmiana ceny/i,
+        /zaktualizowan[a\u0105] cen[e\u0119]/i,
+        /ceny plan[o\u00f3]w premium rosn[a\u0105]/i,
+        /aktualizujemy cen[e\u0119]/i,
+        /nowa cena/i,
+        /\b(price change|updated price|price increase|your price is changing)\b/i,
+    ]);
+}
+
+function hasActiveSubscriberSignal(subjectAndSnippet: string) {
+    if (includesAny(subjectAndSnippet, [/warunk[o\u00f3]w/i, /regulamin/i])) {
+        return false;
+    }
+
+    return includesAny(subjectAndSnippet, [
+        /jako subskrybenta/i,
+        /jako subskrybent/i,
+        /nadal b[e\u0119]dziesz korzysta[c\u0107]/i,
+        /zachowujesz dost[e\u0119]p/i,
+        /aby pozosta[c\u0107] w planie/i,
+        /pozostajesz w planie/i,
+        /\b(active subscriber|as a subscriber|keep your plan|continue your subscription)\b/i,
+    ]);
+}
+
+function hasBillingDateSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /dzie[n\u0144] rozliczeniowy/i,
+        /dniu rozliczeniowym/i,
+        /do dnia rozliczenia/i,
+        /pojawi si[e\u0119] w dniu rozliczeniowym/i,
+        /\b(billing date|next billing date|renewal date)\b/i,
+    ]);
+}
+
+function hasProgressReportSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\bweekly progress\b/i,
+        /\bprogress report\b/i,
+        /\btake a look at your stats\b/i,
+    ]);
+}
+
+function hasTransportTicketSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\bbilet\b/i,
+        /zakup biletu/i,
+        /potwierdzenie zakupu biletu/i,
+        /karta miejska/i,
+        /krakowska karta miejska/i,
+        /elektroniczne konto pasa[z\u017c]era/i,
+        /wazny od/i,
+        /wa[z\u017c]ny od/i,
+        /wazny do/i,
+        /wa[z\u017c]ny do/i,
+        /sieciowy/i,
+        /komunikacja miejska/i,
+        /\bmpk\b/i,
+    ]);
+}
+
+function hasPhoneTopUpSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /do[l\u0142]adowanie telefonu/i,
+        /realizacja do[l\u0142]adowania/i,
+        /kwota do[l\u0142]adowania/i,
+        /do[l\u0142]adowanie numeru/i,
+        /\btop-up\b/i,
+        /\bphone top-up\b/i,
     ]);
 }
 
@@ -281,6 +413,102 @@ function hasFreePlanSignal(subjectAndSnippet: string) {
     ]);
 }
 
+function hasUnreadableEncodedEvidenceSignal(subjectAndSnippet: string) {
+    const quotedPrintableMatches =
+        subjectAndSnippet.match(/=(?:C3|C5|3D)/gi)?.length ?? 0;
+
+    return (
+        includesAny(subjectAndSnippet, [
+            /\bContent-Transfer-Encoding\b/i,
+            /\bContent-Type:/i,
+            /\bMime-Version\b/i,
+            /\b[A-Za-z0-9+/=]{80,}\b/,
+            /\b(?:PFRB|PCFE|PERJ)[A-Za-z0-9+/=]{20,}\b/,
+        ]) || quotedPrintableMatches >= 4
+    );
+}
+
+function isTrustedPaymentProcessorText(text: string) {
+    return /\b(paypal|stripe|google|payu|przelewy24|autopay|tpay)\b/i.test(text);
+}
+
+function isSuspiciousSenderForProvider(from: string, provider: string | undefined) {
+    const emailAddress = from.match(/<([^>]+)>/)?.[1] ?? from;
+
+    if (!provider || isTrustedPaymentProcessorText(emailAddress)) {
+        return false;
+    }
+
+    const trustedProviderKeywords: Record<string, string[]> = {
+        Spotify: ["spotify"],
+        OpenAI: ["openai", "tm.openai", "chatgpt"],
+        YouTube: ["youtube", "google"],
+        "Google Play": ["google"],
+        "Google One": ["google"],
+        Apple: ["apple"],
+        Netflix: ["netflix"],
+        Disney: ["disney"],
+        Max: ["max", "hbo", "warnermedia", "wbd"],
+        HBO: ["hbo", "max", "warnermedia", "wbd"],
+        Amazon: ["amazon"],
+        Canva: ["canva"],
+        Adobe: ["adobe"],
+        Microsoft: ["microsoft"],
+        Dropbox: ["dropbox"],
+        Play: ["play.pl", "mojefinanseplay"],
+        Orange: ["orange"],
+        "T-Mobile": ["t-mobile", "tmobile"],
+        Plus: ["plus.pl"],
+        Netia: ["netia"],
+        Vectra: ["vectra"],
+        UPC: ["upc"],
+    };
+    const trustedKeywords = trustedProviderKeywords[provider];
+
+    if (!trustedKeywords) {
+        return false;
+    }
+
+    const normalizedFrom = emailAddress.toLowerCase();
+    return !trustedKeywords.some((keyword) =>
+        normalizedFrom.includes(keyword.toLowerCase())
+    );
+}
+
+function isHighRiskProviderForSuspiciousSender(provider: string | undefined) {
+    return Boolean(
+        provider &&
+            [
+                "Amazon",
+                "Max",
+                "HBO",
+                "Disney",
+                "Netflix",
+                "Spotify",
+                "OpenAI",
+                "YouTube",
+                "Google Play",
+                "Google One",
+                "Apple",
+                "Microsoft",
+                "Adobe",
+                "Canva",
+                "Dropbox",
+            ].includes(provider)
+    );
+}
+
+function hasSuspiciousRedirectLinkSignal(subjectAndSnippet: string) {
+    return /\b(?:sendgrid|ct\.sendgrid)\b/i.test(subjectAndSnippet);
+}
+
+function hasRealExternalDomainMismatchEvidence(
+    from: string,
+    provider: string | undefined
+) {
+    return isSuspiciousSenderForProvider(from, provider);
+}
+
 function hasAccountSecurityLoginSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
         /\b(verify your email|confirm your email|confirm email|email verification|login code|sign-in code|new sign in|new login|password reset|security alert|create account|account creation)\b/i,
@@ -297,12 +525,100 @@ function hasAccountSecurityLoginSignal(subjectAndSnippet: string) {
     ]);
 }
 
+function hasAccountSecurityCodeSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /wprowad[z\u017a] poni[z\u017c]szy kod/i,
+        /wpisz poni[z\u017c]szy kod/i,
+        /tw[o\u00f3]j kod to/i,
+        /\bkod to:/i,
+        /zmiany na swoim koncie/i,
+        /aktualizacja danych na twoim koncie/i,
+        /aktualizacja danych na koncie/i,
+        /pro[s\u015b]b[e\u0119] o aktualizacj[e\u0119] danych/i,
+        /prosbe o aktualizacje danych/i,
+        /kod w ci[a\u0105]gu/i,
+        /kod w ciagu/i,
+    ]);
+}
+
 export function detectProvider(text: string) {
     const normalizedText = text.toLowerCase();
 
     return PROVIDER_CATALOG.find((provider) =>
         provider.patterns.some((pattern) => normalizedText.includes(pattern))
     )?.name;
+}
+
+function cleanInferredProviderName(value: string | undefined) {
+    const cleaned = cleanText(value)
+        .replace(/\b\d+(?:[./|-]\d+)*\b/g, " ")
+        .replace(/\b(?:pln|usd|eur|gbp|zl|z\u0142)\b/gi, " ")
+        .replace(/[|:,_#()[\]{}.!?/\\-]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!cleaned || cleaned.length < 2) {
+        return undefined;
+    }
+
+    return cleaned
+        .split(" ")
+        .filter(Boolean)
+        .slice(0, 3)
+        .map((part) =>
+            part.length <= 4
+                ? part.toUpperCase()
+                : part.charAt(0).toUpperCase() + part.slice(1)
+        )
+        .join(" ");
+}
+
+function hasInvoiceLikeProviderInferenceContext(text: string) {
+    return includesAny(text, [
+        /ekofaktura/i,
+        /e-faktura/i,
+        /efaktura/i,
+        /op[l\u0142]a[c\u0107] faktur[e\u0119]/i,
+        /op[l\u0142]ac fakture/i,
+        /termin p[l\u0142]atno[s\u015b]ci/i,
+        /kwota do zap[l\u0142]aty/i,
+        /panel klienta/i,
+        /\b(eBOA|eboa|ebok|e-bok)\b/i,
+    ]);
+}
+
+function inferProviderFromInvoiceContext(from: string, subjectAndSnippet: string) {
+    const subjectProvider = subjectAndSnippet.match(
+        /\b(?:eko\s?faktura|e-faktura|efaktura)\s+([^|:\n\r]+)/i
+    )?.[1];
+    const cleanedSubjectProvider = cleanInferredProviderName(subjectProvider);
+
+    if (cleanedSubjectProvider) {
+        return cleanedSubjectProvider;
+    }
+
+    if (!hasInvoiceLikeProviderInferenceContext(subjectAndSnippet)) {
+        return undefined;
+    }
+
+    const emailAddress = from.match(/<([^>]+)>/)?.[1] ?? from;
+    const domain = emailAddress.toLowerCase().split("@").pop() ?? "";
+    const blockedDomains = [
+        "gmail.com",
+        "interia.pl",
+        "paypal.com",
+        "tpay.com",
+        "payu.com",
+        "payu.pl",
+        "autopay.pl",
+        "stripe.com",
+    ];
+
+    if (!domain || blockedDomains.some((blocked) => domain.endsWith(blocked))) {
+        return undefined;
+    }
+
+    return cleanInferredProviderName(domain.split(".")[0]);
 }
 
 function isPaymentProcessorText(text: string) {
@@ -426,6 +742,7 @@ export function detectTrialEndDateText(text: string) {
 export function detectAmountText(text: string) {
     const patterns = [
         /[$\u20ac\u00a3]\s?\d+(?:[.,]\d{2})?/,
+        /\d+(?:[.,]\d{2})?\s?z[l\u0142]/i,
         /\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP)/i,
         /(?:PLN|USD|EUR|GBP)\s?\d+(?:[.,]\d{2})?/i,
     ];
@@ -447,6 +764,7 @@ export function detectCurrency(amountText: string | undefined) {
     if (amountText.includes("$")) return "USD";
     if (amountText.includes("\u20ac")) return "EUR";
     if (amountText.includes("\u00a3")) return "GBP";
+    if (/\bz[l\u0142]\b/i.test(amountText)) return "PLN";
 
     const currencyMatch = amountText.match(/\b(PLN|USD|EUR|GBP)\b/i);
     return currencyMatch?.[1]?.toUpperCase();
@@ -464,7 +782,7 @@ export function parseAmountText(
         /^([$\u20ac\u00a3])\s?(\d+(?:[.,]\d{2})?)$/
     );
     const suffixCurrency = cleanedAmountText.match(
-        /^(\d+(?:[.,]\d{2})?)\s?(PLN|USD|EUR|GBP)$/i
+        /^(\d+(?:[.,]\d{2})?)\s?(PLN|USD|EUR|GBP|z[l\u0142])$/i
     );
     const prefixCurrency = cleanedAmountText.match(
         /^(PLN|USD|EUR|GBP)\s?(\d+(?:[.,]\d{2})?)$/i
@@ -480,7 +798,7 @@ export function parseAmountText(
     if (suffixCurrency) {
         return {
             amount: Number(suffixCurrency[1].replace(",", ".")),
-            currency: suffixCurrency[2].toUpperCase(),
+            currency: detectCurrency(suffixCurrency[2]),
         };
     }
 
@@ -515,6 +833,10 @@ export function truncateEvidenceSnippet(snippet: string) {
 export function detectBillingCycle(
     text: string
 ): BillingCycleDetection | undefined {
+    if (hasProgressReportSignal(text)) {
+        return undefined;
+    }
+
     if (
         includesAny(text, [
             /\b(monthly|per month|month-to-month|co miesi[a\u0105]c|co miesiac|ka[z\u017c]dego miesi[a\u0105]ca|kazdego miesiaca|miesi[e\u0119]cznie|miesiecznie)\b/i,
@@ -531,6 +853,8 @@ export function detectBillingCycle(
             /miesi[e\u0119]czny abonament/i,
             /okres rozliczeniowy[\s\S]{0,120}\b(internet|abonament|us[l\u0142]ug)/i,
             /\b(internet|abonament|us[l\u0142]ug)[\s\S]{0,120}okres rozliczeniowy/i,
+            /dniu rozliczeniowym/i,
+            /do dnia rozliczenia/i,
         ])
     ) {
         return "monthly";
@@ -563,37 +887,76 @@ function collectDetectionSignals(params: {
     subjectAndSnippet: string;
     combinedText: string;
 }): DetectionSignals {
-    const provider = detectProvider(params.combinedText);
+    const detectedCatalogProvider = detectProvider(params.combinedText);
+    const provider =
+        detectedCatalogProvider ??
+        inferProviderFromInvoiceContext(params.from, params.subjectAndSnippet);
     const planName = detectPlanName(params.combinedText);
     const billingCycle = detectBillingCycle(params.subjectAndSnippet);
     const trialEndDateText = detectTrialEndDateText(params.subjectAndSnippet);
     const amountText = detectAmountText(params.subjectAndSnippet);
+    const hasProgressReportEvidence = hasProgressReportSignal(
+        params.subjectAndSnippet
+    );
+    const hasPriceChangeEvidence = hasPriceChangeSignal(params.subjectAndSnippet);
+    const hasActiveSubscriberEvidence = hasActiveSubscriberSignal(
+        params.subjectAndSnippet
+    );
+    const hasBillingDateEvidence = hasBillingDateSignal(params.subjectAndSnippet);
+    const hasTransportTicketEvidence = hasTransportTicketSignal(
+        params.combinedText
+    );
+    const hasPhoneTopUpEvidence = hasPhoneTopUpSignal(params.combinedText);
     const hasNegatedSubscriptionEvidence = hasNegatedSubscriptionSignal(
         params.subjectAndSnippet
     );
     const hasNegatedBillingEvidence = hasNegatedBillingSignal(
         params.subjectAndSnippet
     );
-    const hasRecurringBillEvidence = hasRecurringBillSignal(
-        params.subjectAndSnippet
-    );
+    const hasPaymentDueEvidence =
+        !hasNegatedBillingEvidence && hasPaymentDueSignal(params.subjectAndSnippet);
+    const hasMarketingEvidence = includesAny(params.subjectAndSnippet, [
+        /\b(newsletter|sale|promo|offer|deal|limited time offer|special offer|discover|promotional email|try it|upgrade to|switch to|activate|send-premium|referral|refer a friend)\b/i,
+        /\b(oferta|oferte|oferty|wyj[a\u0105]tkowa oferta|wyjatkowa oferta|sprawd[z\u017a] szczeg[o\u00f3][l\u0142]y oferty|sprawdz szczegoly oferty|oferta specjalna|kup na|przejd[z\u017a] na|przejdz na|aktywuj|wypr[o\u00f3]buj|wyprobuj|wybierz abonament|smartfonem|rabatach|zgody marketingowe|promocyjne|promocje|marketingowe|promocyjna|poznaj)\b/i,
+        /kod polecaj[a\u0105]cy/i,
+        /pole[c\u0107] plan znajomemu/i,
+        /podziel si[e\u0119]/i,
+        /3 miesi[a\u0105]ce za darmo/i,
+        /za 0 z[l\u0142]/i,
+    ]);
+    const hasRecurringBillEvidence =
+        hasRecurringBillSignal(params.subjectAndSnippet) &&
+        !(hasMarketingEvidence && !hasPaymentDueEvidence);
     const hasTrialEvidence = includesAny(params.subjectAndSnippet, [
         /\b(trial|free trial|trial started|start your trial|your trial|trial will end|okres pr[o\u00f3]bny|wersja pr[o\u00f3]bna)\b/i,
     ]);
     const hasReceiptEvidence =
         !hasNegatedBillingEvidence &&
+        !(hasMarketingEvidence && !hasPaymentDueEvidence) &&
         includesAny(params.subjectAndSnippet, [
             /\b(receipt|order receipt|order confirmation|purchase confirmation|potwierdzenie zakupu|potwierdzenie p[\u0142l]atno[s\u015b]ci|potwierdzenie platnosci)\b/i,
+            /ekofaktura/i,
+            /e-faktura/i,
+            /efaktura/i,
         ]);
     const hasInvoiceEvidence =
         !hasNegatedBillingEvidence &&
+        !(hasMarketingEvidence && !hasPaymentDueEvidence) &&
         includesAny(params.subjectAndSnippet, [
             /\b(invoice|faktura|numer faktury|rachunek)\b/i,
+            /ekofaktura/i,
+            /e-faktura/i,
+            /efaktura/i,
+            /faktura jest ju[z\u017c] dost[e\u0119]pna/i,
+            /faktura dost[e\u0119]pna/i,
         ]);
     const hasPaymentEvidence =
         !hasNegatedBillingEvidence &&
+        !(hasMarketingEvidence && !hasPaymentDueEvidence) &&
         includesAny(params.subjectAndSnippet, [
             /\b(payment|paid|purchase|purchased|billed|p[\u0142l]atno[s\u015b][c\u0107]i|p[\u0142l]atno[s\u015b][c\u0107]|platnosci|platnosc|zakup)\b/i,
+            /op[l\u0142]a[c\u0107] faktur[e\u0119]/i,
+            /op[l\u0142]ac fakture/i,
             /\bpobralismy\s+platnosc\b/i,
             /\bpobral[i\u015b]my\s+p[\u0142l]atno[s\u015b][c\u0107]\b/i,
         ]);
@@ -616,6 +979,8 @@ function collectDetectionSignals(params: {
     ]);
     const hasPaymentFailedEvidence = includesAny(params.subjectAndSnippet, [
         /\b(payment failed|problem with your .*payment|could not process your payment|update your payment method)\b/i,
+        /\bproblem z (?:przetworzeniem )?p[\u0142l]atno[s\u015b]ci\b/i,
+        /zaktualizuj metod[e\u0119] p[\u0142l]atno[s\u015b]ci/i,
         /\bnie uda[l\u0142]o si[e\u0119] pobra[c\u0107] p[\u0142l]atno[s\u015b]ci\b/i,
         /\bnie udalo sie pobrac platnosci\b/i,
     ]);
@@ -628,7 +993,11 @@ function collectDetectionSignals(params: {
     const hasPasswordResetEvidence = /\b(password reset|reset your .*password)\b/i.test(
         params.subjectAndSnippet
     );
+    const hasAccountSecurityCodeEvidence = hasAccountSecurityCodeSignal(
+        params.subjectAndSnippet
+    );
     const hasAccountSecurityEvidence =
+        hasAccountSecurityCodeEvidence ||
         hasAccountSecurityLoginSignal(params.subjectAndSnippet) ||
         includesAny(params.subjectAndSnippet, [
             /\b(login code|sign-in code|new sign in|new sign-in|new login|security alert|account security)\b/i,
@@ -636,10 +1005,6 @@ function collectDetectionSignals(params: {
             /jednorazowy\s+kod/i,
             /nowe\s+logowanie/i,
         ]);
-    const hasMarketingEvidence = includesAny(params.subjectAndSnippet, [
-        /\b(newsletter|sale|promo|offer|deal|limited time offer|special offer|discover|promotional email)\b/i,
-        /\b(promocje|promocyjna|oferta|poznaj)\b/i,
-    ]);
     const hasPromotionalTrialEvidence = hasPromotionalTrialSignal(
         params.subjectAndSnippet
     );
@@ -658,8 +1023,21 @@ function collectDetectionSignals(params: {
         hasReceiptEvidence ||
         hasInvoiceEvidence ||
         hasPaymentEvidence ||
+        hasPaymentDueEvidence ||
         hasChargedEvidence ||
         hasTrialEvidence;
+    const hasUnreadableEncodedEvidence = hasUnreadableEncodedEvidenceSignal(
+        params.subjectAndSnippet
+    );
+    const hasSuspiciousSenderEvidence = isSuspiciousSenderForProvider(
+        params.from,
+        provider
+    );
+    const hasHighRiskProviderSuspiciousSenderEvidence =
+        hasSuspiciousSenderEvidence &&
+        isHighRiskProviderForSuspiciousSender(provider) &&
+        (hasSuspiciousRedirectLinkSignal(params.subjectAndSnippet) ||
+            hasRealExternalDomainMismatchEvidence(params.from, provider));
 
     return {
         provider,
@@ -672,6 +1050,7 @@ function collectDetectionSignals(params: {
         hasReceiptEvidence,
         hasInvoiceEvidence,
         hasPaymentEvidence,
+        hasPaymentDueEvidence,
         hasChargedEvidence,
         hasRecurringEvidence,
         hasSubscriptionEvidence,
@@ -679,13 +1058,20 @@ function collectDetectionSignals(params: {
         hasPaidTierEvidence: hasPaidTierEvidence || Boolean(planName),
         hasBillingCycleEvidence: Boolean(billingCycle),
         hasPaymentFailedEvidence,
+        hasPriceChangeEvidence,
+        hasActiveSubscriberEvidence,
+        hasBillingDateEvidence,
+        hasTransportTicketEvidence,
+        hasPhoneTopUpEvidence,
         hasAccountSecurityEvidence,
+        hasAccountSecurityCodeEvidence,
         hasVerificationEvidence,
         hasPasswordResetEvidence,
         hasCancellationEvidence,
         hasRefundEvidence,
         hasFreePlanEvidence,
         hasMarketingEvidence,
+        hasProgressReportEvidence,
         hasNegatedSubscriptionEvidence,
         hasNegatedBillingEvidence,
         hasPromotionalTrialEvidence,
@@ -694,20 +1080,38 @@ function collectDetectionSignals(params: {
         hasRecurringBillEvidence,
         hasActiveRenewalPaymentEvidence,
         hasPaymentReceiptTrialChargeEvidence,
+        hasUnreadableEncodedEvidence,
+        hasSuspiciousSenderEvidence,
+        hasHighRiskProviderSuspiciousSenderEvidence,
     };
 }
 
-function hasStrongSubscriptionOrPaymentEvidence(signals: DetectionSignals) {
+function hasRealActiveBillingEvidence(signals: DetectionSignals) {
+    const hasActivePriceChangeEvidence =
+        signals.hasPaidTierEvidence &&
+        ((signals.hasPriceChangeEvidence && signals.hasActiveSubscriberEvidence) ||
+            (signals.hasPriceChangeEvidence &&
+                (signals.hasBillingCycleEvidence || Boolean(signals.amountText))) ||
+            (signals.hasActiveSubscriberEvidence && signals.hasBillingDateEvidence));
+
     return (
         signals.hasReceiptEvidence ||
         signals.hasInvoiceEvidence ||
         signals.hasPaymentEvidence ||
+        signals.hasPaymentDueEvidence ||
         signals.hasChargedEvidence ||
+        signals.hasPaymentFailedEvidence ||
         signals.hasRecurringBillEvidence ||
-        signals.hasTrialEvidence ||
+        signals.hasActiveTrialSubscriptionEvidence ||
+        signals.hasActiveRenewalPaymentEvidence ||
+        hasActivePriceChangeEvidence ||
         (signals.hasSubscriptionEvidence &&
             (signals.hasRecurringEvidence || signals.hasBillingCycleEvidence))
     );
+}
+
+function hasStrongSubscriptionOrPaymentEvidence(signals: DetectionSignals) {
+    return hasRealActiveBillingEvidence(signals) || signals.hasTrialEvidence;
 }
 
 function isCandidateFromPositiveEvidence(signals: DetectionSignals) {
@@ -716,7 +1120,14 @@ function isCandidateFromPositiveEvidence(signals: DetectionSignals) {
         signals.hasReceiptEvidence ||
         signals.hasInvoiceEvidence ||
         signals.hasPaymentEvidence ||
+        signals.hasPaymentDueEvidence ||
         signals.hasChargedEvidence;
+    const hasActivePriceChangeEvidence =
+        signals.hasPaidTierEvidence &&
+        ((signals.hasPriceChangeEvidence && signals.hasActiveSubscriberEvidence) ||
+            (signals.hasPriceChangeEvidence &&
+                (signals.hasBillingCycleEvidence || Boolean(signals.amountText))) ||
+            (signals.hasActiveSubscriberEvidence && signals.hasBillingDateEvidence));
 
     return (
         (hasReceiptInvoiceOrPayment &&
@@ -734,6 +1145,7 @@ function isCandidateFromPositiveEvidence(signals: DetectionSignals) {
                 hasReceiptInvoiceOrPayment ||
                 Boolean(signals.amountText) ||
                 signals.hasBillingCycleEvidence)) ||
+        (hasActivePriceChangeEvidence && Boolean(signals.provider)) ||
         (signals.hasPaidTierEvidence &&
             Boolean(signals.provider) &&
             (hasReceiptInvoiceOrPayment ||
@@ -781,7 +1193,11 @@ export function analyzeMessageForSubscription(
         reasons.push("+0.25 receipt/invoice evidence");
     }
 
-    if (signals.hasPaymentEvidence || signals.hasChargedEvidence) {
+    if (
+        signals.hasPaymentEvidence ||
+        signals.hasPaymentDueEvidence ||
+        signals.hasChargedEvidence
+    ) {
         confidence += 0.25;
         reasons.push("+0.25 payment/charged evidence");
     }
@@ -821,6 +1237,21 @@ export function analyzeMessageForSubscription(
     if (signals.hasPaymentFailedEvidence) {
         confidence += 0.15;
         reasons.push("+0.15 payment failed evidence");
+    }
+
+    if (signals.hasPriceChangeEvidence) {
+        confidence += 0.15;
+        reasons.push("+0.15 price change evidence");
+    }
+
+    if (signals.hasActiveSubscriberEvidence) {
+        confidence += 0.2;
+        reasons.push("+0.20 active subscriber evidence");
+    }
+
+    if (signals.hasBillingDateEvidence) {
+        confidence += 0.1;
+        reasons.push("+0.10 billing date evidence");
     }
 
     if (signals.trialEndDateText) {
@@ -937,10 +1368,57 @@ export function analyzeMessageForSubscription(
 
     if (
         signals.hasMarketingEvidence &&
-        !hasStrongSubscriptionOrPaymentEvidence(signals)
+        !hasRealActiveBillingEvidence(signals)
     ) {
         confidence -= 0.2;
-        reasons.push("-0.20 promotional signal without subscription-like signal");
+        reasons.push("-0.20 marketing/upsell signal without active billing evidence");
+    }
+
+    if (signals.hasUnreadableEncodedEvidence && !hasRealActiveBillingEvidence(signals)) {
+        confidence -= 0.35;
+        reasons.push("-0.35 unreadable encoded/raw message signal");
+    }
+
+    if (signals.hasSuspiciousSenderEvidence) {
+        const penalty =
+            signals.hasHighRiskProviderSuspiciousSenderEvidence
+                ? 1
+                : signals.hasUnreadableEncodedEvidence || signals.hasPaymentFailedEvidence
+                ? 0.5
+                : 0.25;
+        confidence -= penalty;
+        reasons.push(
+            `-${penalty.toFixed(2)} suspicious sender domain for detected provider`
+        );
+    }
+
+    if (
+        signals.hasProgressReportEvidence &&
+        !signals.hasReceiptEvidence &&
+        !signals.hasInvoiceEvidence &&
+        !signals.hasPaymentEvidence &&
+        !signals.hasPaymentDueEvidence &&
+        !signals.hasChargedEvidence &&
+        !signals.hasPaymentFailedEvidence &&
+        !signals.hasSubscriptionEvidence &&
+        !signals.hasTrialEvidence &&
+        !hasRealActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.25;
+        reasons.push("-0.25 progress report without billing signal");
+    }
+
+    if (
+        signals.hasTransportTicketEvidence &&
+        !(signals.hasInvoiceEvidence && signals.hasRecurringBillEvidence)
+    ) {
+        confidence -= 0.6;
+        reasons.push("-0.60 transport ticket/pass purchase signal");
+    }
+
+    if (signals.hasPhoneTopUpEvidence) {
+        confidence -= 0.6;
+        reasons.push("-0.60 phone top-up purchase signal");
     }
 
     const normalizedConfidence = Math.max(0, Math.min(1, confidence));
@@ -949,6 +1427,8 @@ export function analyzeMessageForSubscription(
             signals.hasVerificationEvidence ||
             signals.hasPasswordResetEvidence) &&
         !hasStrongSubscriptionOrPaymentEvidence(signals);
+    const isBlockedAccountSecurityCodeMessage =
+        signals.hasAccountSecurityCodeEvidence && !hasRealActiveBillingEvidence(signals);
     const isBlockedNegatedSubscriptionMessage =
         signals.hasNegatedSubscriptionEvidence &&
         !signals.hasPaymentReceiptTrialChargeEvidence;
@@ -965,7 +1445,7 @@ export function analyzeMessageForSubscription(
     const isBlockedFreePlanMessage =
         signals.hasFreePlanEvidence && !signals.hasPaymentReceiptTrialChargeEvidence;
     const isBlockedMarketingMessage =
-        signals.hasMarketingEvidence && !hasStrongSubscriptionOrPaymentEvidence(signals);
+        signals.hasMarketingEvidence && !hasRealActiveBillingEvidence(signals);
     const isBlockedMarketingNegatedMessage =
         signals.hasMarketingEvidence && signals.hasNegatedSubscriptionEvidence;
     const isBlockedPromotionalTrialMessage =
@@ -982,6 +1462,33 @@ export function analyzeMessageForSubscription(
         !signals.hasChargedEvidence &&
         !signals.hasActiveTrialSubscriptionEvidence &&
         !signals.hasActiveRenewalPaymentEvidence;
+    const isBlockedUnreadableEncodedMessage =
+        signals.hasUnreadableEncodedEvidence && !hasRealActiveBillingEvidence(signals);
+    const isBlockedSuspiciousSenderMessage =
+        signals.hasSuspiciousSenderEvidence &&
+        (signals.hasHighRiskProviderSuspiciousSenderEvidence ||
+            signals.hasUnreadableEncodedEvidence ||
+            signals.hasPaymentFailedEvidence ||
+            !hasRealActiveBillingEvidence(signals));
+    const isBlockedProgressReportMessage =
+        signals.hasProgressReportEvidence &&
+        !signals.hasReceiptEvidence &&
+        !signals.hasInvoiceEvidence &&
+        !signals.hasPaymentEvidence &&
+        !signals.hasPaymentDueEvidence &&
+        !signals.hasChargedEvidence &&
+        !signals.hasPaymentFailedEvidence &&
+        !signals.hasSubscriptionEvidence &&
+        !signals.hasTrialEvidence &&
+        !hasRealActiveBillingEvidence(signals);
+    const isBlockedTransportTicketMessage =
+        signals.hasTransportTicketEvidence &&
+        !(signals.hasInvoiceEvidence && signals.hasRecurringBillEvidence);
+    const isBlockedPhoneTopUpMessage = signals.hasPhoneTopUpEvidence;
+
+    if (isBlockedAccountSecurityCodeMessage) {
+        reasons.push("-blocked: account/security code message without billing signal");
+    }
 
     if (isBlockedAccountMessage) {
         reasons.push("-blocked: account/security/login message without subscription signal");
@@ -1008,7 +1515,7 @@ export function analyzeMessageForSubscription(
     }
 
     if (isBlockedMarketingMessage) {
-        reasons.push("-blocked: marketing message without subscription signal");
+        reasons.push("-blocked: marketing upsell without active billing evidence");
     }
 
     if (isBlockedMarketingNegatedMessage) {
@@ -1025,6 +1532,26 @@ export function analyzeMessageForSubscription(
         reasons.push("-blocked: payment setup message without subscription signal");
     }
 
+    if (isBlockedUnreadableEncodedMessage) {
+        reasons.push("-blocked: unreadable encoded message");
+    }
+
+    if (isBlockedSuspiciousSenderMessage) {
+        reasons.push("-blocked: suspicious sender domain for detected provider");
+    }
+
+    if (isBlockedProgressReportMessage) {
+        reasons.push("-blocked: progress report without billing signal");
+    }
+
+    if (isBlockedTransportTicketMessage) {
+        reasons.push("-blocked: transport ticket/pass purchase");
+    }
+
+    if (isBlockedPhoneTopUpMessage) {
+        reasons.push("-blocked: phone top-up purchase");
+    }
+
     const candidateFromPositiveEvidence = isCandidateFromPositiveEvidence(signals);
 
     return {
@@ -1039,6 +1566,12 @@ export function analyzeMessageForSubscription(
             !isBlockedMarketingNegatedMessage &&
             !isBlockedPromotionalTrialMessage &&
             !isBlockedPaymentSetupMessage &&
+            !isBlockedUnreadableEncodedMessage &&
+            !isBlockedAccountSecurityCodeMessage &&
+            !isBlockedSuspiciousSenderMessage &&
+            !isBlockedProgressReportMessage &&
+            !isBlockedTransportTicketMessage &&
+            !isBlockedPhoneTopUpMessage &&
             candidateFromPositiveEvidence &&
             normalizedConfidence >= 0.45,
         confidence: normalizedConfidence,
