@@ -21,6 +21,8 @@ type ImapSpikeConfig = {
     outputJson: boolean;
     targetedSearch: boolean;
     targetedSearchLimit: number;
+    showReviewCandidates: boolean;
+    reviewLimit: number;
 };
 
 type ImapDebugMessage = {
@@ -135,12 +137,31 @@ type ImapCanonicalSubscription = {
     reasons: string[];
 };
 
+type ImapReviewCandidate = {
+    id: string;
+    reviewKey: string;
+    reviewScore: number;
+    from: string;
+    subject: string;
+    date: string;
+    snippet: string;
+    detectedProvider?: string;
+    detectedName?: string;
+    blockedReason?: string;
+    isCandidate: boolean;
+    confidence: number;
+    reasons: string[];
+    reviewSignals: string[];
+    riskSignals: string[];
+};
+
 type ImapScanSpikeResult = {
     mailbox: string;
     scannedMessages: number;
     candidatesFound: number;
     rejectedMessages: number;
     canonicalSubscriptions: ImapCanonicalSubscription[];
+    reviewCandidates: ImapReviewCandidate[];
     recurringGroups: ImapRecurringGroup[];
     debugMessages: ImapDebugMessage[];
 };
@@ -207,6 +228,15 @@ function getConfig(): ImapSpikeConfig {
             process.env.IMAP_TARGETED_SEARCH_LIMIT,
             250,
             "IMAP_TARGETED_SEARCH_LIMIT"
+        ),
+        showReviewCandidates: parseBoolean(
+            process.env.IMAP_SHOW_REVIEW_CANDIDATES,
+            true
+        ),
+        reviewLimit: parsePositiveInteger(
+            process.env.IMAP_REVIEW_LIMIT,
+            30,
+            "IMAP_REVIEW_LIMIT"
         ),
     };
 }
@@ -841,6 +871,13 @@ function classifyAmountByImmediateContext(before: string, after: string): Pick<A
     const asciiLeft = left.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const asciiBoth = both.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 
+    if (
+        /(po zakonczeniu .{0,80}okresu probnego|after trial|after your trial|trial ends)/i.test(asciiBoth) &&
+        /(zostanie naliczona oplata|will be charged|automatically renew|automatycznie odnawiane)/i.test(asciiBoth)
+    ) {
+        return { kind: "trial_then_price", confidence: 0.96 };
+    }
+
     if (/(promo|promotional|special offer|oferta specjalna|promocj|promocyjna|rabat|discount|cena promocyjna)/i.test(asciiBoth)) {
         return { kind: "promo_price", confidence: 0.94 };
     }
@@ -913,7 +950,7 @@ function normalizeAmount(raw: string) {
 }
 
 function extractAmountSemantics(text: string) {
-    const amountPattern = /(?:[$€£]\s?\d+(?:[.,]\d{2})?|\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP|z[lł]))/gi;
+    const amountPattern = /(?:[$€£]\s?\d+(?:[.,]\d{2})?|\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP|z[lł]|\(?\s?brutto\s?\)?))/gi;
     const results: AmountSemantics[] = [];
 
     for (const match of text.matchAll(amountPattern)) {
@@ -1660,7 +1697,292 @@ function buildRecurringGroups(debugMessages: ImapDebugMessage[]) {
     );
 }
 
-function printHumanSummary(result: ImapScanSpikeResult) {
+function addReviewSignal(
+    signals: string[],
+    text: string,
+    pattern: RegExp,
+    label: string
+) {
+    if (pattern.test(text) && !signals.includes(label)) {
+        signals.push(label);
+    }
+}
+
+function blockedReasonForMessage(message: ImapDebugMessage) {
+    return message.reasons.find((reason) => /^-blocked:/i.test(reason));
+}
+
+function reviewKeyForMessage(message: ImapDebugMessage) {
+    const providerOrName = cleanText(
+        message.detected.provider ??
+        message.detected.name ??
+        ""
+    ).toLowerCase();
+    const domain = extractSenderDomain(message.from);
+    const subjectFamily = normalizeSubjectFamily(message.subject);
+
+    return `${providerOrName || domain}|${domain}|${subjectFamily}`;
+}
+
+function scoreReviewCandidate(message: ImapDebugMessage) {
+    const text = cleanText(
+        [
+            message.from,
+            message.subject,
+            message.snippet,
+            message.reasons.join(" "),
+            message.detected.provider,
+            message.detected.name,
+        ]
+            .filter(Boolean)
+            .join(" ")
+    ).toLowerCase();
+    const asciiText = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const reviewSignals: string[] = [];
+    const riskSignals: string[] = [];
+    const hasStrongActiveBillingEvidence =
+        !/\b(will not be charged|not be charged|no further charges|subscription has been canceled|subscription has been cancelled|bez subskrypcji|no subscription renewal|does not renew|not a subscription)\b/i.test(asciiText) &&
+        /\b(payment method will be charged|your payment method will be charged|will automatically renew|automatically renews|subscription will renew|next billing|next renewal|charged|payment confirmation|invoice|amount due|kwota do zaplaty|termin platnosci|metoda platnosci .*bedzie obciazana|zostanie naliczona oplata|automatycznie odnawiane|automatycznie przedluzana|kontynuujac subskrypcje)\b/i.test(asciiText);
+
+    addReviewSignal(
+        reviewSignals,
+        text,
+        /\b(primevideo\.com|amazon\.(pl|com|de|co\.uk)|googleplay-noreply@google\.com|payments-noreply@google\.com|email\.apple\.com|paypal\.com|stripe\.com|autopay\.pl|tpay\.com|payu\.com|przelewy24\.pl)\b/i,
+        "trusted marketplace or billing domain"
+    );
+    addReviewSignal(
+        reviewSignals,
+        text,
+        /\b(subscription|subskrypcja|abonament|membership|plan|premium|plus|pro|renewal|odnawianie|przed[lł]u[zż]enie|przedluzenie)\b/i,
+        "subscription/service keyword"
+    );
+    addReviewSignal(
+        reviewSignals,
+        text,
+        /\b(your subscription|twoja subskrypcja|current subscriber|active subscriber|aktualny klient|kontynuuj[aą]c subskrypcj[eę]|kontynuujac subskrypcje)\b/i,
+        "active customer/subscriber hint"
+    );
+    addReviewSignal(
+        reviewSignals,
+        text,
+        /\b(charged|obci[aą][zż]ona|obciazona|payment method|metoda p[lł]atno[sś]ci|next billing|nast[eę]pne rozliczenie|renewal date|data odnowienia|nast[eę]pna data przed[lł]u[zż]enia|platnosc zostala zrealizowana|p[lł]atno[sś][cć] zosta[lł]a zrealizowana)\b/i,
+        "billing/renewal hint"
+    );
+    addReviewSignal(
+        reviewSignals,
+        text,
+        /\b(faktura|rachunek|kwota do zap[lł]aty|kwota do zaplaty|termin p[lł]atno[sś]ci|termin platnosci|ebok|eboa|e-bok|panel klienta)\b/i,
+        "invoice/utility hint"
+    );
+    addReviewSignal(
+        reviewSignals,
+        text,
+        /\b(prime video|google play|app store|apple|paypal automatic payment|stripe invoice|przelewy24|payu|autopay|tpay|merchant|odbiorca|us[lł]ugodawca|uslugodawca)\b/i,
+        "marketplace or processor hint"
+    );
+
+    if (message.detected.provider || message.detected.name) {
+        reviewSignals.push("detected provider/name present");
+    }
+
+    addReviewSignal(
+        riskSignals,
+        text,
+        /\b(security|login|password|verification code|kod|has[lł]o|reset has[lł]a|sign in|nowe logowanie)\b/i,
+        "security/login/code"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /\b(newsletter|recommendation|recommended|polecamy|polecane|watch now|obejrzyj teraz|specjalnie dla ciebie|na podstawie ogl[aą]danych)\b/i,
+        "newsletter/recommendation"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /\b(order|zam[oó]wienie|zamowienie|purchase|rental|wypo[zż]yczenie|wypozyczenie|one-time|jednorazowo|receipt for ride|uber eats order|bilet|ticket)\b/i,
+        "one-time purchase/order/rental"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /\b(marketing|upsell|oferta|promocja|sprawd[zź] ofert[eę]|wypr[oó]buj|try free|korzystaj taniej|zaoszcz[eę]dzisz|benefit|unlock benefits)\b/i,
+        "marketing/upsell without active billing"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /\b(rrso|po[zż]yczka|pozyczka|kredyt|leasing|rata|raty|oprocentowanie|ca[lł]kowita kwota kredytu|calkowita kwota kredytu)\b/i,
+        "loan/credit/leasing"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /\b(expired|cancelled|canceled|anulowano|wygas[lł]a|wygasla|reactivation|reaktywuj|zwrot|refund|no further charges)\b/i,
+        "expired/cancelled/reactivation/refund"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /suspicious sender|suspicious domain|spoof/i,
+        "suspicious sender domain"
+    );
+    addReviewSignal(
+        riskSignals,
+        text,
+        /^received:|received-spf|authentication-results|dkim-signature/i,
+        "raw-header-only body"
+    );
+    addReviewSignal(
+        riskSignals,
+        asciiText,
+        /\b(work profile|business profile|profil sluzbowy|profil biznesowy|credits|kredyty)\b/i,
+        "work/business profile or credits marketing"
+    );
+    addReviewSignal(
+        riskSignals,
+        asciiText,
+        /\b(dlc|game|add-on|addon|playstation store|xbox store|nintendo|steam|epic games|movie rental|prime video zamowienie)\b/i,
+        "game/DLC/store purchase or rental"
+    );
+
+    const positiveWeight = reviewSignals.reduce((score, signal) => {
+        if (/billing|invoice|active customer|marketplace|trusted/i.test(signal)) {
+            return score + 0.18;
+        }
+
+        if (/subscription|detected provider/i.test(signal)) {
+            return score + 0.12;
+        }
+
+        return score + 0.08;
+    }, 0);
+    const riskWeight = riskSignals.reduce((score, signal) => {
+        if (/security|loan|one-time|suspicious|raw-header/i.test(signal)) {
+            return score + 0.18;
+        }
+
+        return score + 0.1;
+    }, 0);
+    const blockedReason = blockedReasonForMessage(message);
+    const blockedAuditBonus =
+        blockedReason && reviewSignals.some((signal) => /billing|invoice|active customer|marketplace/i.test(signal))
+            ? 0.12
+            : 0;
+    let score = Math.max(
+        0,
+        Math.min(1, message.confidence * 0.45 + positiveWeight + blockedAuditBonus - riskWeight)
+    );
+
+    if (riskSignals.some((signal) => /raw-header-only body/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.44);
+    }
+
+    if (riskSignals.some((signal) => /expired|cancelled|reactivation|refund/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.44);
+    }
+
+    if (riskSignals.some((signal) => /one-time purchase|order|rental/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.44);
+    }
+
+    if (riskSignals.some((signal) => /security|login|work\/business profile|credits marketing|game\/dlc|store purchase/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.44);
+    }
+
+    if (riskSignals.some((signal) => /marketing\/upsell/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.44);
+    }
+
+    return {
+        score,
+        blockedReason,
+        reviewSignals,
+        riskSignals,
+        positiveWeight,
+        riskWeight,
+        hasStrongActiveBillingEvidence,
+    };
+}
+
+function buildReviewCandidates(
+    debugMessages: ImapDebugMessage[],
+    canonicalSubscriptions: ImapCanonicalSubscription[] = []
+) {
+    const deduped = new Map<string, ImapReviewCandidate>();
+    const canonicalProviderKeys = new Set(
+        canonicalSubscriptions
+            .flatMap((subscription) => [
+                subscription.provider?.toLowerCase(),
+                subscription.displayName?.toLowerCase(),
+            ])
+            .filter((item): item is string => Boolean(item))
+    );
+
+    for (const message of debugMessages.filter((item) => !item.isCandidate)) {
+        const scored = scoreReviewCandidate(message);
+
+        if (scored.reviewSignals.length === 0) {
+            continue;
+        }
+
+        if (scored.positiveWeight < 0.25 && scored.riskWeight > 0) {
+            continue;
+        }
+
+        if (scored.score < 0.45) {
+            continue;
+        }
+
+        const messageProviderKeys = [
+            message.detected.provider?.toLowerCase(),
+            message.detected.name?.toLowerCase(),
+        ].filter((item): item is string => Boolean(item));
+
+        if (
+            messageProviderKeys.some((key) => canonicalProviderKeys.has(key)) &&
+            scored.score < 0.75 &&
+            !scored.hasStrongActiveBillingEvidence
+        ) {
+            continue;
+        }
+
+        const reviewKey = reviewKeyForMessage(message);
+        const candidate: ImapReviewCandidate = {
+            id: message.id,
+            reviewKey,
+            reviewScore: Number(scored.score.toFixed(2)),
+            from: message.from,
+            subject: message.subject,
+            date: message.date,
+            snippet: sanitizeSampleSnippet(message.snippet),
+            detectedProvider: message.detected.provider,
+            detectedName: message.detected.name,
+            blockedReason: scored.blockedReason,
+            isCandidate: message.isCandidate,
+            confidence: message.confidence,
+            reasons: message.reasons,
+            reviewSignals: scored.reviewSignals,
+            riskSignals: scored.riskSignals,
+        };
+        const previous = deduped.get(reviewKey);
+
+        if (
+            !previous ||
+            candidate.reviewScore > previous.reviewScore ||
+            (candidate.reviewScore === previous.reviewScore &&
+                Date.parse(candidate.date) > Date.parse(previous.date))
+        ) {
+            deduped.set(reviewKey, candidate);
+        }
+    }
+
+    return [...deduped.values()].sort(
+        (a, b) => b.reviewScore - a.reviewScore || Date.parse(b.date) - Date.parse(a.date)
+    );
+}
+
+function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig) {
     console.log("IMAP scan summary:");
     console.log(`mailbox: ${result.mailbox}`);
     console.log(`scannedMessages: ${result.scannedMessages}`);
@@ -1721,6 +2043,45 @@ function printHumanSummary(result: ImapScanSpikeResult) {
     });
 
     console.log("");
+
+    if (config.showReviewCandidates) {
+        const reviewCandidates = result.reviewCandidates.slice(0, config.reviewLimit);
+
+        console.log("Review candidates / possible missed subscriptions:");
+
+        if (reviewCandidates.length === 0) {
+            console.log("none");
+        }
+
+        reviewCandidates.forEach((candidate, index) => {
+            console.log("");
+            console.log(`${index + 1}. ${candidate.detectedName ?? candidate.detectedProvider ?? candidate.subject}`);
+            console.log(`   reviewScore: ${candidate.reviewScore.toFixed(2)}`);
+            console.log(`   detectionConfidence: ${candidate.confidence.toFixed(2)}`);
+            optionalLine("provider", candidate.detectedProvider);
+            optionalLine("name", candidate.detectedName);
+            optionalLine("blockedReason", candidate.blockedReason);
+            optionalLine("from", candidate.from);
+            optionalLine("subject", candidate.subject);
+            optionalLine("date", candidate.date);
+            optionalLine("snippet", candidate.snippet);
+            console.log("   reviewSignals:");
+
+            for (const signal of candidate.reviewSignals.slice(0, 8)) {
+                console.log(`   - ${signal}`);
+            }
+
+            if (candidate.riskSignals.length > 0) {
+                console.log("   riskSignals:");
+
+                for (const signal of candidate.riskSignals.slice(0, 6)) {
+                    console.log(`   - ${signal}`);
+                }
+            }
+        });
+
+        console.log("");
+    }
 
     const strongRecurringGroups = result.recurringGroups.filter(
         (group) =>
@@ -1939,12 +2300,14 @@ async function main() {
             debugMessages,
             recurringGroups
         );
+        const reviewCandidates = buildReviewCandidates(debugMessages, canonicalSubscriptions);
         const result: ImapScanSpikeResult = {
             mailbox: config.mailbox,
             scannedMessages: debugMessages.length,
             candidatesFound,
             rejectedMessages: debugMessages.length - candidatesFound,
             canonicalSubscriptions,
+            reviewCandidates,
             recurringGroups,
             debugMessages,
         };
@@ -1952,7 +2315,7 @@ async function main() {
         if (config.outputJson) {
             console.log(JSON.stringify(result, null, 2));
         } else {
-            printHumanSummary(result);
+            printHumanSummary(result, config);
         }
     } finally {
         await client.logout().catch(() => undefined);

@@ -80,6 +80,7 @@ type MessageType =
     | "subscription_started"
     | "subscription_active"
     | "subscription_continuation"
+    | "trial_started_future_charge"
     | "trial_started_auto_renew"
     | "trial_ending"
     | "subscription_active_notice"
@@ -466,6 +467,7 @@ function hasNegatedSubscriptionSignal(subjectAndSnippet: string) {
         /\bdoes not confirm subscription\b/i,
         /\bno subscription\b/i,
         /\bnot a subscription\b/i,
+        /\bwithout subscription\b/i,
         /\bnot confirm any subscription\b/i,
         /\bnot confirm a subscription\b/i,
         /\bthis is not a receipt\b/i,
@@ -477,6 +479,7 @@ function hasNegatedSubscriptionSignal(subjectAndSnippet: string) {
         /nie oznacza rozpocz[e\u0119]cia subskrypcji/i,
         /nie oznacza rozpoczecia subskrypcji/i,
         /nie oznacza aktywnej subskrypcji/i,
+        /bez subskrypcji/i,
         /nie rozpocz[e\u0119]to subskrypcji/i,
         /nie rozpoczeto subskrypcji/i,
         /to nie jest subskrypcja/i,
@@ -634,8 +637,13 @@ function hasSubscriptionContinuationSignal(subjectAndSnippet: string) {
         /automatycznie przed[l\u0142]u[z\u017c]ana/i,
         /automatycznie przedluzana/i,
         /automatycznie odnawiana/i,
+        /automatycznie odnawiane/i,
+        /subskrypcje b[e\u0119]d[a\u0105] automatycznie odnawiane/i,
+        /subskrypcje beda automatycznie odnawiane/i,
         /metoda p[\u0142l]atno[s\u015b]ci .*b[e\u0119]dzie obci[a\u0105][z\u017c]ana/i,
         /metoda platnosci .*bedzie obciazana/i,
+        /zostanie naliczona op[l\u0142]ata/i,
+        /zostanie naliczona oplata/i,
         /\b(your payment method will be charged|will automatically renew|automatically renews|continue your subscription)\b/i,
     ]);
 }
@@ -1092,12 +1100,17 @@ function hasActiveTrialSubscriptionSignal(subjectAndSnippet: string) {
         /subskrypcja .*rozpocznie si[e\u0119] automatycznie/i,
         /subskrypcja .*rozpocznie sie automatycznie/i,
         /\bokres pr[o\u00f3]bny .{0,60}ko[n\u0144]czy/i,
+        /po zako[n\u0144]czeniu .{0,80}okresu pr[o\u00f3]bnego .{0,80}zostanie naliczona op[l\u0142]ata/i,
+        /po zakonczeniu .{0,80}okresu probnego .{0,80}zostanie naliczona oplata/i,
         /\bbedziemy obciazac\b/i,
         /\bb[e\u0119]dziemy obci[a\u0105][z\u017c]a[c\u0107]\b/i,
         /w[l\u0142]a[s\u015b]nie rozpoczyna si[e\u0119] twoja subskrypcja/i,
         /wlasnie rozpoczyna sie twoja subskrypcja/i,
         /automatycznie przed[l\u0142]u[z\u017c]ana/i,
         /automatycznie przedluzana/i,
+        /automatycznie odnawiane/i,
+        /subskrypcje b[e\u0119]d[a\u0105] automatycznie odnawiane/i,
+        /subskrypcje beda automatycznie odnawiane/i,
     ]);
 }
 
@@ -1124,6 +1137,8 @@ function hasActiveRenewalPaymentSignal(subjectAndSnippet: string) {
         /\bpobralismy\s+platnosc\b/i,
         /\bobci[a\u0105][z\u017c]ymy\b/i,
         /\bobciazymy\b/i,
+        /zostanie naliczona op[l\u0142]ata/i,
+        /zostanie naliczona oplata/i,
         /metoda p[\u0142l]atno[s\u015b]ci .*b[e\u0119]dzie obci[a\u0105][z\u017c]ana/i,
         /metoda platnosci .*bedzie obciazana/i,
     ]);
@@ -1555,6 +1570,7 @@ export function detectAmountText(text: string) {
         /\d+(?:[.,]\d{2})?\s?z[l\u0142]/i,
         /\d+(?:[.,]\d{2})?\s?(?:PLN|USD|EUR|GBP)/i,
         /(?:PLN|USD|EUR|GBP)\s?\d+(?:[.,]\d{2})?/i,
+        /\d+(?:[.,]\d{2})?\s?brutto/i,
     ];
 
     for (const pattern of patterns) {
@@ -2065,6 +2081,15 @@ function classifyMessage(signals: DetectionSignals): MessageClassification {
         messageType = "subscription_continuation";
         positiveEvidence.push("active subscription continuation/future charge evidence");
     } else if (
+        signals.hasTrialEvidence &&
+        (signals.hasActiveTrialSubscriptionEvidence ||
+            signals.hasSubscriptionContinuationEvidence ||
+            signals.hasActiveRenewalPaymentEvidence ||
+            signals.hasChargedEvidence)
+    ) {
+        messageType = "trial_started_future_charge";
+        positiveEvidence.push("trial started with future charge/auto-renew evidence");
+    } else if (
         signals.hasSubscriptionStartedEvidence ||
         (signals.hasTrialEvidence && signals.hasActiveTrialSubscriptionEvidence)
     ) {
@@ -2095,7 +2120,10 @@ function classifyMessage(signals: DetectionSignals): MessageClassification {
     } else if (signals.hasAccountSecurityEvidence) {
         messageType = "security_login";
         negativeEvidence.push("security/login/code evidence");
-    } else if (signals.hasOneTimePurchaseEvidence || signals.hasTransportTicketEvidence) {
+    } else if (
+        (signals.hasOneTimePurchaseEvidence || signals.hasTransportTicketEvidence) &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
         messageType = "one_time_purchase";
         negativeEvidence.push("one-time purchase/order/rental/ticket evidence");
     } else if (signals.hasNewsletterRecommendationEvidence) {

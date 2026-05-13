@@ -2392,6 +2392,25 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
         },
     },
     {
+        name: "Adobe purchase trial future charge real PL",
+        input: {
+            id: "fixture-adobe-purchase-trial-future-charge-real-pl",
+            from: "Adobe <store@adobe.com>",
+            subject: "Dziekujemy za zakup!",
+            snippet:
+                "Dziekujemy za zakup! Okres probny Adobe Acrobat Pro. Po zakonczeniu bezplatnego okresu probnego zostanie naliczona oplata 36,89 brutto miesiecznie. Subskrypcje beda automatycznie odnawiane co miesiac.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Adobe",
+            name: "Adobe Acrobat Pro",
+            amountText: "36,89 brutto",
+            billingCycle: "monthly",
+            isTrial: true,
+            minConfidence: 0.55,
+        },
+    },
+    {
         name: "Generic onboarding only SaaS EN",
         input: {
             id: "fixture-generic-onboarding-only-saas-en",
@@ -2520,6 +2539,58 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
         expected: {
             isCandidate: false,
             maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Tazapay game DLC payment EN",
+        input: {
+            id: "fixture-tazapay-game-dlc-payment-en",
+            from: "Tazapay <no-reply@tazapay.com>",
+            subject: "Payment received",
+            snippet:
+                "Payment received for game DLC add-on. Transaction description: Fantasy Quest expansion pack. This is a one-time store purchase with no subscription renewal.",
+        },
+        expected: {
+            isCandidate: false,
+        },
+    },
+    {
+        name: "Amazon Prime Video movie rental order PL",
+        input: {
+            id: "fixture-amazon-prime-video-movie-rental-order-pl",
+            from: "Prime Video <no-reply@primevideo.com>",
+            subject: "Zamowienie Prime Video",
+            snippet:
+                "Dziekujemy za zamowienie. Wypozyczenie filmu w Prime Video zostalo zrealizowane. Kwota 9,99 zl. To jednorazowe zamowienie, bez subskrypcji.",
+        },
+        expected: {
+            isCandidate: false,
+        },
+    },
+    {
+        name: "Prezi cancellation EN",
+        input: {
+            id: "fixture-prezi-cancellation-en",
+            from: "Prezi <billing@prezi.com>",
+            subject: "Your subscription has been canceled",
+            snippet:
+                "Your Prezi subscription has been canceled. You will not be charged moving forward and no further charges will apply.",
+        },
+        expected: {
+            isCandidate: false,
+        },
+    },
+    {
+        name: "PlayStation game purchase EN",
+        input: {
+            id: "fixture-playstation-game-purchase-en",
+            from: "PlayStation <sony@txn-email03.playstation.com>",
+            subject: "Thank you for your purchase",
+            snippet:
+                "Your PlayStation Store transaction was successful. Game purchase: Adventure Pack. Total 29.99 USD. This is not a subscription and does not renew.",
+        },
+        expected: {
+            isCandidate: false,
         },
     },
 ];
