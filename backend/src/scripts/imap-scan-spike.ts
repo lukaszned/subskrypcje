@@ -19,10 +19,31 @@ type ImapSpikeConfig = {
     limit: number;
     verbose: boolean;
     outputJson: boolean;
+    scanMode: "recent_window" | "hybrid_window" | "deep";
+    scanDays: number;
+    deepDays: number;
     targetedSearch: boolean;
     targetedSearchLimit: number;
+    targetedTerms: string[];
+    targetedVerbose: boolean;
+    headerTargetedEnabled: boolean;
+    headerTargetedLimit: number;
+    headerTargetedTerms: string[];
+    metadataPrepassEnabled: boolean;
+    metadataPrepassDays: number;
+    metadataPrepassLimit: number;
+    metadataPrepassFetchBatchSize: number;
+    metadataPrepassMatchLimit: number;
+    metadataPrepassVerbose: boolean;
+    deepFallbackEnabled: boolean;
+    deepBatchSize: number;
+    deepMaxFetch: number;
+    deepBucketDays: number;
+    deepPerBucketLimit: number;
+    deepBucketSampleMode: "newest" | "mixed" | "even";
     showReviewCandidates: boolean;
     reviewLimit: number;
+    reviewSuppressVerbose: boolean;
 };
 
 type ImapDebugMessage = {
@@ -35,8 +56,56 @@ type ImapDebugMessage = {
     confidence: number;
     reasons: string[];
     detected: ReturnType<typeof analyzeMessageForSubscription>["detected"];
-    source: "latest_scan" | "targeted_search";
+    source: "recent_window" | "targeted_search" | "header_targeted" | "metadata_prepass" | "deep_fallback";
+    sourceTags: Array<"recent_window" | "targeted" | "header_targeted" | "metadata-prepass" | "deep_fallback" | "deep_bucket">;
     debug?: EmailDetectionDebugDetails;
+};
+
+type ImapScanStats = {
+    scanMode: ImapSpikeConfig["scanMode"];
+    scanWindowDays: number;
+    deepWindowDays?: number;
+    mailboxTotalMessages: number;
+    recentMessagesFetched: number;
+    targetedQueriesRun: number;
+    targetedMessagesMatched: number;
+    targetedMessagesUniqueMatched: number;
+    targetedMessagesFetched: number;
+    headerTargetedQueriesRun: number;
+    headerTargetedMessagesMatched: number;
+    headerTargetedUniqueMatched: number;
+    headerTargetedMessagesFetched: number;
+    metadataPrepassEnabled: boolean;
+    metadataPrepassWindowDays?: number;
+    metadataPrepassMessagesScanned: number;
+    metadataPrepassMatches: number;
+    metadataPrepassFetched: number;
+    metadataPrepassSkippedAlreadyFetched: number;
+    metadataPrepassFetchLimit: number;
+    metadataPrepassTopTerms: string[];
+    uniqueMessagesAnalyzed: number;
+    fallbackUsed: boolean;
+    fallbackReason?: string;
+    deepFallbackUsed: boolean;
+    deepFallbackReason?: string;
+    deepFallbackStrategy: "time_buckets" | "newest_first_fallback" | "none";
+    deepFallbackMessagesFetched: number;
+    deepFallbackWindowDays?: number;
+    deepFallbackBatchSize: number;
+    deepFallbackBucketDays: number;
+    deepFallbackBucketSampleMode: ImapSpikeConfig["deepBucketSampleMode"];
+    deepFallbackBucketsTotal: number;
+    deepFallbackBucketsQueried: number;
+    deepFallbackBucketsWithMatches: number;
+    deepFallbackPerBucketLimit: number;
+    deepFallbackMessagesMatchedBeforeCap: number;
+    deepFallbackUidCandidatesBeforeSampling: number;
+    deepFallbackUidCandidatesAfterSampling: number;
+    reviewSuppressedOneTimeOrders: number;
+    reviewSuppressedPrimeVideoOrders: number;
+    reviewSuppressedWeakPurchases: number;
+    mayMissYearlySubscriptions: boolean;
+    coverageNote: string;
 };
 
 type ImapRecurringGroup = {
@@ -169,6 +238,7 @@ type ImapReviewCandidate = {
 
 type ImapScanSpikeResult = {
     mailbox: string;
+    scanStats: ImapScanStats;
     scannedMessages: number;
     candidatesFound: number;
     rejectedMessages: number;
@@ -204,6 +274,60 @@ function parsePositiveInteger(
     return parsed;
 }
 
+function parseScanMode(value: string | undefined): ImapSpikeConfig["scanMode"] {
+    const mode = value?.trim() || "recent_window";
+
+    if (["recent_window", "hybrid_window", "deep"].includes(mode)) {
+        return mode as ImapSpikeConfig["scanMode"];
+    }
+
+    throw new Error("IMAP_SCAN_MODE must be recent_window, hybrid_window, or deep.");
+}
+
+function parseDeepBucketSampleMode(
+    value: string | undefined
+): ImapSpikeConfig["deepBucketSampleMode"] {
+    const mode = value?.trim() || "mixed";
+
+    if (["newest", "mixed", "even"].includes(mode)) {
+        return mode as ImapSpikeConfig["deepBucketSampleMode"];
+    }
+
+    throw new Error("IMAP_DEEP_BUCKET_SAMPLE_MODE must be newest, mixed, or even.");
+}
+
+function parseTargetedTerms(value: string | undefined) {
+    if (!value?.trim()) {
+        return PRODUCT_TARGETED_SEARCH_TERMS;
+    }
+
+    const trimmed = value.trim();
+    const override = /^override:/i.test(trimmed);
+    const rawTerms = trimmed.replace(/^override:/i, "");
+    const envTerms = rawTerms
+        .split(",")
+        .map((term) => cleanText(term))
+        .filter(Boolean);
+
+    return [...new Set([...(override ? [] : PRODUCT_TARGETED_SEARCH_TERMS), ...envTerms])];
+}
+
+function parseHeaderTargetedTerms(value: string | undefined) {
+    if (!value?.trim()) {
+        return HEADER_TARGETED_SEARCH_TERMS;
+    }
+
+    const trimmed = value.trim();
+    const override = /^override:/i.test(trimmed);
+    const rawTerms = trimmed.replace(/^override:/i, "");
+    const envTerms = rawTerms
+        .split(",")
+        .map((term) => cleanText(term))
+        .filter(Boolean);
+
+    return [...new Set([...(override ? [] : HEADER_TARGETED_SEARCH_TERMS), ...envTerms])];
+}
+
 function getConfig(): ImapSpikeConfig {
     const host = process.env.IMAP_HOST?.trim();
     const user = process.env.IMAP_USER?.trim();
@@ -221,6 +345,18 @@ function getConfig(): ImapSpikeConfig {
         throw new Error("Missing IMAP_PASSWORD.");
     }
 
+    const scanMode = parseScanMode(process.env.IMAP_SCAN_MODE);
+    const deepDays = parsePositiveInteger(
+        process.env.IMAP_DEEP_DAYS,
+        730,
+        "IMAP_DEEP_DAYS"
+    );
+    const targetedSearchLimit = parsePositiveInteger(
+        process.env.IMAP_TARGETED_LIMIT ?? process.env.IMAP_TARGETED_SEARCH_LIMIT,
+        300,
+        "IMAP_TARGETED_LIMIT"
+    );
+
     return {
         host,
         user,
@@ -235,11 +371,86 @@ function getConfig(): ImapSpikeConfig {
         ),
         verbose: parseBoolean(process.env.IMAP_VERBOSE, false),
         outputJson: parseBoolean(process.env.IMAP_OUTPUT_JSON, false),
-        targetedSearch: parseBoolean(process.env.IMAP_TARGETED_SEARCH, false),
-        targetedSearchLimit: parsePositiveInteger(
-            process.env.IMAP_TARGETED_SEARCH_LIMIT,
-            250,
-            "IMAP_TARGETED_SEARCH_LIMIT"
+        scanMode,
+        scanDays: parsePositiveInteger(
+            process.env.IMAP_SCAN_DAYS,
+            90,
+            "IMAP_SCAN_DAYS"
+        ),
+        deepDays,
+        targetedSearch: parseBoolean(
+            process.env.IMAP_TARGETED_SEARCH,
+            ["hybrid_window", "deep"].includes(scanMode)
+        ),
+        targetedSearchLimit,
+        targetedTerms: parseTargetedTerms(process.env.IMAP_TARGETED_TERMS),
+        targetedVerbose: parseBoolean(process.env.IMAP_TARGETED_VERBOSE, false),
+        headerTargetedEnabled: parseBoolean(
+            process.env.IMAP_HEADER_TARGETED_ENABLED,
+            scanMode === "deep"
+        ),
+        headerTargetedLimit: parsePositiveInteger(
+            process.env.IMAP_HEADER_TARGETED_LIMIT,
+            500,
+            "IMAP_HEADER_TARGETED_LIMIT"
+        ),
+        headerTargetedTerms: parseHeaderTargetedTerms(
+            process.env.IMAP_HEADER_TARGETED_TERMS
+        ),
+        metadataPrepassEnabled: parseBoolean(
+            process.env.IMAP_METADATA_PREPASS_ENABLED,
+            scanMode === "deep"
+        ),
+        metadataPrepassDays: parsePositiveInteger(
+            process.env.IMAP_METADATA_PREPASS_DAYS,
+            deepDays,
+            "IMAP_METADATA_PREPASS_DAYS"
+        ),
+        metadataPrepassLimit: parsePositiveInteger(
+            process.env.IMAP_METADATA_PREPASS_LIMIT,
+            3000,
+            "IMAP_METADATA_PREPASS_LIMIT"
+        ),
+        metadataPrepassFetchBatchSize: parsePositiveInteger(
+            process.env.IMAP_METADATA_PREPASS_FETCH_BATCH_SIZE,
+            200,
+            "IMAP_METADATA_PREPASS_FETCH_BATCH_SIZE"
+        ),
+        metadataPrepassMatchLimit: parsePositiveInteger(
+            process.env.IMAP_METADATA_PREPASS_MATCH_LIMIT,
+            800,
+            "IMAP_METADATA_PREPASS_MATCH_LIMIT"
+        ),
+        metadataPrepassVerbose: parseBoolean(
+            process.env.IMAP_METADATA_PREPASS_VERBOSE,
+            false
+        ),
+        deepFallbackEnabled: parseBoolean(
+            process.env.IMAP_DEEP_FALLBACK_ENABLED,
+            true
+        ),
+        deepBatchSize: parsePositiveInteger(
+            process.env.IMAP_DEEP_BATCH_SIZE,
+            200,
+            "IMAP_DEEP_BATCH_SIZE"
+        ),
+        deepMaxFetch: parsePositiveInteger(
+            process.env.IMAP_DEEP_MAX_FETCH,
+            targetedSearchLimit,
+            "IMAP_DEEP_MAX_FETCH"
+        ),
+        deepBucketDays: parsePositiveInteger(
+            process.env.IMAP_DEEP_BUCKET_DAYS,
+            30,
+            "IMAP_DEEP_BUCKET_DAYS"
+        ),
+        deepPerBucketLimit: parsePositiveInteger(
+            process.env.IMAP_DEEP_PER_BUCKET_LIMIT,
+            80,
+            "IMAP_DEEP_PER_BUCKET_LIMIT"
+        ),
+        deepBucketSampleMode: parseDeepBucketSampleMode(
+            process.env.IMAP_DEEP_BUCKET_SAMPLE_MODE
         ),
         showReviewCandidates: parseBoolean(
             process.env.IMAP_SHOW_REVIEW_CANDIDATES,
@@ -249,6 +460,10 @@ function getConfig(): ImapSpikeConfig {
             process.env.IMAP_REVIEW_LIMIT,
             30,
             "IMAP_REVIEW_LIMIT"
+        ),
+        reviewSuppressVerbose: parseBoolean(
+            process.env.IMAP_REVIEW_SUPPRESS_VERBOSE,
+            false
         ),
     };
 }
@@ -350,6 +565,157 @@ const TARGETED_SEARCH_TERMS = [
     "Energa",
 ];
 
+const PRODUCT_TARGETED_SEARCH_TERMS = [
+    ...TARGETED_SEARCH_TERMS,
+    "czlonkostwo",
+    "członkostwo",
+    "membership",
+    "paid plan",
+    "plan platny",
+    "plan płatny",
+    "payment",
+    "płatność",
+    "platnosc",
+    "zaplata",
+    "zapłata",
+    "charged",
+    "obciaz",
+    "obciąż",
+    "naliczona oplata",
+    "naliczona opłata",
+    "kwota do zaplaty",
+    "kwota do zapłaty",
+    "termin platnosci",
+    "termin płatności",
+    "renew",
+    "odnawia",
+    "automatycznie odnaw",
+    "automatycznie przedluz",
+    "automatycznie przedłuż",
+    "next billing",
+    "nastepna platnosc",
+    "następna płatność",
+    "billing date",
+    "due date",
+    "okres probny",
+    "okres próbny",
+    "bezplatny okres probny",
+    "bezpłatny okres próbny",
+    "free trial",
+    "po zakonczeniu okresu probnego",
+    "po zakończeniu okresu próbnego",
+    "after trial",
+    "zostanie naliczona",
+    "eFaktura",
+    "e-faktura",
+    "Apple",
+    "Autopay",
+    "PayU",
+    "Przelewy24",
+    "Tpay",
+    "faktura za prad",
+    "faktura za prąd",
+    "faktura za internet",
+    "rachunek za telefon",
+    "rachunek za internet",
+];
+
+const HEADER_TARGETED_SEARCH_TERMS = [
+    ...new Set([
+        ...TARGETED_SEARCH_TERMS,
+        "subscription",
+        "subskrypcja",
+        "abonament",
+        "renewal",
+        "odnowienie",
+        "faktura",
+        "eFaktura",
+        "rachunek",
+        "payment",
+        "płatność",
+        "Prime Video",
+        "Google Play",
+        "App Store",
+        "Amazon Prime",
+        "PayPal",
+        "Stripe",
+        "Adobe",
+        "Max",
+        "SkyShowtime",
+        "Tauron",
+        "Uber One",
+    ]),
+];
+
+const METADATA_PREPASS_TERMS = [
+    ...new Set([
+        ...HEADER_TARGETED_SEARCH_TERMS,
+        "subscription",
+        "subskrypcja",
+        "abonament",
+        "czlonkostwo",
+        "członkostwo",
+        "membership",
+        "premium",
+        "plan",
+        "faktura",
+        "e-faktura",
+        "eFaktura",
+        "rachunek",
+        "płatność",
+        "platnosc",
+        "payment",
+        "invoice",
+        "receipt",
+        "renewal",
+        "odnowienie",
+        "automatic renewal",
+        "automatycznie odnaw",
+        "trial",
+        "okres próbny",
+        "okres probny",
+        "bezpłatny okres próbny",
+        "bezplatny okres probny",
+        "zostanie naliczona",
+        "Netflix",
+        "Spotify",
+        "YouTube",
+        "Google Play",
+        "Google One",
+        "Apple",
+        "iCloud",
+        "Disney",
+        "Max",
+        "SkyShowtime",
+        "Prime Video",
+        "Amazon Prime",
+        "Adobe",
+        "Canva",
+        "Microsoft",
+        "Dropbox",
+        "Uber One",
+        "Wolt",
+        "Allegro Smart",
+        "Play",
+        "Orange",
+        "T-Mobile",
+        "Plus",
+        "Netia",
+        "Vectra",
+        "TOYA",
+        "Tauron",
+        "PGE",
+        "Energa",
+        "E.ON",
+        "PayPal",
+        "Stripe",
+        "PayU",
+        "Przelewy24",
+        "Tpay",
+        "Autopay",
+    ]),
+];
+
 async function appendDebugMessageFromFetchMessage(
     debugMessages: ImapDebugMessage[],
     seenIds: Set<string>,
@@ -364,11 +730,45 @@ async function appendDebugMessageFromFetchMessage(
         internalDate?: Date | string;
         source?: Buffer;
     },
-    source: "latest_scan" | "targeted_search"
+    rawSource:
+        | "recent_window"
+        | "targeted_search"
+        | "header_targeted"
+        | "metadata_prepass"
+        | "deep_fallback"
+        | "deep_bucket"
 ) {
     const id = String(message.uid ?? message.seq);
 
-    if (!id || seenIds.has(id)) {
+    if (!id) {
+        return;
+    }
+
+    const source = rawSource === "deep_bucket" ? "deep_fallback" : rawSource;
+    const sourceTags =
+        rawSource === "targeted_search"
+            ? (["targeted"] as const)
+            : rawSource === "header_targeted"
+              ? (["header_targeted"] as const)
+              : rawSource === "metadata_prepass"
+                ? (["metadata-prepass"] as const)
+            : rawSource === "deep_fallback"
+              ? (["deep_fallback"] as const)
+              : rawSource === "deep_bucket"
+                ? (["deep_fallback", "deep_bucket"] as const)
+                : (["recent_window"] as const);
+
+    if (seenIds.has(id)) {
+        const existing = debugMessages.find((item) => item.id === id);
+
+        if (existing) {
+            for (const sourceTag of sourceTags) {
+                if (!existing.sourceTags.includes(sourceTag)) {
+                    existing.sourceTags.push(sourceTag);
+                }
+            }
+        }
+
         return;
     }
 
@@ -403,29 +803,124 @@ async function appendDebugMessageFromFetchMessage(
         reasons: analysis.reasons,
         detected: analysis.detected,
         source,
+        sourceTags: [...sourceTags],
         debug,
     });
 }
 
+function normalizeSearchUids(result: unknown): number[] {
+    const values: unknown[] = [];
+
+    const addValue = (value: unknown) => {
+        if (value === null || value === undefined) {
+            return;
+        }
+
+        if (typeof value === "number" || typeof value === "string") {
+            values.push(value);
+            return;
+        }
+
+        if (Array.isArray(value)) {
+            for (const item of value) {
+                addValue(item);
+            }
+            return;
+        }
+
+        if (value instanceof Set) {
+            for (const item of value) {
+                addValue(item);
+            }
+            return;
+        }
+
+        if (typeof value === "object") {
+            const candidate = value as Record<string, unknown>;
+            const knownKeys = ["uid", "uids", "results", "matches", "all", "ids"];
+            let usedKnownKey = false;
+
+            for (const key of knownKeys) {
+                if (key in candidate) {
+                    usedKnownKey = true;
+                    addValue(candidate[key]);
+                }
+            }
+
+            if (usedKnownKey) {
+                return;
+            }
+
+            if (Symbol.iterator in candidate) {
+                try {
+                    for (const item of value as Iterable<unknown>) {
+                        addValue(item);
+                    }
+                    return;
+                } catch {
+                    // Fall through to object values for unusual iterable-like results.
+                }
+            }
+
+            for (const item of Object.values(candidate)) {
+                addValue(item);
+            }
+        }
+    };
+
+    addValue(result);
+
+    const uids = values
+        .map((value) =>
+            typeof value === "number"
+                ? value
+                : typeof value === "string"
+                  ? Number(value)
+                  : NaN
+        )
+        .filter((value) => Number.isFinite(value) && value > 0)
+        .map((value) => Math.trunc(value));
+
+    return [...new Set(uids)].sort((a, b) => b - a);
+}
+
 async function collectTargetedSearchUids(
     client: ImapFlow,
+    terms: string[],
+    since: Date,
     limit: number,
     verbose: boolean
 ) {
     const uids = new Set<number>();
+    let queriesRun = 0;
+    let matched = 0;
+    const allMatchedUids = new Set<number>();
 
-    for (const term of TARGETED_SEARCH_TERMS) {
+    for (const term of terms) {
         if (uids.size >= limit) {
             break;
         }
 
         try {
-            const matches = (await (client as any).search(
-                { body: term },
+            queriesRun += 1;
+            const result = await (client as any).search(
+                { since, body: term },
                 { uid: true }
-            )) as number[];
+            );
+            const matches = normalizeSearchUids(result);
+            matched += matches.length;
 
-            for (const uid of matches.reverse()) {
+            for (const uid of matches) {
+                allMatchedUids.add(uid);
+            }
+
+            if (verbose) {
+                console.error(
+                    `Targeted IMAP search: term="${term}", type=body, normalizedMatches=${matches.length}`
+                );
+            }
+
+            for (const uid of matches) {
                 uids.add(uid);
 
                 if (uids.size >= limit) {
@@ -441,7 +936,628 @@ async function collectTargetedSearchUids(
         }
     }
 
-    return [...uids].slice(0, limit);
+    return {
+        uids: [...uids].slice(0, limit),
+        queriesRun,
+        matched,
+        uniqueMatched: allMatchedUids.size,
+    };
+}
+
+async function collectHeaderTargetedSearchUids(
+    client: ImapFlow,
+    terms: string[],
+    since: Date,
+    limit: number,
+    verbose: boolean
+) {
+    const uids = new Set<number>();
+    const allMatchedUids = new Set<number>();
+    let queriesRun = 0;
+    let matched = 0;
+
+    for (const term of terms) {
+        if (uids.size >= limit) {
+            break;
+        }
+
+        const queries: Array<{ label: string; criteria: Record<string, unknown> }> = [
+            { label: "subject", criteria: { since, header: ["subject", term] } },
+            { label: "from", criteria: { since, from: term } },
+        ];
+
+        for (const query of queries) {
+            if (uids.size >= limit) {
+                break;
+            }
+
+            try {
+                queriesRun += 1;
+                const result = await (client as any).search(query.criteria, {
+                    uid: true,
+                });
+                const matches = normalizeSearchUids(result);
+                matched += matches.length;
+
+                for (const uid of matches) {
+                    allMatchedUids.add(uid);
+                }
+
+                if (verbose) {
+                    console.error(
+                        `Header targeted IMAP search: term="${term}", type=${query.label}, normalizedMatches=${matches.length}`
+                    );
+                }
+
+                for (const uid of matches) {
+                    uids.add(uid);
+
+                    if (uids.size >= limit) {
+                        break;
+                    }
+                }
+            } catch (error) {
+                if (verbose) {
+                    const message =
+                        error instanceof Error
+                            ? error.message
+                            : "header targeted search failed";
+                    console.error(
+                        `Header targeted IMAP search skipped for "${term}" (${query.label}): ${message}`
+                    );
+                }
+            }
+        }
+    }
+
+    return {
+        uids: [...uids].slice(0, limit),
+        queriesRun,
+        matched,
+        uniqueMatched: allMatchedUids.size,
+    };
+}
+
+type MetadataPrepassResult = {
+    uids: number[];
+    messagesScanned: number;
+    matches: number;
+    skippedAlreadyFetched: number;
+    topTerms: string[];
+};
+
+function chunkArray<T>(items: T[], size: number) {
+    const chunks: T[][] = [];
+
+    for (let index = 0; index < items.length; index += size) {
+        chunks.push(items.slice(index, index + size));
+    }
+
+    return chunks;
+}
+
+function scoreMetadataPrepassMessage(message: {
+    uid?: number | string;
+    envelope?: {
+        from?: MessageAddressObject[];
+        subject?: string;
+        date?: Date | string;
+    };
+    internalDate?: Date | string;
+}) {
+    const uid = Number(message.uid);
+    const from = cleanText(formatAddress(message.envelope?.from?.[0]));
+    const subject = cleanText(message.envelope?.subject ?? "");
+    const date = messageDateFromEnvelope(message);
+    const text = `${from} ${subject}`.toLowerCase();
+    const asciiText = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    const subjectAscii = subject
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const terms: string[] = [];
+    let score = 0;
+
+    const add = (amount: number, term: string) => {
+        score += amount;
+
+        if (!terms.includes(term)) {
+            terms.push(term);
+        }
+    };
+
+    if (/\b(subskrypcja|abonament|subscription|membership|premium|paid plan)\b/i.test(asciiText)) {
+        add(0.45, "subscription subject");
+    }
+
+    if (/\b(faktura|e-faktura|efaktura|rachunek|invoice|receipt|payment|platnosc|platnosc|płatność)\b/i.test(asciiText)) {
+        add(0.4, "billing subject");
+    }
+
+    if (/\b(renewal|odnowienie|automatycznie odnaw|trial|okres probny|zostanie naliczona)\b/i.test(asciiText)) {
+        add(0.4, "renewal/trial subject");
+    }
+
+    if (/\b(potwierdzenie platnosci|potwierdzenie płatności|dziekujemy za zakup|dziękujemy za zakup)\b/i.test(asciiText)) {
+        add(0.22, "purchase/payment confirmation subject");
+    }
+
+    for (const term of METADATA_PREPASS_TERMS) {
+        const normalizedTerm = cleanText(term)
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+
+        if (!normalizedTerm || normalizedTerm.length < 3) {
+            continue;
+        }
+
+        if (subjectAscii.includes(normalizedTerm)) {
+            add(0.18, `subject:${term}`);
+        } else if (asciiText.includes(normalizedTerm)) {
+            add(0.1, `from:${term}`);
+        }
+    }
+
+    if (/\b(paypal|stripe|payu|przelewy24|tpay|autopay|googleplay-noreply|primevideo|adobe|tauron|uberone|amazon|netflix|spotify|youtube|max|skyshowtime)\b/i.test(asciiText)) {
+        add(0.18, "trusted/provider-like sender");
+    }
+
+    if (/\b(zamowienie|order|rental|wypozyczenie|refund|zwrot|reklamacja|newsletter|regulamin|terms update|security|login|kod|verification code)\b/i.test(asciiText)) {
+        score -= 0.35;
+        terms.push("risk:order/security/newsletter");
+    }
+
+    return {
+        uid: Number.isFinite(uid) && uid > 0 ? Math.trunc(uid) : undefined,
+        score,
+        date: date?.toISOString() ?? "",
+        terms,
+    };
+}
+
+async function collectMetadataPrepassUids(
+    client: ImapFlow,
+    totalMessages: number,
+    since: Date,
+    prepassLimit: number,
+    matchLimit: number,
+    batchSize: number,
+    alreadyFetchedIds: Set<string>,
+    verbose: boolean
+): Promise<MetadataPrepassResult> {
+    let candidateUids: number[] = [];
+
+    try {
+        const result = await (client as any).search({ since }, { uid: true });
+        candidateUids = normalizeSearchUids(result).slice(0, prepassLimit);
+    } catch (error) {
+        if (verbose) {
+            const message =
+                error instanceof Error ? error.message : "metadata SINCE search failed";
+            console.error(`Metadata prepass SINCE search skipped: ${message}`);
+        }
+    }
+
+    if (candidateUids.length === 0) {
+        candidateUids = await collectDeepFallbackUidsByBatch(
+            client,
+            totalMessages,
+            since,
+            prepassLimit,
+            batchSize,
+            new Set(),
+            verbose
+        );
+    }
+
+    const hits: Array<{
+        uid: number;
+        score: number;
+        date: string;
+        terms: string[];
+    }> = [];
+    let messagesScanned = 0;
+    const termCounts = new Map<string, number>();
+
+    for (const chunk of chunkArray(candidateUids, batchSize)) {
+        try {
+            for await (const message of client.fetch(
+                chunk,
+                {
+                    envelope: true,
+                    internalDate: true,
+                    flags: true,
+                } as any,
+                { uid: true }
+            )) {
+                messagesScanned += 1;
+                const scored = scoreMetadataPrepassMessage(message);
+
+                if (!scored.uid || scored.score < 0.25) {
+                    continue;
+                }
+
+                hits.push(scored as {
+                    uid: number;
+                    score: number;
+                    date: string;
+                    terms: string[];
+                });
+
+                for (const term of scored.terms.slice(0, 6)) {
+                    termCounts.set(term, (termCounts.get(term) ?? 0) + 1);
+                }
+            }
+        } catch (error) {
+            if (verbose) {
+                const message =
+                    error instanceof Error
+                        ? error.message
+                        : "metadata envelope fetch failed";
+                console.error(`Metadata prepass envelope batch skipped: ${message}`);
+            }
+        }
+    }
+
+    const sortedHits = hits.sort(
+        (a, b) => b.score - a.score || Date.parse(b.date) - Date.parse(a.date)
+    );
+    const selected: number[] = [];
+    let skippedAlreadyFetched = 0;
+
+    for (const hit of sortedHits) {
+        if (alreadyFetchedIds.has(String(hit.uid))) {
+            skippedAlreadyFetched += 1;
+            continue;
+        }
+
+        selected.push(hit.uid);
+
+        if (selected.length >= matchLimit) {
+            break;
+        }
+    }
+
+    return {
+        uids: selected,
+        messagesScanned,
+        matches: sortedHits.length,
+        skippedAlreadyFetched,
+        topTerms: [...termCounts.entries()]
+            .sort((a, b) => b[1] - a[1])
+            .slice(0, 10)
+            .map(([term, count]) => `${term}:${count}`),
+    };
+}
+
+async function collectRecentWindowUids(
+    client: ImapFlow,
+    since: Date,
+    limit: number
+) {
+    const result = await (client as any).search({ since }, { uid: true });
+
+    return normalizeSearchUids(result).slice(0, limit);
+}
+
+function messageDateFromEnvelope(message: {
+    envelope?: {
+        date?: Date | string;
+    };
+    internalDate?: Date | string;
+}) {
+    const value = message.envelope?.date ?? message.internalDate;
+
+    if (value instanceof Date) {
+        return value;
+    }
+
+    const parsed = Date.parse(String(value ?? ""));
+    return Number.isFinite(parsed) ? new Date(parsed) : undefined;
+}
+
+async function collectDeepFallbackUidsByBatch(
+    client: ImapFlow,
+    totalMessages: number,
+    since: Date,
+    limit: number,
+    batchSize: number,
+    excludedIds: Set<string>,
+    verbose: boolean
+) {
+    const selected = new Set<number>();
+    let currentEnd = totalMessages;
+
+    while (currentEnd > 0 && selected.size < limit) {
+        const currentStart = Math.max(1, currentEnd - batchSize + 1);
+        const range = `${currentStart}:${currentEnd}`;
+        let sawAnyDate = false;
+        let newestBatchDate: Date | undefined;
+
+        if (verbose) {
+            console.error(`Deep fallback envelope batch: range=${range}`);
+        }
+
+        for await (const message of client.fetch(range, {
+            envelope: true,
+            internalDate: true,
+            uid: true,
+        } as any)) {
+            const uid = Number(message.uid ?? message.seq);
+            const messageDate = messageDateFromEnvelope(message);
+
+            if (messageDate) {
+                sawAnyDate = true;
+
+                if (!newestBatchDate || messageDate > newestBatchDate) {
+                    newestBatchDate = messageDate;
+                }
+            }
+
+            if (
+                Number.isFinite(uid) &&
+                uid > 0 &&
+                !excludedIds.has(String(uid)) &&
+                (!messageDate || messageDate >= since)
+            ) {
+                selected.add(Math.trunc(uid));
+
+                if (selected.size >= limit) {
+                    break;
+                }
+            }
+        }
+
+        if (sawAnyDate && newestBatchDate && newestBatchDate < since) {
+            break;
+        }
+
+        currentEnd = currentStart - 1;
+    }
+
+    return [...selected].sort((a, b) => b - a).slice(0, limit);
+}
+
+type DeepFallbackUidResult = {
+    uids: number[];
+    reason: string;
+    strategy: ImapScanStats["deepFallbackStrategy"];
+    bucketsTotal: number;
+    bucketsQueried: number;
+    bucketsWithMatches: number;
+    matchedBeforeCap: number;
+    uidCandidatesBeforeSampling: number;
+    uidCandidatesAfterSampling: number;
+};
+
+function addDays(date: Date, days: number) {
+    const copy = new Date(date);
+    copy.setDate(copy.getDate() + days);
+    return copy;
+}
+
+function takeEvenlySpaced<T>(items: T[], count: number) {
+    if (count <= 0 || items.length === 0) {
+        return [];
+    }
+
+    if (count >= items.length) {
+        return [...items];
+    }
+
+    if (count === 1) {
+        return [items[Math.floor(items.length / 2)]];
+    }
+
+    const selected: T[] = [];
+    const lastIndex = items.length - 1;
+
+    for (let index = 0; index < count; index += 1) {
+        const itemIndex = Math.round((index * lastIndex) / (count - 1));
+        selected.push(items[itemIndex]);
+    }
+
+    return selected;
+}
+
+function sampleBucketUids(
+    uidsNewestFirst: number[],
+    limit: number,
+    mode: ImapSpikeConfig["deepBucketSampleMode"]
+) {
+    const uniqueNewestFirst = [...new Set(uidsNewestFirst)];
+
+    if (limit >= uniqueNewestFirst.length) {
+        return uniqueNewestFirst;
+    }
+
+    if (mode === "newest") {
+        return uniqueNewestFirst.slice(0, limit);
+    }
+
+    if (mode === "even") {
+        return takeEvenlySpaced(uniqueNewestFirst, limit);
+    }
+
+    const newestCount = Math.max(1, Math.floor(limit * 0.25));
+    const oldestCount = Math.max(1, Math.floor(limit * 0.25));
+    const selected = new Set<number>();
+
+    for (const uid of uniqueNewestFirst.slice(0, newestCount)) {
+        selected.add(uid);
+    }
+
+    for (const uid of uniqueNewestFirst.slice(-oldestCount)) {
+        selected.add(uid);
+    }
+
+    const remaining = uniqueNewestFirst.filter((uid) => !selected.has(uid));
+    const evenCount = limit - selected.size;
+
+    for (const uid of takeEvenlySpaced(remaining, evenCount)) {
+        selected.add(uid);
+    }
+
+    return [...selected].slice(0, limit);
+}
+
+async function collectDeepFallbackUidsByBuckets(
+    client: ImapFlow,
+    since: Date,
+    limit: number,
+    bucketDays: number,
+    perBucketLimit: number,
+    sampleMode: ImapSpikeConfig["deepBucketSampleMode"],
+    excludedIds: Set<string>,
+    verbose: boolean
+): Promise<DeepFallbackUidResult> {
+    const now = new Date();
+    const selected = new Set<number>();
+    let bucketsTotal = 0;
+    let bucketsQueried = 0;
+    let bucketsWithMatches = 0;
+    let matchedBeforeCap = 0;
+    let uidCandidatesBeforeSampling = 0;
+    let uidCandidatesAfterSampling = 0;
+    let bucketEnd = now;
+
+    while (bucketEnd > since) {
+        bucketsTotal += 1;
+        bucketEnd = addDays(bucketEnd, -bucketDays);
+    }
+
+    bucketEnd = now;
+
+    while (bucketEnd > since && selected.size < limit) {
+        const bucketStart = addDays(bucketEnd, -bucketDays);
+        const boundedStart = bucketStart < since ? since : bucketStart;
+        bucketsQueried += 1;
+
+        try {
+            const result = await (client as any).search(
+                { since: boundedStart, before: bucketEnd },
+                { uid: true }
+            );
+            const matches = normalizeSearchUids(result).filter(
+                (uid) => !excludedIds.has(String(uid))
+            );
+            matchedBeforeCap += matches.length;
+            uidCandidatesBeforeSampling += matches.length;
+            const sampledMatches = sampleBucketUids(
+                matches,
+                perBucketLimit,
+                sampleMode
+            );
+            uidCandidatesAfterSampling += sampledMatches.length;
+
+            if (matches.length > 0) {
+                bucketsWithMatches += 1;
+            }
+
+            if (verbose) {
+                console.error(
+                    `Deep fallback bucket: since=${boundedStart.toISOString().slice(0, 10)}, before=${bucketEnd.toISOString().slice(0, 10)}, matches=${matches.length}, sampled=${sampledMatches.length}, mode=${sampleMode}`
+                );
+            }
+
+            for (const uid of sampledMatches) {
+                selected.add(uid);
+
+                if (selected.size >= limit) {
+                    break;
+                }
+            }
+        } catch (error) {
+            const message =
+                error instanceof Error ? error.message : "deep bucket search failed";
+            throw new Error(`Deep bucket search failed: ${message}`);
+        }
+
+        bucketEnd = boundedStart;
+    }
+
+    return {
+        uids: [...selected].sort((a, b) => b - a).slice(0, limit),
+        reason:
+            "targeted search returned no usable messages; using stratified deep time-bucket fallback",
+        strategy: "time_buckets",
+        bucketsTotal,
+        bucketsQueried,
+        bucketsWithMatches,
+        matchedBeforeCap,
+        uidCandidatesBeforeSampling,
+        uidCandidatesAfterSampling,
+    };
+}
+
+async function collectDeepFallbackUids(
+    client: ImapFlow,
+    totalMessages: number,
+    since: Date,
+    limit: number,
+    batchSize: number,
+    bucketDays: number,
+    perBucketLimit: number,
+    sampleMode: ImapSpikeConfig["deepBucketSampleMode"],
+    excludedIds: Set<string>,
+    verbose: boolean
+): Promise<DeepFallbackUidResult> {
+    try {
+        return await collectDeepFallbackUidsByBuckets(
+            client,
+            since,
+            limit,
+            bucketDays,
+            perBucketLimit,
+            sampleMode,
+            excludedIds,
+            verbose
+        );
+    } catch (error) {
+        if (verbose) {
+            const message =
+                error instanceof Error ? error.message : "deep bucket fallback failed";
+            console.error(`Deep fallback buckets failed: ${message}`);
+        }
+    }
+
+    const batchedUids = await collectDeepFallbackUidsByBatch(
+        client,
+        totalMessages,
+        since,
+        limit,
+        batchSize,
+        excludedIds,
+        verbose
+    );
+
+    return {
+        uids: batchedUids,
+        reason:
+            "targeted search returned no usable messages; deep bucket search failed; using newest-first envelope batch fallback",
+        strategy: "newest_first_fallback",
+        bucketsTotal: 0,
+        bucketsQueried: 0,
+        bucketsWithMatches: 0,
+        matchedBeforeCap: batchedUids.length,
+        uidCandidatesBeforeSampling: batchedUids.length,
+        uidCandidatesAfterSampling: batchedUids.length,
+    };
+}
+
+function dateDaysAgo(days: number) {
+    const date = new Date();
+    date.setDate(date.getDate() - days);
+    return date;
+}
+
+function coverageNoteFor(config: ImapSpikeConfig) {
+    if (config.scanMode === "deep") {
+        return "Deep scan searches a wider window for yearly or older subscriptions.";
+    }
+
+    return "Quick scan covers recent recurring payments. Run deep scan to find yearly or older subscriptions.";
 }
 
 function optionalLine(label: string, value: string | number | boolean | undefined) {
@@ -450,6 +1566,17 @@ function optionalLine(label: string, value: string | number | boolean | undefine
     }
 
     console.log(`   ${label}: ${value}`);
+}
+
+function optionalSummaryLine(
+    label: string,
+    value: string | number | boolean | undefined
+) {
+    if (value === undefined || value === "") {
+        return;
+    }
+
+    console.log(`${label}: ${value}`);
 }
 
 function extractEmailAddress(from: string) {
@@ -558,6 +1685,13 @@ function isOneTimeOrNoiseGroup(messages: ImapDebugMessage[], subjectFamily: stri
     const isStrongInvoiceGroup =
         isStrongEfakturaFamily(subjectFamily) ||
         isInvoiceLikeFamily(subjectFamily, messages);
+
+    if (
+        isOneTimeMarketplaceOrEcommerceText(text) &&
+        !hasExplicitServiceUtilityOrSubscriptionEvidence(text)
+    ) {
+        return true;
+    }
 
     if (
         (hasOnetMarketingIntermediaryGroupSignal(text) ||
@@ -752,6 +1886,388 @@ function canonicalKeyForMessage(message: ImapDebugMessage) {
     const subjectFamily = normalizeSubjectFamily(message.subject);
 
     return [domain, subjectFamily].filter(Boolean).join("|");
+}
+
+function isPaymentMethodOnlyName(value: string | undefined) {
+    return Boolean(
+        value &&
+            /^(blik|visa|mastercard|master card|card|karta|apple pay|google pay|paypal|wallet|portfel|bank transfer|przelew)$/i.test(
+                cleanText(value)
+            )
+    );
+}
+
+function normalizeAsciiText(text: string) {
+    return cleanText(text)
+        .toLowerCase()
+        .replace(/[łŁ]/g, "l")
+        .replace(/[ąĄ]/g, "a")
+        .replace(/[ćĆ]/g, "c")
+        .replace(/[ęĘ]/g, "e")
+        .replace(/[ńŃ]/g, "n")
+        .replace(/[óÓ]/g, "o")
+        .replace(/[śŚ]/g, "s")
+        .replace(/[źŹżŻ]/g, "z")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+
+function hasExplicitRecurringSubscriptionEvidence(text: string) {
+    const asciiText = normalizeAsciiText(text);
+
+    return /\b(subscription|subskrypcja|abonament|membership|renewal|renews|renew|odnawia|odnowienie|automatic renewal|automatycznie odnaw|automatycznie przedluz|next billing|next renewal|future charge|will be charged|payment method will be charged|metoda platnosci .*bedzie obciazana|zostanie naliczona oplata|billing agreement|recurring payment)\b/i.test(
+        asciiText
+    );
+}
+
+function isOneTimeMarketplaceOrEcommerceText(text: string) {
+    const asciiText = normalizeAsciiText(text);
+
+    return /\b(potwierdzenie zakupu|dziekujemy za zakup|thank you for (?:your )?purchase|zamowienie|numer zamowienia|data zamowienia|osoba sprzedajaca|sprzedajacy|przedmiot|produkt|produkty|paczka|wysylka|dostawa|przesylka|wymiana|reklamacja|oplata za ochrone kupujacych|do twojego zamowienia|faktura do zamowienia|e-faktura do|faktura do twojego zamowienia|paragon|order confirmation|purchase confirmation|receipt for your order|invoice for your order|seller|item|items|shipping|delivery|buyer protection|marketplace|return|refund|rental|rented|movie rental|wypozyczenie|wypozyczenia|wypozyczone filmy)\b/i.test(
+        asciiText
+    );
+}
+
+function hasExplicitServiceUtilityOrSubscriptionEvidence(text: string) {
+    const asciiText = normalizeAsciiText(text);
+
+    return /\b(subscription|subskrypcja|abonament|membership|renews|renewal|odnawia|automatycznie odnaw|automatycznie przedluz|next billing|next renewal|will be charged|zostanie naliczona oplata|trial|okres probny|recurring payment|automatic payment|billing agreement|kwota do zaplaty|termin platnosci|kod abonenta|numer abonenta|eboa|ebok|faktura za prad|faktura za internet|rachunek za telefon|rachunek za internet|energia|electricity|gaz|internet|telefon|telecom)\b/i.test(
+        asciiText
+    );
+}
+
+function isHardReviewPurchaseNoise(text: string) {
+    const asciiText = normalizeAsciiText(text);
+
+    return (
+        /\b(zamowienie w amazon prime video|wciaz wazne wypozyczenia|wciaz wazne wypozyczone filmy|wypozyczone filmy|wczesniejsze zakupy i wypozyczenia|data zamowienia|movie rental|rental|rented)\b/i.test(
+            asciiText
+        ) ||
+        /\b(e-faktura do twojego zamowienia|faktura do twojego zamowienia|do twojego zamowienia wygenerowalismy fakture|faktura do zamowienia|numer zamowienia|twoje zamowienie|zamowiles|przesylka|paczka|wysylka|zwrot|wymiana|reklamacja)\b/i.test(
+            asciiText
+        ) ||
+        /\b(vinted|playstation store|tazapay|transaction description|dlc|game purchase|game|add-on|addon|seller|buyer protection|potwierdzenie twojego zakupu|potwierdzenie zakupu)\b/i.test(
+            asciiText
+        ) ||
+        /\b(dziekujemy za zakup|thank you for (?:your )?purchase)\b/i.test(asciiText)
+    );
+}
+
+function isPrimeVideoOneTimeOrderOrRental(text: string) {
+    const asciiText = normalizeAsciiText(text);
+    const hasPrimeVideoOrder =
+        /\b(zamowienie w amazon prime video|amazon prime video order|your prime video order)\b/i.test(
+            asciiText
+        );
+    const hasRentalOrOrderBody =
+        /\b(zamowienie nr|data zamowienia|wciaz wazne wypozyczenia|wciaz wazne wypozyczone filmy|wypozyczenia w usludze|wczesniejsze zakupy|movie rental|rental|order number)\b/i.test(
+            asciiText
+        );
+
+    return hasPrimeVideoOrder || (/prime video/i.test(asciiText) && hasRentalOrOrderBody);
+}
+
+function isEcommerceOrderReviewNoise(text: string) {
+    const asciiText = normalizeAsciiText(text);
+
+    return /\b(zamowienie nr|numer zamowienia|twoje zamowienie|do twojego zamowienia|dziekujemy za zakup|thank you for (?:your )?purchase|wykupienie pakietu|pakietu w naszym kreatorze|pakietu|pelen dostep|platnosc zostala otrzymana|potwierdzenie zakupu|package|przesylka|paczka|wysylka|dostawa|zwrot|wymiana|reklamacja|paragon|faktura do zamowienia|e-faktura do twojego zamowienia|order number|shipping|delivery|return|refund|item|product)\b/i.test(
+        asciiText
+    );
+}
+
+function hasExplicitActiveSubscriptionReviewEvidence(text: string) {
+    const asciiText = normalizeAsciiText(text);
+
+    return /\b(kontynuujac subskrypcje|subskrypcja rozpocznie sie|wlasnie rozpoczyna sie twoja subskrypcja|automatycznie odnowiona|automatycznie odnawiana|automatycznie odnawiane|odnawia sie|metoda platnosci bedzie obciazana|bedzie obciazana kwota|co miesiac|miesiecznie|co rok|monthly|yearly|annual|next billing|next renewal|future charge|will be charged every (?:month|year)|will renew|subscription will renew|trial then charged)\b/i.test(
+        asciiText
+    );
+}
+
+function hasReviewWorthyPositiveEvidence(message: ImapDebugMessage, text: string) {
+    const asciiText = normalizeAsciiText(text);
+    const fromDomain = extractSenderDomain(message.from);
+    const trustedSubscriptionProviderSender =
+        Boolean(message.detected.provider || message.detected.name) &&
+        !isPaymentMethodOnlyName(message.detected.provider) &&
+        !isPaymentMethodOnlyName(message.detected.name) &&
+        /\b(subscription|subskrypcja|abonament|membership|plan|premium|renewal|odnowienie|trial|okres probny)\b/i.test(
+            asciiText
+        ) &&
+        !isEcommerceOrderReviewNoise(asciiText);
+    const explicitSubscriptionWithActiveContext =
+        /\b(subscription|subskrypcja|abonament|membership|plan)\b/i.test(asciiText) &&
+        /\b(renews|renewal|odnawia|automatycznie odnaw|automatycznie przedluz|next billing|next renewal|will be charged|bedzie obciazana|zostanie naliczona oplata|co miesiac|co rok|monthly|yearly|annual|billing agreement|recurring payment|kontynuujac subskrypcje)\b/i.test(
+            asciiText
+        );
+    const billingCycleEvidence = Boolean(message.detected.billingCycle) || /\b(co miesiac|co rok|monthly|yearly|annual|miesiecznie|rocznie)\b/i.test(asciiText);
+    const nextChargeEvidence = /\b(next billing|next renewal|nastepna platnosc|nastepna data przedluzenia|future charge|trial then charged|will be charged every (?:month|year)|bedzie obciazana|zostanie naliczona oplata)\b/i.test(
+        asciiText
+    );
+    const invoiceUtilityRecurringEvidence =
+        /\b(faktura|rachunek|kwota do zaplaty|termin platnosci|ebok|eboa|panel klienta|kod abonenta|numer abonenta|faktura za prad|faktura za internet|rachunek za telefon|rachunek za internet)\b/i.test(
+            asciiText
+        ) &&
+        !isEcommerceOrderReviewNoise(asciiText) &&
+        !/\b(sklep|shop|store|orders?|zamowienia)\b/i.test(fromDomain);
+    const paymentProcessorMerchantRecurringEvidence =
+        /\b(paypal|stripe|payu|przelewy24|autopay|tpay|merchant|odbiorca|uslugodawca|automatic payment|billing agreement|recurring payment)\b/i.test(
+            asciiText
+        ) &&
+        /\b(merchant|odbiorca|uslugodawca|automatic payment|billing agreement|recurring payment|subscription|subskrypcja|renewal|odnawia)\b/i.test(
+            asciiText
+        );
+
+    return (
+        explicitSubscriptionWithActiveContext ||
+        billingCycleEvidence ||
+        nextChargeEvidence ||
+        invoiceUtilityRecurringEvidence ||
+        trustedSubscriptionProviderSender ||
+        paymentProcessorMerchantRecurringEvidence
+    );
+}
+
+function isReviewWorthyMissedSubscription(
+    message: ImapDebugMessage,
+    scored: ReturnType<typeof scoreReviewCandidate>
+) {
+    const text = [
+        message.from,
+        message.subject,
+        message.snippet,
+        message.reasons.join(" "),
+        message.detected.provider,
+        message.detected.name,
+    ]
+        .filter(Boolean)
+        .join(" ");
+    const hasPositiveEvidence =
+        hasReviewWorthyPositiveEvidence(message, text) ||
+        scored.hasStrongActiveBillingEvidence;
+    const hardOneTimeNoise =
+        isPrimeVideoOneTimeOrderOrRental(text) ||
+        isEcommerceOrderReviewNoise(text) ||
+        isHardReviewPurchaseNoise(text) ||
+        scored.riskSignals.some((signal) =>
+            /one-time|ecommerce|order|rental|game\/dlc|store purchase|payment method only/i.test(
+                signal
+            )
+        );
+
+    if (hardOneTimeNoise && !hasPositiveEvidence) {
+        return false;
+    }
+
+    if (!hasPositiveEvidence) {
+        return false;
+    }
+
+    if (
+        scored.riskSignals.some((signal) =>
+            /security|newsletter|recommendation|regulation|public\/statutory|loan\/credit|expired|cancelled|refund|raw-header/i.test(
+                signal
+            )
+        ) &&
+        !scored.hasStrongActiveBillingEvidence
+    ) {
+        return false;
+    }
+
+    return true;
+}
+
+type ReviewSuppressionReason =
+    | "prime_video_order"
+    | "one_time_order"
+    | "weak_purchase"
+    | undefined;
+
+function shouldSuppressReviewCandidate(
+    candidate: ImapReviewCandidate,
+    message: ImapDebugMessage,
+    scored: ReturnType<typeof scoreReviewCandidate>
+): ReviewSuppressionReason {
+    const text = [
+        candidate.from,
+        candidate.subject,
+        candidate.snippet,
+        message.snippet,
+        candidate.reasons.join(" "),
+        candidate.detectedProvider,
+        candidate.detectedName,
+    ]
+        .filter(Boolean)
+        .join(" ");
+    const hasExplicitActiveEvidence =
+        hasExplicitActiveSubscriptionReviewEvidence(text) ||
+        scored.hasStrongActiveBillingEvidence;
+
+    if (isPrimeVideoOneTimeOrderOrRental(text) && !hasExplicitActiveEvidence) {
+        return "prime_video_order";
+    }
+
+    if (isEcommerceOrderReviewNoise(text) && !hasExplicitActiveEvidence) {
+        return "one_time_order";
+    }
+
+    if (!hasReviewWorthyPositiveEvidence(message, text) && !hasExplicitActiveEvidence) {
+        return "weak_purchase";
+    }
+
+    return undefined;
+}
+
+function incrementReviewSuppression(
+    stats: Pick<
+        ImapScanStats,
+        | "reviewSuppressedOneTimeOrders"
+        | "reviewSuppressedPrimeVideoOrders"
+        | "reviewSuppressedWeakPurchases"
+    >,
+    reason: ReviewSuppressionReason
+) {
+    if (reason === "prime_video_order") {
+        stats.reviewSuppressedPrimeVideoOrders += 1;
+        stats.reviewSuppressedOneTimeOrders += 1;
+        return;
+    }
+
+    if (reason === "one_time_order") {
+        stats.reviewSuppressedOneTimeOrders += 1;
+        return;
+    }
+
+    if (reason === "weak_purchase") {
+        stats.reviewSuppressedWeakPurchases += 1;
+    }
+}
+
+function createReviewSuppressorSelfTestMessage(
+    subject: string,
+    snippet: string,
+    from = "Amazon Prime Video <no-reply@primevideo.com>"
+): ImapDebugMessage {
+    return {
+        id: `self-test-${subject}`,
+        from,
+        subject,
+        date: new Date(0).toISOString(),
+        snippet,
+        isCandidate: false,
+        confidence: 0.75,
+        reasons: [],
+        detected: {},
+        source: "recent_window",
+        sourceTags: ["recent_window"],
+    };
+}
+
+function reviewSuppressorSelfTestCases() {
+    const cases = [
+        {
+            name: "Prime Video Crimson Peak",
+            message: createReviewSuppressorSelfTestMessage(
+                "Zamowienie w Amazon Prime Video: Crimson Peak. Wzgorze krwi",
+                "Zamowienie nr 123. Data zamowienia. Wczesniejsze zakupy i wciaz wazne wypozyczenia."
+            ),
+            expected: "prime_video_order",
+        },
+        {
+            name: "Prime Video Grimsby",
+            message: createReviewSuppressorSelfTestMessage(
+                "Zamowienie w Amazon Prime Video: Grimsby",
+                "Wciaz wazne wypozyczone filmy."
+            ),
+            expected: "prime_video_order",
+        },
+        {
+            name: "InterviewMe weak purchase",
+            message: createReviewSuppressorSelfTestMessage(
+                "Dziekujemy za zakup",
+                "Wykupienie pakietu. Pelen dostep. Numer zamowienia.",
+                "InterviewMe <kontakt@e.interviewme.pl>"
+            ),
+            expected: "one_time_order",
+        },
+        {
+            name: "SkyShowtime continuation",
+            message: createReviewSuppressorSelfTestMessage(
+                "Potwierdzenie subskrypcji SkyShowtime",
+                "Kontynuujac subskrypcje, metoda platnosci bedzie obciazana kwota 4,00 zl miesiecznie.",
+                "Prime Video <no-reply@primevideo.com>"
+            ),
+            expected: undefined,
+        },
+        {
+            name: "Generic renewable subscription purchase",
+            message: createReviewSuppressorSelfTestMessage(
+                "Dziekujemy za zakup subskrypcji",
+                "Subskrypcja automatycznie odnawiane co miesiac.",
+                "Example SaaS <billing@example.test>"
+            ),
+            expected: undefined,
+        },
+    ];
+
+    return cases.map(({ name, message, expected }) => {
+        const scored = scoreReviewCandidate(message);
+        const candidate: ImapReviewCandidate = {
+            id: message.id,
+            reviewKey: reviewKeyForMessage(message),
+            reviewScore: Number(scored.score.toFixed(2)),
+            from: message.from,
+            subject: message.subject,
+            date: message.date,
+            snippet: message.snippet,
+            detectedProvider: message.detected.provider,
+            detectedName: message.detected.name,
+            blockedReason: scored.blockedReason,
+            isCandidate: message.isCandidate,
+            confidence: message.confidence,
+            reasons: message.reasons,
+            reviewSignals: scored.reviewSignals,
+            riskSignals: scored.riskSignals,
+        };
+
+        return {
+            name,
+            expected,
+            actual: shouldSuppressReviewCandidate(candidate, message, scored),
+        };
+    });
+}
+
+function isCanonicalHardNoiseMessage(message: ImapDebugMessage) {
+    const text = `${message.from} ${message.subject} ${message.snippet} ${message.reasons.join(" ")}`;
+    const recurringEvidence = hasExplicitRecurringSubscriptionEvidence(text);
+
+    if (
+        (isPaymentMethodOnlyName(message.detected.provider) ||
+            isPaymentMethodOnlyName(message.detected.name)) &&
+        !recurringEvidence
+    ) {
+        return true;
+    }
+
+    if (
+        /payment method only without subscription merchant|one-time marketplace\/ecommerce purchase|one-time purchase\/order message|free app\/store purchase|recommendation\/newsletter|refund message|cancellation message/i.test(
+            message.reasons.join(" ")
+        ) &&
+        !recurringEvidence
+    ) {
+        return true;
+    }
+
+    return isOneTimeMarketplaceOrEcommerceText(text) && !recurringEvidence;
+}
+
+function isCanonicalHardNoiseGroup(group: ImapRecurringGroup) {
+    const text = `${group.suggestedName} ${group.fromSample} ${group.sampleSubjects.join(" ")} ${group.sampleSnippets.join(" ")} ${group.reasons.join(" ")}`;
+
+    return (
+        isOneTimeMarketplaceOrEcommerceText(text) &&
+        !hasExplicitServiceUtilityOrSubscriptionEvidence(text)
+    );
 }
 
 function canonicalKeyForGroup(group: ImapRecurringGroup) {
@@ -1243,8 +2759,21 @@ function reviewNeedForCanonical(args: {
     category: string | undefined;
     cadenceUnknown: boolean;
     riskSummary: string[];
+    provider: string | undefined;
+    evidenceSummary: string[];
 }) {
     const reasons: string[] = [];
+    const category = args.category ?? "";
+    const hasKnownProvider = Boolean(args.provider);
+    const hasStrongActiveEvidence = args.evidenceSummary.some((evidence) =>
+        /payment confirmation|active|renewal|future charge|subscription|monthly billing|billing channel/i.test(
+            evidence
+        )
+    );
+    const isSubscriptionLikeCategory =
+        /(streaming_video|music_audio|software_saas|cloud_storage|ai_tools|gaming|delivery_membership|ecommerce_membership|productivity|education|health_fitness|other_subscription)/i.test(
+            category
+        );
 
     if (args.confidenceLevel === "low") reasons.push("low confidence");
     if (args.status === "unknown") reasons.push("unknown status");
@@ -1252,7 +2781,13 @@ function reviewNeedForCanonical(args: {
     if (
         !args.amount &&
         ["active", "trial", "price_change"].includes(args.status) &&
-        !/(utilities_energy|internet_isp|other_bill)/i.test(args.category ?? "")
+        !/(utilities_energy|internet_isp|other_bill)/i.test(category) &&
+        !(
+            args.confidenceLevel === "high" &&
+            hasKnownProvider &&
+            hasStrongActiveEvidence &&
+            isSubscriptionLikeCategory
+        )
     ) {
         reasons.push("missing amount for likely paid subscription");
     }
@@ -1561,6 +3096,10 @@ function buildCanonicalSubscriptions(
             continue;
         }
 
+        if (isCanonicalHardNoiseMessage(message)) {
+            continue;
+        }
+
         const key = canonicalKeyForMessage(message);
         const draft = getDraft(key);
         const billingChannel = extractBillingChannel(message);
@@ -1606,6 +3145,10 @@ function buildCanonicalSubscriptions(
     for (const group of recurringGroups.filter(
         (item) => item.isRecurringCandidate && item.confidence >= 0.75
     )) {
+        if (isCanonicalHardNoiseGroup(group)) {
+            continue;
+        }
+
         const key = canonicalKeyForGroup(group);
         const draft = getDraft(key);
 
@@ -1729,6 +3272,8 @@ function buildCanonicalSubscriptions(
                 category,
                 cadenceUnknown: draft.groupCadences.includes("unknown"),
                 riskSummary,
+                provider: draft.provider,
+                evidenceSummary,
             });
             const statusReason =
                 status === "active"
@@ -1986,6 +3531,10 @@ function scoreReviewCandidate(message: ImapDebugMessage) {
     const asciiText = text.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
     const reviewSignals: string[] = [];
     const riskSignals: string[] = [];
+    const hasExplicitRecurringOrServiceEvidence =
+        hasExplicitRecurringSubscriptionEvidence(asciiText) ||
+        hasExplicitServiceUtilityOrSubscriptionEvidence(asciiText);
+    const hasHardPurchaseNoise = isHardReviewPurchaseNoise(asciiText);
     const hasStrongActiveBillingEvidence =
         !/\b(will not be charged|not be charged|no further charges|subscription has been canceled|subscription has been cancelled|bez subskrypcji|no subscription renewal|does not renew|not a subscription)\b/i.test(asciiText) &&
         /\b(payment method will be charged|your payment method will be charged|will automatically renew|automatically renews|subscription will renew|next billing|next renewal|charged|payment confirmation|invoice|amount due|kwota do zaplaty|termin platnosci|metoda platnosci .*bedzie obciazana|zostanie naliczona oplata|automatycznie odnawiane|automatycznie przedluzana|kontynuujac subskrypcje)\b/i.test(asciiText);
@@ -2029,6 +3578,14 @@ function scoreReviewCandidate(message: ImapDebugMessage) {
 
     if (message.detected.provider || message.detected.name) {
         reviewSignals.push("detected provider/name present");
+    }
+
+    if (
+        isPaymentMethodOnlyName(message.detected.provider) ||
+        isPaymentMethodOnlyName(message.detected.name) ||
+        /payment method only without subscription merchant/i.test(text)
+    ) {
+        riskSignals.push("payment method only");
     }
 
     addReviewSignal(
@@ -2091,6 +3648,30 @@ function scoreReviewCandidate(message: ImapDebugMessage) {
         /\b(dlc|game|add-on|addon|playstation store|xbox store|nintendo|steam|epic games|movie rental|prime video zamowienie)\b/i,
         "game/DLC/store purchase or rental"
     );
+    addReviewSignal(
+        riskSignals,
+        asciiText,
+        /\b(regulamin|regulation|terms update|terms of service|privacy policy|polityka prywatnosci|zmiany w regulaminie|onet poczta)\b/i,
+        "newsletter/recommendation/regulation"
+    );
+    addReviewSignal(
+        riskSignals,
+        asciiText,
+        /\b(do twojego zamowienia|e-faktura do|faktura do zamowienia|ecommerce invoice|zwrot|reklamacja|movie rental|prime video zamowienie)\b/i,
+        "one-time ecommerce/order/rental/refund"
+    );
+    addReviewSignal(
+        riskSignals,
+        asciiText,
+        /\b(getting started|rozpoczynanie pracy|welcome to product|witamy w|pobierz program|pobierz oprogramowanie|download the app|download software)\b/i,
+        "onboarding-only without billing"
+    );
+    addReviewSignal(
+        riskSignals,
+        asciiText,
+        /\b(ekrus|zus|skladki|skladka|ubezpieczenie spoleczne|social insurance|tax office|urzad skarbowy|podatek|tax)\b/i,
+        "public/statutory/tax/social insurance reminder"
+    );
 
     const positiveWeight = reviewSignals.reduce((score, signal) => {
         if (/billing|invoice|active customer|marketplace|trusted/i.test(signal)) {
@@ -2128,7 +3709,7 @@ function scoreReviewCandidate(message: ImapDebugMessage) {
         score = Math.min(score, 0.44);
     }
 
-    if (riskSignals.some((signal) => /one-time purchase|order|rental/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+    if (riskSignals.some((signal) => /one-time|ecommerce|order|rental|refund/i.test(signal)) && !hasStrongActiveBillingEvidence) {
         score = Math.min(score, 0.44);
     }
 
@@ -2138,6 +3719,41 @@ function scoreReviewCandidate(message: ImapDebugMessage) {
 
     if (riskSignals.some((signal) => /marketing\/upsell/i.test(signal)) && !hasStrongActiveBillingEvidence) {
         score = Math.min(score, 0.44);
+    }
+
+    if (riskSignals.some((signal) => /newsletter|recommendation|regulation/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.44);
+    }
+
+    if (riskSignals.some((signal) => /payment method only/i.test(signal)) && !hasStrongActiveBillingEvidence) {
+        score = Math.min(score, 0.39);
+    }
+
+    if (
+        riskSignals.some((signal) => /onboarding-only/i.test(signal)) &&
+        !hasStrongActiveBillingEvidence &&
+        !message.detected.amountText &&
+        !message.detected.billingCycle
+    ) {
+        score = Math.min(score, 0.39);
+    }
+
+    if (
+        riskSignals.some((signal) => /public\/statutory|social insurance|tax/i.test(signal)) &&
+        !hasStrongActiveBillingEvidence
+    ) {
+        score = Math.min(score, 0.39);
+    }
+
+    if (/one-time marketplace\/ecommerce purchase|payment method only without subscription merchant|one-time purchase\/order|free app\/store purchase/i.test(blockedReason ?? "")) {
+        score = Math.min(score, 0.39);
+    }
+
+    if (hasHardPurchaseNoise && !hasExplicitRecurringOrServiceEvidence) {
+        score = Math.min(score, 0.39);
+        if (!riskSignals.includes("hard one-time ecommerce/order/rental noise")) {
+            riskSignals.push("hard one-time ecommerce/order/rental noise");
+        }
     }
 
     return {
@@ -2153,7 +3769,14 @@ function scoreReviewCandidate(message: ImapDebugMessage) {
 
 function buildReviewCandidates(
     debugMessages: ImapDebugMessage[],
-    canonicalSubscriptions: ImapCanonicalSubscription[] = []
+    canonicalSubscriptions: ImapCanonicalSubscription[] = [],
+    suppressionStats?: Pick<
+        ImapScanStats,
+        | "reviewSuppressedOneTimeOrders"
+        | "reviewSuppressedPrimeVideoOrders"
+        | "reviewSuppressedWeakPurchases"
+    >,
+    suppressVerbose = false
 ) {
     const deduped = new Map<string, ImapReviewCandidate>();
     const canonicalProviderKeys = new Set(
@@ -2211,6 +3834,28 @@ function buildReviewCandidates(
             reviewSignals: scored.reviewSignals,
             riskSignals: scored.riskSignals,
         };
+        const suppressionReason = shouldSuppressReviewCandidate(
+            candidate,
+            message,
+            scored
+        );
+
+        if (suppressionReason) {
+            if (suppressionStats) {
+                incrementReviewSuppression(suppressionStats, suppressionReason);
+            }
+            if (suppressVerbose) {
+                console.error(
+                    `Review candidate suppressed: reason=${suppressionReason}; from=${candidate.from}; subject=${candidate.subject}`
+                );
+            }
+            continue;
+        }
+
+        if (!isReviewWorthyMissedSubscription(message, scored)) {
+            continue;
+        }
+
         const previous = deduped.get(reviewKey);
 
         if (
@@ -2231,9 +3876,55 @@ function buildReviewCandidates(
 function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig) {
     console.log("IMAP scan summary:");
     console.log(`mailbox: ${result.mailbox}`);
+    console.log(`scanMode: ${result.scanStats.scanMode}`);
+    console.log(`scanWindowDays: ${result.scanStats.scanWindowDays}`);
+    optionalSummaryLine("deepWindowDays", result.scanStats.deepWindowDays);
+    console.log(`mailboxTotalMessages: ${result.scanStats.mailboxTotalMessages}`);
+    console.log(`recentMessagesFetched: ${result.scanStats.recentMessagesFetched}`);
+    console.log(`targetedQueriesRun: ${result.scanStats.targetedQueriesRun}`);
+    console.log(`targetedMessagesMatched: ${result.scanStats.targetedMessagesMatched}`);
+    console.log(`targetedMessagesUniqueMatched: ${result.scanStats.targetedMessagesUniqueMatched}`);
+    console.log(`targetedMessagesFetched: ${result.scanStats.targetedMessagesFetched}`);
+    console.log(`headerTargetedQueriesRun: ${result.scanStats.headerTargetedQueriesRun}`);
+    console.log(`headerTargetedMessagesMatched: ${result.scanStats.headerTargetedMessagesMatched}`);
+    console.log(`headerTargetedUniqueMatched: ${result.scanStats.headerTargetedUniqueMatched}`);
+    console.log(`headerTargetedMessagesFetched: ${result.scanStats.headerTargetedMessagesFetched}`);
+    console.log(`metadataPrepassEnabled: ${result.scanStats.metadataPrepassEnabled ? "yes" : "no"}`);
+    optionalSummaryLine("metadataPrepassWindowDays", result.scanStats.metadataPrepassWindowDays);
+    console.log(`metadataPrepassMessagesScanned: ${result.scanStats.metadataPrepassMessagesScanned}`);
+    console.log(`metadataPrepassMatches: ${result.scanStats.metadataPrepassMatches}`);
+    console.log(`metadataPrepassFetched: ${result.scanStats.metadataPrepassFetched}`);
+    console.log(`metadataPrepassSkippedAlreadyFetched: ${result.scanStats.metadataPrepassSkippedAlreadyFetched}`);
+    console.log(`metadataPrepassFetchLimit: ${result.scanStats.metadataPrepassFetchLimit}`);
+    optionalSummaryLine("metadataPrepassTopTerms", result.scanStats.metadataPrepassTopTerms.join(", "));
+    console.log(`deepFallbackUsed: ${result.scanStats.deepFallbackUsed ? "yes" : "no"}`);
+    optionalSummaryLine("deepFallbackReason", result.scanStats.deepFallbackReason);
+    console.log(`deepFallbackStrategy: ${result.scanStats.deepFallbackStrategy}`);
+    console.log(`deepFallbackMessagesFetched: ${result.scanStats.deepFallbackMessagesFetched}`);
+    optionalSummaryLine("deepFallbackWindowDays", result.scanStats.deepFallbackWindowDays);
+    console.log(`deepFallbackBatchSize: ${result.scanStats.deepFallbackBatchSize}`);
+    console.log(`deepFallbackBucketDays: ${result.scanStats.deepFallbackBucketDays}`);
+    console.log(`deepFallbackBucketSampleMode: ${result.scanStats.deepFallbackBucketSampleMode}`);
+    console.log(`deepFallbackBucketsTotal: ${result.scanStats.deepFallbackBucketsTotal}`);
+    console.log(`deepFallbackBucketsQueried: ${result.scanStats.deepFallbackBucketsQueried}`);
+    console.log(`deepFallbackBucketsWithMatches: ${result.scanStats.deepFallbackBucketsWithMatches}`);
+    console.log(`deepFallbackPerBucketLimit: ${result.scanStats.deepFallbackPerBucketLimit}`);
+    console.log(`deepFallbackMessagesMatchedBeforeCap: ${result.scanStats.deepFallbackMessagesMatchedBeforeCap}`);
+    console.log(`deepFallbackUidCandidatesBeforeSampling: ${result.scanStats.deepFallbackUidCandidatesBeforeSampling}`);
+    console.log(`deepFallbackUidCandidatesAfterSampling: ${result.scanStats.deepFallbackUidCandidatesAfterSampling}`);
+    console.log(`uniqueMessagesAnalyzed: ${result.scanStats.uniqueMessagesAnalyzed}`);
+    console.log(`fallbackUsed: ${result.scanStats.fallbackUsed ? "yes" : "no"}`);
+    optionalSummaryLine("fallbackReason", result.scanStats.fallbackReason);
+    console.log(`mayMissYearlySubscriptions: ${result.scanStats.mayMissYearlySubscriptions ? "yes" : "no"}`);
+    console.log(`coverageNote: ${result.scanStats.coverageNote}`);
     console.log(`scannedMessages: ${result.scannedMessages}`);
     console.log(`candidatesFound: ${result.candidatesFound}`);
     console.log(`rejectedMessages: ${result.rejectedMessages}`);
+    console.log(`canonicalSubscriptions: ${result.canonicalSubscriptions.length}`);
+    console.log(`reviewCandidates: ${result.reviewCandidates.length}`);
+    console.log(`reviewSuppressedOneTimeOrders: ${result.scanStats.reviewSuppressedOneTimeOrders}`);
+    console.log(`reviewSuppressedPrimeVideoOrders: ${result.scanStats.reviewSuppressedPrimeVideoOrders}`);
+    console.log(`reviewSuppressedWeakPurchases: ${result.scanStats.reviewSuppressedWeakPurchases}`);
     console.log("");
 
     console.log("Canonical subscriptions:");
@@ -2494,61 +4185,392 @@ async function main() {
 
         const debugMessages: ImapDebugMessage[] = [];
         const seenMessageIds = new Set<string>();
+        const scanStats: ImapScanStats = {
+            scanMode: config.scanMode,
+            scanWindowDays: config.scanDays,
+            deepWindowDays: config.scanMode === "deep" ? config.deepDays : undefined,
+            mailboxTotalMessages: totalMessages,
+            recentMessagesFetched: 0,
+            targetedQueriesRun: 0,
+            targetedMessagesMatched: 0,
+            targetedMessagesUniqueMatched: 0,
+            targetedMessagesFetched: 0,
+            headerTargetedQueriesRun: 0,
+            headerTargetedMessagesMatched: 0,
+            headerTargetedUniqueMatched: 0,
+            headerTargetedMessagesFetched: 0,
+            metadataPrepassEnabled:
+                config.metadataPrepassEnabled && config.scanMode !== "recent_window",
+            metadataPrepassWindowDays:
+                config.metadataPrepassEnabled && config.scanMode !== "recent_window"
+                    ? config.metadataPrepassDays
+                    : undefined,
+            metadataPrepassMessagesScanned: 0,
+            metadataPrepassMatches: 0,
+            metadataPrepassFetched: 0,
+            metadataPrepassSkippedAlreadyFetched: 0,
+            metadataPrepassFetchLimit: config.metadataPrepassMatchLimit,
+            metadataPrepassTopTerms: [],
+            uniqueMessagesAnalyzed: 0,
+            fallbackUsed: false,
+            deepFallbackUsed: false,
+            deepFallbackStrategy: "none",
+            deepFallbackMessagesFetched: 0,
+            deepFallbackWindowDays: config.scanMode === "deep" ? config.deepDays : undefined,
+            deepFallbackBatchSize: config.deepBatchSize,
+            deepFallbackBucketDays: config.deepBucketDays,
+            deepFallbackBucketSampleMode: config.deepBucketSampleMode,
+            deepFallbackBucketsTotal: 0,
+            deepFallbackBucketsQueried: 0,
+            deepFallbackBucketsWithMatches: 0,
+            deepFallbackPerBucketLimit: config.deepPerBucketLimit,
+            deepFallbackMessagesMatchedBeforeCap: 0,
+            deepFallbackUidCandidatesBeforeSampling: 0,
+            deepFallbackUidCandidatesAfterSampling: 0,
+            reviewSuppressedOneTimeOrders: 0,
+            reviewSuppressedPrimeVideoOrders: 0,
+            reviewSuppressedWeakPurchases: 0,
+            mayMissYearlySubscriptions: config.scanMode !== "deep" && config.scanDays < 365,
+            coverageNote: coverageNoteFor(config),
+        };
 
         if (totalMessages > 0) {
-            const startSeq = Math.max(1, totalMessages - config.limit + 1);
-            const range = `${startSeq}:*`;
+            const recentSince = dateDaysAgo(config.scanDays);
+            let recentUids: number[] = [];
 
-            for await (const message of client.fetch(range, {
-                envelope: true,
-                internalDate: true,
-                source: {
-                    maxLength: 20_000,
-                },
-            })) {
-                await appendDebugMessageFromFetchMessage(
-                    debugMessages,
-                    seenMessageIds,
-                    message,
-                    "latest_scan"
-                );
+            try {
+                recentUids = await collectRecentWindowUids(client, recentSince, config.limit);
+            } catch (error) {
+                scanStats.fallbackUsed = true;
+                scanStats.fallbackReason =
+                    error instanceof Error ? error.message : "recent SINCE search failed";
+
+                if (config.verbose) {
+                    console.error(`Recent window search fallback: ${scanStats.fallbackReason}`);
+                }
             }
 
-            if (config.targetedSearch) {
-                if (config.verbose) {
+            if (scanStats.fallbackUsed) {
+                const startSeq = Math.max(1, totalMessages - config.limit + 1);
+                const range = `${startSeq}:*`;
+
+                for await (const message of client.fetch(range, {
+                    envelope: true,
+                    internalDate: true,
+                    source: {
+                        maxLength: 20_000,
+                    },
+                })) {
+                    await appendDebugMessageFromFetchMessage(
+                        debugMessages,
+                        seenMessageIds,
+                        message,
+                        "recent_window"
+                    );
+                }
+            } else if (recentUids.length > 0) {
+                for await (const message of client.fetch(
+                    recentUids,
+                    {
+                        envelope: true,
+                        internalDate: true,
+                        source: {
+                            maxLength: 20_000,
+                        },
+                    },
+                    { uid: true }
+                )) {
+                    await appendDebugMessageFromFetchMessage(
+                        debugMessages,
+                        seenMessageIds,
+                        message,
+                        "recent_window"
+                    );
+                }
+            }
+
+            scanStats.recentMessagesFetched = debugMessages.filter((message) =>
+                message.sourceTags.includes("recent_window")
+            ).length;
+
+            if (config.targetedSearch && config.scanMode !== "recent_window") {
+                const targetedSince = dateDaysAgo(
+                    config.scanMode === "deep" ? config.deepDays : config.scanDays
+                );
+
+                if (config.verbose || config.targetedVerbose) {
                     console.error(
-                        `Running targeted IMAP search, limit ${config.targetedSearchLimit}`
+                        `Running targeted IMAP search, mode ${config.scanMode}, limit ${config.targetedSearchLimit}`
                     );
                 }
 
-                const targetedUids = await collectTargetedSearchUids(
+                const targeted = await collectTargetedSearchUids(
                     client,
+                    config.targetedTerms,
+                    targetedSince,
                     config.targetedSearchLimit,
-                    config.verbose
+                    config.verbose || config.targetedVerbose
                 );
+                scanStats.targetedQueriesRun = targeted.queriesRun;
+                scanStats.targetedMessagesMatched = targeted.matched;
+                scanStats.targetedMessagesUniqueMatched = targeted.uniqueMatched;
 
-                if (targetedUids.length > 0) {
-                    for await (const message of client.fetch(
-                        targetedUids,
-                        {
-                            envelope: true,
-                            internalDate: true,
-                            source: {
-                                maxLength: 20_000,
+                if (targeted.uids.length > 0) {
+                    try {
+                        for await (const message of client.fetch(
+                            targeted.uids,
+                            {
+                                envelope: true,
+                                internalDate: true,
+                                source: {
+                                    maxLength: 20_000,
+                                },
                             },
-                        },
-                        { uid: true }
-                    )) {
-                        await appendDebugMessageFromFetchMessage(
-                            debugMessages,
-                            seenMessageIds,
-                            message,
-                            "targeted_search"
+                            { uid: true }
+                        )) {
+                            await appendDebugMessageFromFetchMessage(
+                                debugMessages,
+                                seenMessageIds,
+                                message,
+                                "targeted_search"
+                            );
+                        }
+                    } catch (error) {
+                        if (config.targetedVerbose || config.verbose) {
+                            const message =
+                                error instanceof Error
+                                    ? error.message
+                                    : "targeted fetch failed";
+                            console.error(`Targeted IMAP fetch skipped: ${message}`);
+                        }
+                    }
+                }
+
+                scanStats.targetedMessagesFetched = debugMessages.filter((message) =>
+                    message.sourceTags.includes("targeted")
+                ).length;
+
+                if (config.targetedVerbose || config.verbose) {
+                    console.error(
+                        `Targeted IMAP search summary: matched=${scanStats.targetedMessagesMatched}, unique=${scanStats.targetedMessagesUniqueMatched}, fetched=${scanStats.targetedMessagesFetched}`
+                    );
+                }
+
+                if (
+                    config.scanMode === "deep" &&
+                    config.headerTargetedEnabled
+                ) {
+                    const headerTargeted = await collectHeaderTargetedSearchUids(
+                        client,
+                        config.headerTargetedTerms,
+                        targetedSince,
+                        config.headerTargetedLimit,
+                        config.targetedVerbose || config.verbose
+                    );
+                    scanStats.headerTargetedQueriesRun =
+                        headerTargeted.queriesRun;
+                    scanStats.headerTargetedMessagesMatched =
+                        headerTargeted.matched;
+                    scanStats.headerTargetedUniqueMatched =
+                        headerTargeted.uniqueMatched;
+
+                    if (headerTargeted.uids.length > 0) {
+                        try {
+                            for await (const message of client.fetch(
+                                headerTargeted.uids,
+                                {
+                                    envelope: true,
+                                    internalDate: true,
+                                    source: {
+                                        maxLength: 20_000,
+                                    },
+                                },
+                                { uid: true }
+                            )) {
+                                await appendDebugMessageFromFetchMessage(
+                                    debugMessages,
+                                    seenMessageIds,
+                                    message,
+                                    "header_targeted"
+                                );
+                            }
+                        } catch (error) {
+                            if (config.targetedVerbose || config.verbose) {
+                                const message =
+                                    error instanceof Error
+                                        ? error.message
+                                        : "header targeted fetch failed";
+                                console.error(
+                                    `Header targeted IMAP fetch skipped: ${message}`
+                                );
+                            }
+                        }
+                    }
+
+                    scanStats.headerTargetedMessagesFetched =
+                        debugMessages.filter((message) =>
+                            message.sourceTags.includes("header_targeted")
+                        ).length;
+
+                    if (config.targetedVerbose || config.verbose) {
+                        console.error(
+                            `Header targeted IMAP summary: matched=${scanStats.headerTargetedMessagesMatched}, unique=${scanStats.headerTargetedUniqueMatched}, fetched=${scanStats.headerTargetedMessagesFetched}`
                         );
                     }
                 }
+
+                if (config.metadataPrepassEnabled) {
+                    const metadataSince = dateDaysAgo(config.metadataPrepassDays);
+                    const metadataPrepass = await collectMetadataPrepassUids(
+                        client,
+                        totalMessages,
+                        metadataSince,
+                        config.metadataPrepassLimit,
+                        config.metadataPrepassMatchLimit,
+                        config.metadataPrepassFetchBatchSize,
+                        seenMessageIds,
+                        config.metadataPrepassVerbose || config.verbose
+                    );
+                    scanStats.metadataPrepassMessagesScanned =
+                        metadataPrepass.messagesScanned;
+                    scanStats.metadataPrepassMatches = metadataPrepass.matches;
+                    scanStats.metadataPrepassSkippedAlreadyFetched =
+                        metadataPrepass.skippedAlreadyFetched;
+                    scanStats.metadataPrepassTopTerms = metadataPrepass.topTerms;
+
+                    if (metadataPrepass.uids.length > 0) {
+                        try {
+                            for await (const message of client.fetch(
+                                metadataPrepass.uids,
+                                {
+                                    envelope: true,
+                                    internalDate: true,
+                                    source: {
+                                        maxLength: 20_000,
+                                    },
+                                },
+                                { uid: true }
+                            )) {
+                                await appendDebugMessageFromFetchMessage(
+                                    debugMessages,
+                                    seenMessageIds,
+                                    message,
+                                    "metadata_prepass"
+                                );
+                            }
+                        } catch (error) {
+                            if (config.metadataPrepassVerbose || config.verbose) {
+                                const message =
+                                    error instanceof Error
+                                        ? error.message
+                                        : "metadata prepass fetch failed";
+                                console.error(
+                                    `Metadata prepass IMAP fetch skipped: ${message}`
+                                );
+                            }
+                        }
+                    }
+
+                    scanStats.metadataPrepassFetched = debugMessages.filter(
+                        (message) => message.sourceTags.includes("metadata-prepass")
+                    ).length;
+
+                    if (config.metadataPrepassVerbose || config.verbose) {
+                        console.error(
+                            `Metadata prepass summary: scanned=${scanStats.metadataPrepassMessagesScanned}, matches=${scanStats.metadataPrepassMatches}, fetched=${scanStats.metadataPrepassFetched}`
+                        );
+                    }
+                }
+
+                if (
+                    config.scanMode === "deep" &&
+                    config.deepFallbackEnabled &&
+                    (scanStats.targetedMessagesUniqueMatched === 0 ||
+                        scanStats.targetedMessagesFetched === 0)
+                ) {
+                    const deepSince = dateDaysAgo(config.deepDays);
+                    const deepFallback = await collectDeepFallbackUids(
+                        client,
+                        totalMessages,
+                        deepSince,
+                        config.deepMaxFetch,
+                        config.deepBatchSize,
+                        config.deepBucketDays,
+                        config.deepPerBucketLimit,
+                        config.deepBucketSampleMode,
+                        seenMessageIds,
+                        config.targetedVerbose || config.verbose
+                    );
+
+                    scanStats.deepFallbackUsed = true;
+                    scanStats.deepFallbackReason = deepFallback.reason;
+                    scanStats.deepFallbackStrategy = deepFallback.strategy;
+                    scanStats.deepFallbackBucketsTotal = deepFallback.bucketsTotal;
+                    scanStats.deepFallbackBucketsQueried = deepFallback.bucketsQueried;
+                    scanStats.deepFallbackBucketsWithMatches =
+                        deepFallback.bucketsWithMatches;
+                    scanStats.deepFallbackMessagesMatchedBeforeCap =
+                        deepFallback.matchedBeforeCap;
+                    scanStats.deepFallbackUidCandidatesBeforeSampling =
+                        deepFallback.uidCandidatesBeforeSampling;
+                    scanStats.deepFallbackUidCandidatesAfterSampling =
+                        deepFallback.uidCandidatesAfterSampling;
+
+                    if (config.targetedVerbose || config.verbose) {
+                        console.error(
+                            `Deep fallback selected ${deepFallback.uids.length} messages, limit ${config.deepMaxFetch}`
+                        );
+                    }
+
+                    if (deepFallback.uids.length > 0) {
+                        try {
+                            for await (const message of client.fetch(
+                                deepFallback.uids,
+                                {
+                                    envelope: true,
+                                    internalDate: true,
+                                    source: {
+                                        maxLength: 20_000,
+                                    },
+                                },
+                                { uid: true }
+                            )) {
+                                await appendDebugMessageFromFetchMessage(
+                                    debugMessages,
+                                    seenMessageIds,
+                                    message,
+                                    deepFallback.strategy === "time_buckets"
+                                        ? "deep_bucket"
+                                        : "deep_fallback"
+                                );
+                            }
+                        } catch (error) {
+                            if (config.targetedVerbose || config.verbose) {
+                                const message =
+                                    error instanceof Error
+                                        ? error.message
+                                        : "deep fallback fetch failed";
+                                console.error(`Deep fallback IMAP fetch skipped: ${message}`);
+                            }
+                        }
+                    }
+
+                    scanStats.deepFallbackMessagesFetched = debugMessages.filter(
+                        (message) => message.sourceTags.includes("deep_fallback")
+                    ).length;
+                }
             }
         }
+
+        if (
+            scanStats.metadataPrepassFetched > 0 &&
+            scanStats.targetedMessagesUniqueMatched === 0 &&
+            scanStats.headerTargetedUniqueMatched === 0
+        ) {
+            scanStats.coverageNote = `${scanStats.coverageNote} Targeted IMAP search returned 0; metadata prepass was used.`;
+        }
+
+        scanStats.uniqueMessagesAnalyzed = debugMessages.length;
 
         const candidatesFound = debugMessages.filter(
             (message) => message.isCandidate
@@ -2558,9 +4580,15 @@ async function main() {
             debugMessages,
             recurringGroups
         );
-        const reviewCandidates = buildReviewCandidates(debugMessages, canonicalSubscriptions);
+        const reviewCandidates = buildReviewCandidates(
+            debugMessages,
+            canonicalSubscriptions,
+            scanStats,
+            config.reviewSuppressVerbose
+        );
         const result: ImapScanSpikeResult = {
             mailbox: config.mailbox,
+            scanStats,
             scannedMessages: debugMessages.length,
             candidatesFound,
             rejectedMessages: debugMessages.length - candidatesFound,

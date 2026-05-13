@@ -2593,4 +2593,208 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
             isCandidate: false,
         },
     },
+    {
+        name: "Vinted BLIK one-time marketplace purchase PL",
+        input: {
+            id: "fixture-vinted-blik-one-time-marketplace-purchase-pl",
+            from: "Zespół Vinted <no-reply@vinted.pl>",
+            subject: "Twoje potwierdzenie zakupu: Kłódka",
+            snippet:
+                "Cześć, Twoja płatność została otrzymana. Potwierdzenie Twojego zakupu na Vinted. Osoba sprzedająca: paaulis_1999. Zamówienie: Kłódka. Zapłacono: 12,44 zł (wysyłka: 8,49 zł + przedmiot: 1,00 zł + Opłata za Ochronę Kupujących: 2,95 zł). Metoda płatności: Portfel Vinted (0,00 zł), Blik (12,44 zł).",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Amazon Prime Video specific movie rental order PL",
+        input: {
+            id: "fixture-prime-video-specific-movie-rental-order-pl",
+            from: "Amazon Prime Video <no-reply@primevideo.com>",
+            subject: "Zamówienie w Amazon Prime Video: Crimson Peak. Wzgórze krwi",
+            snippet:
+                "Zamówienie nr 123-456. Data zamówienia 10 maja. Crimson Peak, PLN 9.99. Wcześniejsze zakupy i wypożyczenia znajdziesz na koncie Prime Video.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Sizeer ecommerce e-faktura to order PL",
+        input: {
+            id: "fixture-sizeer-ecommerce-efaktura-order-pl",
+            from: "Sizeer <sklep@sizeer.com>",
+            subject: "E-faktura do Twojego zamówienia w Sizeer",
+            snippet:
+                "Do Twojego zamówienia wygenerowaliśmy fakturę elektroniczną. Zamówiłeś kilka produktów? przesyłka, zwrot, reklamacja.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Tazapay game DLC BLIK payment EN",
+        input: {
+            id: "fixture-tazapay-game-dlc-blik-payment-en",
+            from: "Team Tazapay <no_reply@tazapay.com>",
+            subject: "Payment Received of 47.57 PLN for CDK LLC",
+            snippet:
+                "Transaction Description Jurassic World Evolution 2 DLC x 1. Payment Method BLIK.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Google Play subscription with BLIK method EN",
+        input: {
+            id: "fixture-google-play-subscription-blik-method-en",
+            from: "Google Play <googleplay-noreply@google.com>",
+            subject: "Your YouTube Premium subscription receipt",
+            snippet:
+                "Your YouTube Premium subscription renews monthly. Payment method: BLIK. Amount: 25.99 zł.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "YouTube",
+            minConfidence: 0.6,
+        },
+    },
+    {
+        name: "eKRUS statutory contribution reminder PL",
+        input: {
+            id: "fixture-ekrus-statutory-contribution-reminder-pl",
+            from: "eKRUS <powiadomienia@krus.gov.pl>",
+            subject: "Przypomnienie o płatności składki KRUS",
+            snippet:
+                "Przypominamy o obowiązku opłacenia składki na ubezpieczenie społeczne rolników. Termin płatności składki mija 15.05.2026. To ustawowy obowiązek, a nie subskrypcja.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Generic shop invoice to order PL",
+        input: {
+            id: "fixture-generic-shop-invoice-to-order-pl",
+            from: "Sklep Example <sklep@example-shop.pl>",
+            subject: "Faktura do Twojego zamówienia",
+            snippet:
+                "Do Twojego zamówienia wygenerowaliśmy fakturę. Zamówiłeś produkty w sklepie internetowym. Przesyłka, zwrot i reklamacja są opisane w regulaminie sklepu.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "SaaS subscription invoice with order wording PL",
+        input: {
+            id: "fixture-saas-subscription-invoice-order-wording-pl",
+            from: "Example SaaS <billing@example-saas.com>",
+            subject: "Faktura do zamówienia planu Pro",
+            snippet:
+                "Faktura do zamówienia planu Pro. Twoja subskrypcja odnawia się co miesiąc, a metoda płatności będzie obciążana kwotą 49,00 zł miesięcznie. Następna płatność nastąpi za miesiąc.",
+        },
+        expected: {
+            isCandidate: true,
+            minConfidence: 0.6,
+            billingCycle: "monthly",
+        },
+    },
+    {
+        name: "Generic thank you purchase one-time product PL",
+        input: {
+            id: "fixture-generic-thank-you-purchase-one-time-product-pl",
+            from: "Sklep Example <orders@example-shop.pl>",
+            subject: "Dziekujemy za zakup",
+            snippet:
+                "Dziekujemy za zakup produktu. Numer zamowienia 12345. Przesylka zostanie nadana jutro. To jednorazowy zakup bez subskrypcji.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "Generic thank you subscription purchase monthly PL",
+        input: {
+            id: "fixture-generic-thank-you-subscription-purchase-monthly-pl",
+            from: "Example SaaS <billing@example-saas.com>",
+            subject: "Dziekujemy za zakup subskrypcji",
+            snippet:
+                "Dziekujemy za zakup subskrypcji planu Pro. Subskrypcja odnawia sie co miesiac, a metoda platnosci bedzie obciazana kwota 39,00 zl miesiecznie.",
+        },
+        expected: {
+            isCandidate: true,
+            amountText: "39,00 zl",
+            billingCycle: "monthly",
+            minConfidence: 0.6,
+        },
+    },
+    {
+        name: "PayPal automatic payment to Canva EN",
+        input: {
+            id: "fixture-paypal-automatic-payment-canva-en",
+            from: "PayPal <service@paypal.com>",
+            subject: "You sent an automatic payment to Canva",
+            snippet:
+                "You sent an automatic payment to Canva. Merchant: Canva. This automatic payment is part of your billing agreement and will be charged monthly. Amount 12.99 USD.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Canva",
+            amountText: "12.99 USD",
+            billingCycle: "monthly",
+            minConfidence: 0.6,
+        },
+    },
+    {
+        name: "Uber One payment confirmation without visible amount PL",
+        input: {
+            id: "fixture-uber-one-payment-confirmation-without-visible-amount-pl",
+            from: "Uber One <uberone@uber.com>",
+            subject: "Potwierdzenie platnosci Uber One",
+            snippet:
+                "Platnosc za Uber One zostala zrealizowana. Twoja subskrypcja Uber One pozostaje aktywna.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "Uber One",
+            minConfidence: 0.6,
+        },
+    },
+    {
+        name: "Prime Video valid rentals order PL",
+        input: {
+            id: "fixture-prime-video-valid-rentals-order-pl",
+            from: "Amazon Prime Video <no-reply@primevideo.com>",
+            subject: "Zamowienie w Amazon Prime Video: Ukryte dzialania",
+            snippet:
+                "Zamowienie nr 123-456. Data zamowienia 12 maja. Wciaz wazne wypozyczone filmy oraz wczesniejsze zakupy znajdziesz na koncie. Ukryte dzialania PLN 9.99.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
+    {
+        name: "InterviewMe weak purchase package without renewal PL",
+        input: {
+            id: "fixture-interviewme-weak-purchase-package-without-renewal-pl",
+            from: "InterviewMe <kontakt@interviewme.pl>",
+            subject: "Dziekujemy za zakup",
+            snippet:
+                "Dziekujemy za zakup pakietu InterviewMe. Twoje zamowienie zostalo przyjete. Dostep do materialow znajdziesz na koncie.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.45,
+        },
+    },
 ];
