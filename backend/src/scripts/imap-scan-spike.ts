@@ -96,13 +96,17 @@ type DateSemantics = {
 };
 
 type ImapCanonicalSubscription = {
+    id: string;
     subscriptionKey: string;
     displayName: string;
     provider?: string;
+    billingProvider?: string;
     billingChannel?: string;
     category?: string;
     confidence: number;
-    status: "active" | "trial" | "price_change" | "cancelled" | "expired" | "invoice" | "unknown";
+    confidenceLevel: "high" | "medium" | "low";
+    status: "active" | "trial" | "price_change" | "invoice_due" | "payment_failed" | "cancelled" | "expired" | "unknown";
+    source: "message" | "recurring_group" | "marketplace" | "payment_processor" | "mixed";
     billingCycle?: string;
     amount?: string;
     displayAmount?: string;
@@ -122,19 +126,27 @@ type ImapCanonicalSubscription = {
     nextRenewalDateText?: string;
     trialEndDateText?: string;
     effectiveDateText?: string;
+    chargedDateText?: string;
     amountSemantics?: AmountSemantics[];
     dateSemantics?: DateSemantics[];
     sourceTypes: string[];
     statusReason?: string;
     amounts: string[];
+    allAmounts: string[];
     firstSeen: string;
     lastSeen: string;
+    latestSubject?: string;
     messageCount: number;
+    sourceMessagesCount: number;
     sourceMessageIds: string[];
     sourceSubjects: string[];
     sourceSenders: string[];
     evidenceTypes: string[];
+    evidenceSummary: string[];
+    riskSummary: string[];
     reasons: string[];
+    needsReview: boolean;
+    reviewReason?: string;
 };
 
 type ImapReviewCandidate = {
@@ -757,7 +769,8 @@ function statusRank(status: ImapCanonicalSubscription["status"]) {
         unknown: 0,
         expired: 0,
         cancelled: 0,
-        invoice: 1,
+        payment_failed: 1,
+        invoice_due: 2,
         price_change: 2,
         trial: 3,
         active: 4,
@@ -774,6 +787,10 @@ function statusForMessage(message: ImapDebugMessage): ImapCanonicalSubscription[
 
     if (/expired|reactivation/i.test(debugType + reasons)) {
         return "expired";
+    }
+
+    if (/payment_failed|payment failed|card declined|declined/i.test(debugType + reasons)) {
+        return "payment_failed";
     }
 
     if (
@@ -805,7 +822,7 @@ function statusForMessage(message: ImapDebugMessage): ImapCanonicalSubscription[
     }
 
     if (/invoice|payment_due|recurring bill|eFaktura/i.test(debugType + reasons)) {
-        return "invoice";
+        return "invoice_due";
     }
 
     return "unknown";
@@ -813,7 +830,7 @@ function statusForMessage(message: ImapDebugMessage): ImapCanonicalSubscription[
 
 function statusForGroup(group: ImapRecurringGroup): ImapCanonicalSubscription["status"] {
     if (/invoice|faktura|payment due|recurring/i.test(group.reasons.join(" "))) {
-        return "invoice";
+        return "invoice_due";
     }
 
     return "unknown";
@@ -1070,6 +1087,183 @@ function firstDateOfKind(semantics: DateSemantics[], kinds: DateSemantics["kind"
         .sort((a, b) => b.confidence - a.confidence)[0]?.raw;
 }
 
+function confidenceLevelFor(confidence: number): ImapCanonicalSubscription["confidenceLevel"] {
+    if (confidence >= 0.85) return "high";
+    if (confidence >= 0.65) return "medium";
+    return "low";
+}
+
+function normalizeCanonicalCategory(category: string | undefined, draftText: string) {
+    const text = cleanText(`${category ?? ""} ${draftText}`).toLowerCase();
+    const normalizedCategory = cleanText(category ?? "").toLowerCase();
+
+    if (normalizedCategory && normalizedCategory !== "unknown") {
+        const mappedCategory: Record<string, string> = {
+            streaming_video: "streaming_video",
+            music_audio: "music_audio",
+            cloud_storage: "cloud_storage",
+            ai_tools: "ai_tools",
+            design_creative: "software_saas",
+            productivity_office: "productivity",
+            developer_tools: "software_saas",
+            delivery_membership: "delivery_membership",
+            ecommerce_membership: "ecommerce_membership",
+            telecom_mobile: "telecom_mobile",
+            internet_isp: "internet_isp",
+            utilities_energy: "utilities_energy",
+            education_learning: "education",
+            fitness_health: "health_fitness",
+            gaming: "gaming",
+        };
+
+        if (mappedCategory[normalizedCategory]) {
+            return mappedCategory[normalizedCategory];
+        }
+    }
+
+    if (/streaming|video|prime video|netflix|skyshowtime|max|hbo|disney|apple tv|player|canal/.test(text)) {
+        return "streaming_video";
+    }
+
+    if (/music|audio|spotify|youtube music|tidal|deezer|audible|storytel/.test(text)) {
+        return "music_audio";
+    }
+
+    if (/cloud|storage|icloud|google one|dropbox|drive|onedrive/.test(text)) {
+        return "cloud_storage";
+    }
+
+    if (/\b(ai|chatgpt|openai|claude|perplexity|copilot|midjourney)\b/.test(text)) {
+        return "ai_tools";
+    }
+
+    if (/delivery|uber one|uber eats|wolt|glovo/.test(text)) {
+        return "delivery_membership";
+    }
+
+    if (/allegro smart|amazon prime|ecommerce/.test(text)) {
+        return "ecommerce_membership";
+    }
+
+    if (/telecom|mobile|play|orange|t-mobile|plus|plush|nju/.test(text)) {
+        return "telecom_mobile";
+    }
+
+    if (/internet|isp|toya|netia|vectra|inea|localnet|fiber/.test(text)) {
+        return "internet_isp";
+    }
+
+    if (/utility|utilities|energy|electricity|power|pr[aą]d|prad|gaz|tauron|pge|energa|enea|e\.on|invoice_due/.test(text)) {
+        return "utilities_energy";
+    }
+
+    if (/finance|insurance|bank|tax|accounting|zus|krus/.test(text)) {
+        return "finance_insurance";
+    }
+
+    if (/software|saas|acrobat|adobe|canva|figma/.test(text)) {
+        return "software_saas";
+    }
+
+    if (/productivity|office|microsoft 365|notion|slack|zoom|prezi/.test(text)) {
+        return "productivity";
+    }
+
+    if (/education|learning|duolingo|coursera|udemy/.test(text)) {
+        return "education";
+    }
+
+    if (/health|fitness|strava|alltrails|calm|headspace/.test(text)) {
+        return "health_fitness";
+    }
+
+    if (/travel|transport|ticket|bolt/.test(text)) {
+        return "travel_transport";
+    }
+
+    if (/government|tax|krus|zus/.test(text)) {
+        return "government_tax_insurance";
+    }
+
+    if (/invoice|faktura|rachunek|bill|payment due/.test(text)) {
+        return "other_bill";
+    }
+
+    return "other_subscription";
+}
+
+function sourceForCanonical(
+    sourceTypes: string[],
+    billingChannel: string | undefined,
+    hasMessageSource: boolean
+): ImapCanonicalSubscription["source"] {
+    const hasRecurring = sourceTypes.includes("recurring_group");
+
+    if (hasRecurring && hasMessageSource) return "mixed";
+    if (isMarketplaceChannel(billingChannel)) return "marketplace";
+    if (billingChannel && /paypal|stripe|payu|przelewy24|tpay|autopay/i.test(billingChannel)) {
+        return "payment_processor";
+    }
+    if (hasRecurring) return "recurring_group";
+    return "message";
+}
+
+function evidenceSummaryForCanonical(
+    status: ImapCanonicalSubscription["status"],
+    evidenceTypes: string[],
+    billingChannel: string | undefined,
+    billingCycle: string | undefined
+) {
+    const text = evidenceTypes.join(" ");
+    const summary: string[] = [];
+
+    if (/payment confirmation|payment\/charged|charged/i.test(text)) summary.push("payment confirmation");
+    if (/future charge|continuation/i.test(text)) summary.push("subscription continuation/future charge");
+    if (/trial/i.test(text) || status === "trial") summary.push("trial/future paid conversion");
+    if (/invoice|payment due|recurring bill/i.test(text) || status === "invoice_due") summary.push("invoice or bill due");
+    if (/price change/i.test(text) || status === "price_change") summary.push("active price change");
+    if (billingCycle && billingCycle !== "unknown") summary.push(`${billingCycle} billing`);
+    if (billingChannel) summary.push(`billing channel: ${billingChannel}`);
+
+    return [...new Set(summary)].slice(0, 8);
+}
+
+function riskSummaryForCanonical(reasons: string[]) {
+    return reasons
+        .filter((reason) => /^-|blocked|suspicious|raw header|risk/i.test(reason))
+        .map((reason) => reason.replace(/^[-+]\d?(?:\.\d+)?\s*/, ""))
+        .slice(0, 6);
+}
+
+function reviewNeedForCanonical(args: {
+    confidenceLevel: ImapCanonicalSubscription["confidenceLevel"];
+    status: ImapCanonicalSubscription["status"];
+    source: ImapCanonicalSubscription["source"];
+    amount: string | undefined;
+    category: string | undefined;
+    cadenceUnknown: boolean;
+    riskSummary: string[];
+}) {
+    const reasons: string[] = [];
+
+    if (args.confidenceLevel === "low") reasons.push("low confidence");
+    if (args.status === "unknown") reasons.push("unknown status");
+    if (args.source === "mixed" && args.riskSummary.length > 0) reasons.push("mixed source with risk evidence");
+    if (
+        !args.amount &&
+        ["active", "trial", "price_change"].includes(args.status) &&
+        !/(utilities_energy|internet_isp|other_bill)/i.test(args.category ?? "")
+    ) {
+        reasons.push("missing amount for likely paid subscription");
+    }
+    if (args.cadenceUnknown && !args.amount) reasons.push("recurring group has unknown cadence and weak amount semantics");
+
+    return {
+        needsReview: reasons.length > 0,
+        reviewReason: reasons.join("; ") || undefined,
+    };
+}
+
 function chooseDisplayAmount(args: {
     status: ImapCanonicalSubscription["status"];
     amountSemantics: AmountSemantics[];
@@ -1244,7 +1438,7 @@ function selectCanonicalAmount(
     if (datedAmounts[0]) {
         return {
             amount: datedAmounts[0],
-            amountKind: status === "invoice" ? "invoice_due" as const : "latest" as const,
+            amountKind: status === "invoice_due" ? "invoice_due" as const : "latest" as const,
         };
     }
 
@@ -1498,6 +1692,44 @@ function buildCanonicalSubscriptions(
             const promoAmount = firstAmountOfKind(uniqueAmountSemantics, ["promo_price"]);
             const regularAmount = firstAmountOfKind(uniqueAmountSemantics, ["regular_price"]);
             const trialThenAmount = firstAmountOfKind(uniqueAmountSemantics, ["trial_then_price"]);
+            const fallbackAmountChoice = (() => {
+                if (amountChoice.displayAmount) return amountChoice;
+                if (trialThenAmount) return { ...amountChoice, displayAmount: trialThenAmount, amountKind: "trial_then_price" as const };
+                if (futureAmount) return { ...amountChoice, displayAmount: futureAmount, amountKind: "future_price" as const };
+                if (regularAmount) return { ...amountChoice, displayAmount: regularAmount, amountKind: "regular_price" as const };
+                if (dueAmount) return { ...amountChoice, displayAmount: dueAmount, amountKind: "due" as const };
+                if (chargedAmount) return { ...amountChoice, displayAmount: chargedAmount, amountKind: "charged" as const };
+                return amountChoice;
+            })();
+            const sourceTypes = [...new Set(draft.sourceTypes)].slice(0, 10);
+            const hasMessageSource = draft.sourceMessages.length > 0;
+            const source = sourceForCanonical(sourceTypes, draft.billingChannel, hasMessageSource);
+            const latestSubject = draft.sourceMessages
+                .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0]
+                ?.subject ?? [...new Set(draft.subjects)].slice(-1)[0];
+            const category = normalizeCanonicalCategory(
+                draft.category,
+                `${draft.provider ?? ""} ${draft.displayName ?? ""} ${draft.subjects.join(" ")} ${draft.reasons.join(" ")} ${status}`
+            );
+            const confidenceLevel = confidenceLevelFor(confidence);
+            const evidenceTypes = [...new Set(draft.evidence)].slice(0, 12);
+            const reasons = [...new Set(draft.reasons)].slice(0, 14);
+            const riskSummary = riskSummaryForCanonical(reasons);
+            const evidenceSummary = evidenceSummaryForCanonical(
+                status,
+                evidenceTypes,
+                draft.billingChannel,
+                sortedCycles[0]?.value
+            );
+            const reviewNeed = reviewNeedForCanonical({
+                confidenceLevel,
+                status,
+                source,
+                amount: fallbackAmountChoice.displayAmount,
+                category,
+                cadenceUnknown: draft.groupCadences.includes("unknown"),
+                riskSummary,
+            });
             const statusReason =
                 status === "active"
                     ? "active payment, continuation, renewal, or invoice evidence"
@@ -1505,11 +1737,14 @@ function buildCanonicalSubscriptions(
                     ? "trial evidence without later active payment/continuation"
                     : status === "price_change"
                     ? "active price-change evidence"
-                    : status === "invoice"
+                    : status === "invoice_due"
                     ? "invoice or recurring bill evidence"
+                    : status === "payment_failed"
+                    ? "payment failed or card declined evidence"
                     : undefined;
 
             return {
+                id: draft.key,
                 subscriptionKey: draft.key,
                 displayName:
                     draft.displayName ??
@@ -1517,13 +1752,16 @@ function buildCanonicalSubscriptions(
                     titleFromSubjectFamily(draft.key) ??
                     draft.key,
                 provider: draft.provider,
+                billingProvider: draft.billingChannel,
                 billingChannel: draft.billingChannel,
-                category: draft.category,
+                category,
                 confidence,
+                confidenceLevel,
                 status,
+                source,
                 billingCycle: sortedCycles[0]?.value,
-                amount: amountChoice.displayAmount,
-                displayAmount: amountChoice.displayAmount,
+                amount: fallbackAmountChoice.displayAmount,
+                displayAmount: fallbackAmountChoice.displayAmount,
                 chargedAmount,
                 dueAmount,
                 currentAmount,
@@ -1532,10 +1770,11 @@ function buildCanonicalSubscriptions(
                 promoAmount,
                 regularAmount,
                 trialThenAmount,
-                ignoredAmounts: [...new Set(amountChoice.ignoredAmounts)].slice(0, 10),
-                amountKind: amountChoice.amountKind,
+                ignoredAmounts: [...new Set(fallbackAmountChoice.ignoredAmounts)].slice(0, 10),
+                amountKind: fallbackAmountChoice.amountKind,
                 dueDateText: firstDateOfKind(uniqueDateSemantics, ["due_date"]),
                 billingDateText: firstDateOfKind(uniqueDateSemantics, ["charged_date", "invoice_date"]),
+                chargedDateText: firstDateOfKind(uniqueDateSemantics, ["charged_date"]),
                 nextBillingDateText: firstDateOfKind(uniqueDateSemantics, ["next_renewal_date"]),
                 nextRenewalDateText: firstDateOfKind(uniqueDateSemantics, ["next_renewal_date"]),
                 trialEndDateText:
@@ -1546,17 +1785,24 @@ function buildCanonicalSubscriptions(
                 effectiveDateText: firstDateOfKind(uniqueDateSemantics, ["effective_date"]),
                 amountSemantics: uniqueAmountSemantics,
                 dateSemantics: uniqueDateSemantics,
-                sourceTypes: [...new Set(draft.sourceTypes)].slice(0, 10),
+                sourceTypes,
                 statusReason,
                 amounts: uniqueAmounts,
+                allAmounts: uniqueAmounts,
                 firstSeen: sortedDates[0] ?? "",
                 lastSeen: sortedDates[sortedDates.length - 1] ?? "",
+                latestSubject,
                 messageCount: uniqueMessageIds.length,
+                sourceMessagesCount: uniqueMessageIds.length,
                 sourceMessageIds: uniqueMessageIds,
                 sourceSubjects: [...new Set(draft.subjects)].slice(0, 6),
                 sourceSenders: [...new Set(draft.senders)].slice(0, 6),
-                evidenceTypes: [...new Set(draft.evidence)].slice(0, 12),
-                reasons: [...new Set(draft.reasons)].slice(0, 14),
+                evidenceTypes,
+                evidenceSummary,
+                riskSummary,
+                reasons,
+                needsReview: reviewNeed.needsReview,
+                reviewReason: reviewNeed.reviewReason,
             };
         })
         .sort(
@@ -1999,14 +2245,15 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
     result.canonicalSubscriptions.slice(0, 30).forEach((subscription, index) => {
         console.log("");
         console.log(`${index + 1}. ${subscription.displayName}`);
-        console.log(`   confidence: ${subscription.confidence.toFixed(2)}`);
-        console.log(`   status: ${subscription.status}`);
+        console.log(`   status: ${subscription.status} (${subscription.confidenceLevel}, ${subscription.confidence.toFixed(2)})`);
+        console.log(`   id: ${subscription.id}`);
         optionalLine("provider", subscription.provider);
         optionalLine("billingChannel", subscription.billingChannel);
         optionalLine("category", subscription.category);
-        optionalLine("billingCycle", subscription.billingCycle);
-        optionalLine("amount", subscription.amount);
+        optionalLine("source", subscription.source);
+        optionalLine("displayAmount", subscription.displayAmount);
         optionalLine("amountKind", subscription.amountKind);
+        optionalLine("billingCycle", subscription.billingCycle);
         optionalLine("chargedAmount", subscription.chargedAmount);
         optionalLine("dueAmount", subscription.dueAmount);
         optionalLine("currentAmount", subscription.currentAmount);
@@ -2020,10 +2267,13 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
         optionalLine("nextRenewalDateText", subscription.nextRenewalDateText);
         optionalLine("trialEndDateText", subscription.trialEndDateText);
         optionalLine("effectiveDateText", subscription.effectiveDateText);
+        optionalLine("needsReview", subscription.needsReview ? "yes" : undefined);
+        optionalLine("reviewReason", subscription.reviewReason);
         optionalLine("statusReason", subscription.statusReason);
-        console.log(`   messages: ${subscription.messageCount}`);
+        console.log(`   sourceMessagesCount: ${subscription.sourceMessagesCount}`);
         optionalLine("firstSeen", subscription.firstSeen.slice(0, 10));
         optionalLine("lastSeen", subscription.lastSeen.slice(0, 10));
+        optionalLine("latestSubject", subscription.latestSubject);
 
         if (subscription.sourceSubjects.length > 0) {
             console.log("   source subjects:");
@@ -2033,11 +2283,19 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
             }
         }
 
-        if (subscription.evidenceTypes.length > 0) {
-            console.log("   evidence:");
+        if (subscription.evidenceSummary.length > 0) {
+            console.log("   evidenceSummary:");
 
-            for (const evidence of subscription.evidenceTypes.slice(0, 6)) {
+            for (const evidence of subscription.evidenceSummary.slice(0, 6)) {
                 console.log(`   - ${evidence}`);
+            }
+        }
+
+        if (subscription.riskSummary.length > 0) {
+            console.log("   riskSummary:");
+
+            for (const risk of subscription.riskSummary.slice(0, 4)) {
+                console.log(`   - ${risk}`);
             }
         }
     });
