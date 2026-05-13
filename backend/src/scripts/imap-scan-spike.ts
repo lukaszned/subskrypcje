@@ -101,6 +101,8 @@ type ImapScanStats = {
     deepFallbackMessagesMatchedBeforeCap: number;
     deepFallbackUidCandidatesBeforeSampling: number;
     deepFallbackUidCandidatesAfterSampling: number;
+    reviewCandidatesBeforeSuppression: number;
+    reviewCandidatesAfterSuppression: number;
     reviewSuppressedOneTimeOrders: number;
     reviewSuppressedPrimeVideoOrders: number;
     reviewSuppressedWeakPurchases: number;
@@ -196,6 +198,8 @@ type ImapCanonicalSubscription = {
     trialEndDateText?: string;
     effectiveDateText?: string;
     chargedDateText?: string;
+    selectedAmountSourceDate?: string;
+    selectedAmountSourceSubject?: string;
     amountSemantics?: AmountSemantics[];
     dateSemantics?: DateSemantics[];
     sourceTypes: string[];
@@ -2117,6 +2121,92 @@ function shouldSuppressReviewCandidate(
     return undefined;
 }
 
+function shouldSuppressReviewCandidateFinal(candidate: ImapReviewCandidate): {
+    suppress: boolean;
+    reason?: Exclude<ReviewSuppressionReason, undefined>;
+} {
+    const text = normalizeAsciiText(
+        [
+            candidate.detectedProvider,
+            candidate.detectedName,
+            candidate.from,
+            candidate.subject,
+            candidate.snippet,
+            candidate.blockedReason,
+            ...(candidate.reviewSignals ?? []),
+            ...(candidate.riskSignals ?? []),
+        ]
+            .filter(Boolean)
+            .join(" ")
+    );
+    const hasActiveSubscriptionEvidence =
+        /\b(kontynuujac subskrypcje|subskrypcja rozpocznie sie|wlasnie rozpoczyna sie twoja subskrypcja|automatycznie odnowiona|automatycznie odnawiana|automatycznie odnawiane|metoda platnosci bedzie obciazana|bedzie obciazana kwota|co miesiac|miesiecznie|monthly|next renewal|next billing)\b/i.test(
+            text
+        );
+    const hasPrimeVideo =
+        /\b(amazon prime video|prime video)\b/i.test(text);
+    const hasPrimeVideoOneTimeOrder =
+        /\b(zamowienie w amazon prime video|zamowienie nr|data zamowienia|wczesniejsze zakupy|wciaz wazne wypozyczenia|wciaz wazne wypozyczone filmy|wypozyczone filmy|wypozyczenia w usludze|prime video order|your prime video order|order number|rental|movie rental)\b/i.test(
+            text
+        );
+
+    if (hasPrimeVideo && hasPrimeVideoOneTimeOrder && !hasActiveSubscriptionEvidence) {
+        return { suppress: true, reason: "prime_video_order" };
+    }
+
+    const hasWeakPurchase =
+        /\b(dziekujemy za zakup|wykupienie pakietu|numer zamowienia|zamowienie|pelen dostep|pakietu w naszym kreatorze|platnosc zostala otrzymana|potwierdzenie zakupu)\b/i.test(
+            text
+        );
+
+    if (hasWeakPurchase && !hasActiveSubscriptionEvidence) {
+        return { suppress: true, reason: "weak_purchase" };
+    }
+
+    return { suppress: false };
+}
+
+function applyFinalReviewCandidateSuppression(
+    reviewCandidates: ImapReviewCandidate[],
+    stats: Pick<
+        ImapScanStats,
+        | "reviewCandidatesBeforeSuppression"
+        | "reviewCandidatesAfterSuppression"
+        | "reviewSuppressedOneTimeOrders"
+        | "reviewSuppressedPrimeVideoOrders"
+        | "reviewSuppressedWeakPurchases"
+    >,
+    suppressVerbose: boolean
+) {
+    stats.reviewCandidatesBeforeSuppression = reviewCandidates.length;
+    stats.reviewCandidatesAfterSuppression = 0;
+    stats.reviewSuppressedOneTimeOrders = 0;
+    stats.reviewSuppressedPrimeVideoOrders = 0;
+    stats.reviewSuppressedWeakPurchases = 0;
+
+    const filtered = reviewCandidates.filter((candidate) => {
+        const suppression = shouldSuppressReviewCandidateFinal(candidate);
+
+        if (!suppression.suppress) {
+            return true;
+        }
+
+        incrementReviewSuppression(stats, suppression.reason);
+
+        if (suppressVerbose) {
+            console.error(
+                `Review suppress: reason=${suppression.reason}; from=${candidate.from}; subject=${candidate.subject}`
+            );
+        }
+
+        return false;
+    });
+
+    stats.reviewCandidatesAfterSuppression = filtered.length;
+
+    return filtered;
+}
+
 function incrementReviewSuppression(
     stats: Pick<
         ImapScanStats,
@@ -2601,6 +2691,66 @@ function firstDateOfKind(semantics: DateSemantics[], kinds: DateSemantics["kind"
     return semantics
         .filter((item) => kinds.includes(item.kind))
         .sort((a, b) => b.confidence - a.confidence)[0]?.raw;
+}
+
+function hasInvoiceOrBillEvidence(text: string) {
+    const normalized = normalizeAsciiText(text);
+
+    return /\b(invoice|faktura|e-faktura|efaktura|rachunek|kwota do zaplaty|termin platnosci|amount due|due date|payment due|bill due|oplaty fakture|oplac fakture)\b/i.test(
+        normalized
+    );
+}
+
+function extractDueDateTextFromMessageText(text: string) {
+    const dueDate = firstDateOfKind(extractDateSemantics(text), ["due_date"]);
+
+    if (dueDate) {
+        return dueDate;
+    }
+
+    const normalized = cleanText(text);
+    const match = normalized.match(
+        /(?:termin p[lł]atno[sś]ci|termin platnosci|due date|op[lł]acenie do|pay by)\s*:?\s*(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i
+    );
+
+    return match?.[1];
+}
+
+function selectLatestInvoiceAmountSource(messages: ImapDebugMessage[]) {
+    const sortedMessages = [...messages].sort(
+        (a, b) => Date.parse(b.date) - Date.parse(a.date)
+    );
+
+    for (const message of sortedMessages) {
+        const text = `${message.subject} ${message.snippet} ${message.reasons.join(" ")}`;
+
+        if (!hasInvoiceOrBillEvidence(text)) {
+            continue;
+        }
+
+        const amountSemantics = resolveAmountSemantics(
+            extractAmountSemantics(text)
+        );
+        const dueAmount =
+            firstAmountOfKind(amountSemantics, ["due"]) ??
+            (message.detected.amountText && !isZeroAmount(message.detected.amountText)
+                ? message.detected.amountText
+                : undefined) ??
+            extractAmounts(text).find((amount) => !isZeroAmount(amount));
+
+        if (!dueAmount) {
+            continue;
+        }
+
+        return {
+            dueAmount,
+            dueDateText: extractDueDateTextFromMessageText(text),
+            sourceDate: message.date,
+            sourceSubject: message.subject,
+        };
+    }
+
+    return undefined;
 }
 
 function confidenceLevelFor(confidence: number): ImapCanonicalSubscription["confidenceLevel"] {
@@ -3229,7 +3379,7 @@ function buildCanonicalSubscriptions(
                 fallbackAmounts: uniqueAmounts,
             });
             const chargedAmount = firstAmountOfKind(uniqueAmountSemantics, ["charged"]);
-            const dueAmount = firstAmountOfKind(uniqueAmountSemantics, ["due"]);
+            let dueAmount = firstAmountOfKind(uniqueAmountSemantics, ["due"]);
             const currentAmount = firstAmountOfKind(uniqueAmountSemantics, ["current_price", "old_price"]);
             const futureAmount = firstAmountOfKind(uniqueAmountSemantics, ["new_price", "future_price", "trial_then_price"]);
             const promoAmount = firstAmountOfKind(uniqueAmountSemantics, ["promo_price"]);
@@ -3254,9 +3404,34 @@ function buildCanonicalSubscriptions(
                 draft.category,
                 `${draft.provider ?? ""} ${draft.displayName ?? ""} ${draft.subjects.join(" ")} ${draft.reasons.join(" ")} ${status}`
             );
-            const confidenceLevel = confidenceLevelFor(confidence);
             const evidenceTypes = [...new Set(draft.evidence)].slice(0, 12);
             const reasons = [...new Set(draft.reasons)].slice(0, 14);
+            const latestInvoiceAmountSource = selectLatestInvoiceAmountSource(
+                draft.sourceMessages
+            );
+            const isRecurringBillCanonical =
+                status === "invoice_due" ||
+                /invoice|bill due|payment due|recurring bill|faktura|rachunek/i.test(
+                    `${category} ${evidenceTypes.join(" ")} ${reasons.join(" ")}`
+                ) ||
+                (/(utilities_energy|internet_isp|telecom_mobile|other_bill)/i.test(
+                    category
+                ) &&
+                    Boolean(latestInvoiceAmountSource));
+            const latestBillAmountChoice =
+                isRecurringBillCanonical && latestInvoiceAmountSource
+                    ? {
+                        ...fallbackAmountChoice,
+                        displayAmount: latestInvoiceAmountSource.dueAmount,
+                        amountKind: "due" as const,
+                    }
+                    : fallbackAmountChoice;
+
+            if (isRecurringBillCanonical && latestInvoiceAmountSource?.dueAmount) {
+                dueAmount = latestInvoiceAmountSource.dueAmount;
+            }
+
+            const confidenceLevel = confidenceLevelFor(confidence);
             const riskSummary = riskSummaryForCanonical(reasons);
             const evidenceSummary = evidenceSummaryForCanonical(
                 status,
@@ -3268,7 +3443,7 @@ function buildCanonicalSubscriptions(
                 confidenceLevel,
                 status,
                 source,
-                amount: fallbackAmountChoice.displayAmount,
+                amount: latestBillAmountChoice.displayAmount,
                 category,
                 cadenceUnknown: draft.groupCadences.includes("unknown"),
                 riskSummary,
@@ -3305,8 +3480,8 @@ function buildCanonicalSubscriptions(
                 status,
                 source,
                 billingCycle: sortedCycles[0]?.value,
-                amount: fallbackAmountChoice.displayAmount,
-                displayAmount: fallbackAmountChoice.displayAmount,
+                amount: latestBillAmountChoice.displayAmount,
+                displayAmount: latestBillAmountChoice.displayAmount,
                 chargedAmount,
                 dueAmount,
                 currentAmount,
@@ -3315,9 +3490,12 @@ function buildCanonicalSubscriptions(
                 promoAmount,
                 regularAmount,
                 trialThenAmount,
-                ignoredAmounts: [...new Set(fallbackAmountChoice.ignoredAmounts)].slice(0, 10),
-                amountKind: fallbackAmountChoice.amountKind,
-                dueDateText: firstDateOfKind(uniqueDateSemantics, ["due_date"]),
+                ignoredAmounts: [...new Set(latestBillAmountChoice.ignoredAmounts)].slice(0, 10),
+                amountKind: latestBillAmountChoice.amountKind,
+                dueDateText:
+                    isRecurringBillCanonical && latestInvoiceAmountSource?.dueDateText
+                        ? latestInvoiceAmountSource.dueDateText
+                        : firstDateOfKind(uniqueDateSemantics, ["due_date"]),
                 billingDateText: firstDateOfKind(uniqueDateSemantics, ["charged_date", "invoice_date"]),
                 chargedDateText: firstDateOfKind(uniqueDateSemantics, ["charged_date"]),
                 nextBillingDateText: firstDateOfKind(uniqueDateSemantics, ["next_renewal_date"]),
@@ -3328,6 +3506,8 @@ function buildCanonicalSubscriptions(
                         .find((message) => message.detected.trialEndDateText)?.detected.trialEndDateText ??
                     firstDateOfKind(uniqueDateSemantics, ["trial_end_date"]),
                 effectiveDateText: firstDateOfKind(uniqueDateSemantics, ["effective_date"]),
+                selectedAmountSourceDate: latestInvoiceAmountSource?.sourceDate,
+                selectedAmountSourceSubject: latestInvoiceAmountSource?.sourceSubject,
                 amountSemantics: uniqueAmountSemantics,
                 dateSemantics: uniqueDateSemantics,
                 sourceTypes,
@@ -3922,6 +4102,8 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
     console.log(`rejectedMessages: ${result.rejectedMessages}`);
     console.log(`canonicalSubscriptions: ${result.canonicalSubscriptions.length}`);
     console.log(`reviewCandidates: ${result.reviewCandidates.length}`);
+    console.log(`reviewCandidatesBeforeSuppression: ${result.scanStats.reviewCandidatesBeforeSuppression}`);
+    console.log(`reviewCandidatesAfterSuppression: ${result.scanStats.reviewCandidatesAfterSuppression}`);
     console.log(`reviewSuppressedOneTimeOrders: ${result.scanStats.reviewSuppressedOneTimeOrders}`);
     console.log(`reviewSuppressedPrimeVideoOrders: ${result.scanStats.reviewSuppressedPrimeVideoOrders}`);
     console.log(`reviewSuppressedWeakPurchases: ${result.scanStats.reviewSuppressedWeakPurchases}`);
@@ -3958,6 +4140,8 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
         optionalLine("nextRenewalDateText", subscription.nextRenewalDateText);
         optionalLine("trialEndDateText", subscription.trialEndDateText);
         optionalLine("effectiveDateText", subscription.effectiveDateText);
+        optionalLine("selectedAmountSourceDate", subscription.selectedAmountSourceDate?.slice(0, 10));
+        optionalLine("selectedAmountSourceSubject", subscription.selectedAmountSourceSubject);
         optionalLine("needsReview", subscription.needsReview ? "yes" : undefined);
         optionalLine("reviewReason", subscription.reviewReason);
         optionalLine("statusReason", subscription.statusReason);
@@ -4227,6 +4411,8 @@ async function main() {
             deepFallbackMessagesMatchedBeforeCap: 0,
             deepFallbackUidCandidatesBeforeSampling: 0,
             deepFallbackUidCandidatesAfterSampling: 0,
+            reviewCandidatesBeforeSuppression: 0,
+            reviewCandidatesAfterSuppression: 0,
             reviewSuppressedOneTimeOrders: 0,
             reviewSuppressedPrimeVideoOrders: 0,
             reviewSuppressedWeakPurchases: 0,
@@ -4580,9 +4766,14 @@ async function main() {
             debugMessages,
             recurringGroups
         );
-        const reviewCandidates = buildReviewCandidates(
+        const reviewCandidatesBeforeFinalSuppression = buildReviewCandidates(
             debugMessages,
             canonicalSubscriptions,
+            scanStats,
+            config.reviewSuppressVerbose
+        );
+        const reviewCandidates = applyFinalReviewCandidateSuppression(
+            reviewCandidatesBeforeFinalSuppression,
             scanStats,
             config.reviewSuppressVerbose
         );
