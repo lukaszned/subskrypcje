@@ -44,6 +44,10 @@ type ImapSpikeConfig = {
     showReviewCandidates: boolean;
     reviewLimit: number;
     reviewSuppressVerbose: boolean;
+    activeRecencyDays: number;
+    invoiceRecencyDays: number;
+    trialStaleDays: number;
+    priceChangeFutureGraceDays: number;
 };
 
 type ImapDebugMessage = {
@@ -176,7 +180,7 @@ type ImapCanonicalSubscription = {
     category?: string;
     confidence: number;
     confidenceLevel: "high" | "medium" | "low";
-    status: "active" | "trial" | "price_change" | "invoice_due" | "payment_failed" | "cancelled" | "expired" | "unknown";
+    status: "active" | "likely_active" | "stale_needs_review" | "trial" | "price_change" | "invoice_due" | "payment_failed" | "cancelled" | "expired" | "unknown";
     source: "message" | "recurring_group" | "marketplace" | "payment_processor" | "mixed";
     billingCycle?: string;
     amount?: string;
@@ -200,6 +204,12 @@ type ImapCanonicalSubscription = {
     chargedDateText?: string;
     selectedAmountSourceDate?: string;
     selectedAmountSourceSubject?: string;
+    lastEvidenceDate?: string;
+    lastBillingEvidenceDate?: string;
+    lastActiveEvidenceDate?: string;
+    evidenceAgeDays?: number;
+    recencyStatus?: "active" | "likely_active" | "stale_needs_review" | "price_change" | "invoice_due" | "unknown";
+    stalenessReason?: string;
     amountSemantics?: AmountSemantics[];
     dateSemantics?: DateSemantics[];
     sourceTypes: string[];
@@ -240,12 +250,55 @@ type ImapReviewCandidate = {
     riskSignals: string[];
 };
 
+type ProductBucket =
+    | "currentSubscriptions"
+    | "needsReviewSubscriptions"
+    | "historicalSubscriptions"
+    | "priceChanges"
+    | "billsOrUtilities";
+
+type ProductPrimaryAction =
+    | "show_as_active"
+    | "confirm_still_active"
+    | "review_old_bill"
+    | "review_price_change"
+    | "ignore_or_archive";
+
+type ProductCanonicalSubscription = ImapCanonicalSubscription & {
+    productBucket: ProductBucket;
+    primaryAction: ProductPrimaryAction;
+    userFacingReason: string;
+};
+
+type ImapProductResult = {
+    currentSubscriptions: ProductCanonicalSubscription[];
+    needsReviewSubscriptions: ProductCanonicalSubscription[];
+    historicalSubscriptions: ProductCanonicalSubscription[];
+    priceChanges: ProductCanonicalSubscription[];
+    billsOrUtilities: ProductCanonicalSubscription[];
+    scanSummary: {
+        currentSubscriptions: number;
+        needsReviewSubscriptions: number;
+        historicalSubscriptions: number;
+        priceChanges: number;
+        billsOrUtilities: number;
+        totalCanonicalSubscriptions: number;
+        recommendedDefaultMode: string;
+        recommendedUserMessage: string;
+        hasCurrentSubscriptions: boolean;
+        hasOnlyHistoricalEvidence: boolean;
+        hasPriceChanges: boolean;
+        hasBillsOrUtilities: boolean;
+    };
+};
+
 type ImapScanSpikeResult = {
     mailbox: string;
     scanStats: ImapScanStats;
     scannedMessages: number;
     candidatesFound: number;
     rejectedMessages: number;
+    productResult: ImapProductResult;
     canonicalSubscriptions: ImapCanonicalSubscription[];
     reviewCandidates: ImapReviewCandidate[];
     recurringGroups: ImapRecurringGroup[];
@@ -468,6 +521,26 @@ function getConfig(): ImapSpikeConfig {
         reviewSuppressVerbose: parseBoolean(
             process.env.IMAP_REVIEW_SUPPRESS_VERBOSE,
             false
+        ),
+        activeRecencyDays: parsePositiveInteger(
+            process.env.IMAP_ACTIVE_RECENCY_DAYS,
+            120,
+            "IMAP_ACTIVE_RECENCY_DAYS"
+        ),
+        invoiceRecencyDays: parsePositiveInteger(
+            process.env.IMAP_INVOICE_RECENCY_DAYS,
+            120,
+            "IMAP_INVOICE_RECENCY_DAYS"
+        ),
+        trialStaleDays: parsePositiveInteger(
+            process.env.IMAP_TRIAL_STALE_DAYS,
+            45,
+            "IMAP_TRIAL_STALE_DAYS"
+        ),
+        priceChangeFutureGraceDays: parsePositiveInteger(
+            process.env.IMAP_PRICE_CHANGE_FUTURE_GRACE_DAYS,
+            400,
+            "IMAP_PRICE_CHANGE_FUTURE_GRACE_DAYS"
         ),
     };
 }
@@ -2378,6 +2451,8 @@ function statusRank(status: ImapCanonicalSubscription["status"]) {
         payment_failed: 1,
         invoice_due: 2,
         price_change: 2,
+        stale_needs_review: 2,
+        likely_active: 3,
         trial: 3,
         active: 4,
     }[status];
@@ -2440,6 +2515,219 @@ function statusForGroup(group: ImapRecurringGroup): ImapCanonicalSubscription["s
     }
 
     return "unknown";
+}
+
+type CanonicalRecencyPolicy = Pick<
+    ImapSpikeConfig,
+    | "activeRecencyDays"
+    | "invoiceRecencyDays"
+    | "trialStaleDays"
+    | "priceChangeFutureGraceDays"
+>;
+
+function daysSinceIsoDate(value: string | undefined, now = new Date()) {
+    if (!value) return undefined;
+
+    const parsed = Date.parse(value);
+
+    if (Number.isNaN(parsed)) return undefined;
+
+    return Math.max(0, Math.floor((now.getTime() - parsed) / 86_400_000));
+}
+
+function latestMessageDate(
+    messages: ImapDebugMessage[],
+    predicate: (message: ImapDebugMessage) => boolean
+) {
+    return [...messages]
+        .filter(predicate)
+        .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0]?.date;
+}
+
+function isBillingEvidenceMessage(message: ImapDebugMessage) {
+    const text = `${message.subject} ${message.snippet} ${message.reasons.join(" ")} ${message.debug?.messageType ?? ""}`;
+
+    return /invoice|faktura|rachunek|payment due|kwota do zaplaty|termin platnosci|charged|payment confirmation|payment\/charged|bill due|recurring bill/i.test(
+        normalizeAsciiText(text)
+    );
+}
+
+function isActiveEvidenceMessage(message: ImapDebugMessage) {
+    const text = `${message.subject} ${message.snippet} ${message.reasons.join(" ")} ${message.debug?.messageType ?? ""}`;
+
+    return /payment confirmation|payment\/charged|charged|subscription_started|subscription started|subscription_active|subscription_continuation|future charge|renewal|automatycznie odnaw|automatycznie przedluz|kontynuujac subskrypcje|will be charged|metoda platnosci bedzie obciazana/i.test(
+        normalizeAsciiText(text)
+    );
+}
+
+function isTrialFutureChargeOnlyCanonical(
+    status: ImapCanonicalSubscription["status"],
+    messages: ImapDebugMessage[]
+) {
+    return (
+        (status === "trial" || messages.some((message) => message.detected.isTrial)) &&
+        messages.some((message) => /trial|okres probny|future charge|zostanie naliczona oplata/i.test(normalizeAsciiText(`${message.subject} ${message.snippet} ${message.reasons.join(" ")}`))) &&
+        !messages.some((message) => /payment confirmation|payment\/charged|platnosc zostala zrealizowana|charged/i.test(normalizeAsciiText(`${message.subject} ${message.snippet} ${message.reasons.join(" ")}`)))
+    );
+}
+
+function deriveRecencyForCanonical(args: {
+    status: ImapCanonicalSubscription["status"];
+    sourceMessages: ImapDebugMessage[];
+    category: string | undefined;
+    isRecurringBillCanonical: boolean;
+    latestInvoiceSourceDate?: string;
+    effectiveDateText?: string;
+    policy: CanonicalRecencyPolicy;
+}) {
+    const now = new Date();
+    const lastEvidenceDate = latestMessageDate(args.sourceMessages, () => true);
+    const lastBillingEvidenceDate =
+        args.latestInvoiceSourceDate ??
+        latestMessageDate(args.sourceMessages, isBillingEvidenceMessage);
+    const lastActiveEvidenceDate = latestMessageDate(
+        args.sourceMessages,
+        isActiveEvidenceMessage
+    );
+    const relevantDate =
+        args.isRecurringBillCanonical || args.status === "invoice_due"
+            ? lastBillingEvidenceDate ?? lastEvidenceDate
+            : lastActiveEvidenceDate ?? lastBillingEvidenceDate ?? lastEvidenceDate;
+    const evidenceAgeDays = daysSinceIsoDate(relevantDate, now);
+
+    if (args.status === "price_change") {
+        return {
+            status: args.status,
+            recencyStatus: "price_change" as const,
+            lastEvidenceDate,
+            lastBillingEvidenceDate,
+            lastActiveEvidenceDate,
+            evidenceAgeDays,
+            stalenessReason: undefined,
+        };
+    }
+
+    if (
+        ["cancelled", "expired", "payment_failed", "unknown"].includes(args.status)
+    ) {
+        return {
+            status: args.status,
+            recencyStatus: "unknown" as const,
+            lastEvidenceDate,
+            lastBillingEvidenceDate,
+            lastActiveEvidenceDate,
+            evidenceAgeDays,
+            stalenessReason: undefined,
+        };
+    }
+
+    if (evidenceAgeDays === undefined) {
+        return {
+            status: args.status,
+            recencyStatus: "unknown" as const,
+            lastEvidenceDate,
+            lastBillingEvidenceDate,
+            lastActiveEvidenceDate,
+            evidenceAgeDays,
+            stalenessReason: "no dated evidence for canonical subscription",
+        };
+    }
+
+    if (isTrialFutureChargeOnlyCanonical(args.status, args.sourceMessages)) {
+        if (evidenceAgeDays > args.policy.trialStaleDays) {
+            return {
+                status: "stale_needs_review" as const,
+                recencyStatus: "stale_needs_review" as const,
+                lastEvidenceDate,
+                lastBillingEvidenceDate,
+                lastActiveEvidenceDate,
+                evidenceAgeDays,
+                stalenessReason: `trial/future-charge evidence is older than ${args.policy.trialStaleDays} days and no later charge was found`,
+            };
+        }
+
+        return {
+            status: "trial" as const,
+            recencyStatus: "active" as const,
+            lastEvidenceDate,
+            lastBillingEvidenceDate,
+            lastActiveEvidenceDate,
+            evidenceAgeDays,
+            stalenessReason: undefined,
+        };
+    }
+
+    if (args.isRecurringBillCanonical || args.status === "invoice_due") {
+        if (evidenceAgeDays > args.policy.invoiceRecencyDays * 2) {
+            return {
+                status: "stale_needs_review" as const,
+                recencyStatus: "stale_needs_review" as const,
+                lastEvidenceDate,
+                lastBillingEvidenceDate,
+                lastActiveEvidenceDate,
+                evidenceAgeDays,
+                stalenessReason: `latest invoice/bill evidence is older than ${args.policy.invoiceRecencyDays} days`,
+            };
+        }
+
+        if (evidenceAgeDays > args.policy.invoiceRecencyDays) {
+            return {
+                status: "likely_active" as const,
+                recencyStatus: "likely_active" as const,
+                lastEvidenceDate,
+                lastBillingEvidenceDate,
+                lastActiveEvidenceDate,
+                evidenceAgeDays,
+                stalenessReason: `latest invoice/bill evidence is older than ${args.policy.invoiceRecencyDays} days`,
+            };
+        }
+
+        return {
+            status: args.status === "active" ? "active" as const : "invoice_due" as const,
+            recencyStatus: args.status === "active" ? "active" as const : "invoice_due" as const,
+            lastEvidenceDate,
+            lastBillingEvidenceDate,
+            lastActiveEvidenceDate,
+            evidenceAgeDays,
+            stalenessReason: undefined,
+        };
+    }
+
+    if (args.status === "active" || args.status === "trial") {
+        if (evidenceAgeDays > args.policy.activeRecencyDays * 2) {
+            return {
+                status: "stale_needs_review" as const,
+                recencyStatus: "stale_needs_review" as const,
+                lastEvidenceDate,
+                lastBillingEvidenceDate,
+                lastActiveEvidenceDate,
+                evidenceAgeDays,
+                stalenessReason: `latest active evidence is older than ${args.policy.activeRecencyDays} days`,
+            };
+        }
+
+        if (evidenceAgeDays > args.policy.activeRecencyDays) {
+            return {
+                status: "likely_active" as const,
+                recencyStatus: "likely_active" as const,
+                lastEvidenceDate,
+                lastBillingEvidenceDate,
+                lastActiveEvidenceDate,
+                evidenceAgeDays,
+                stalenessReason: `latest active evidence is older than ${args.policy.activeRecencyDays} days`,
+            };
+        }
+    }
+
+    return {
+        status: args.status,
+        recencyStatus: "active" as const,
+        lastEvidenceDate,
+        lastBillingEvidenceDate,
+        lastActiveEvidenceDate,
+        evidenceAgeDays,
+        stalenessReason: undefined,
+    };
 }
 
 function isZeroAmount(amount: string | undefined) {
@@ -3184,7 +3472,8 @@ function evidenceTypesForMessage(message: ImapDebugMessage) {
 
 function buildCanonicalSubscriptions(
     debugMessages: ImapDebugMessage[],
-    recurringGroups: ImapRecurringGroup[]
+    recurringGroups: ImapRecurringGroup[],
+    recencyPolicy: CanonicalRecencyPolicy
 ) {
     type Draft = {
         key: string;
@@ -3431,17 +3720,27 @@ function buildCanonicalSubscriptions(
                 dueAmount = latestInvoiceAmountSource.dueAmount;
             }
 
+            const recencyAdjustment = deriveRecencyForCanonical({
+                status,
+                sourceMessages: draft.sourceMessages,
+                category,
+                isRecurringBillCanonical,
+                latestInvoiceSourceDate: latestInvoiceAmountSource?.sourceDate,
+                effectiveDateText: firstDateOfKind(uniqueDateSemantics, ["effective_date"]),
+                policy: recencyPolicy,
+            });
+            const productStatus = recencyAdjustment.status;
             const confidenceLevel = confidenceLevelFor(confidence);
             const riskSummary = riskSummaryForCanonical(reasons);
             const evidenceSummary = evidenceSummaryForCanonical(
-                status,
+                productStatus,
                 evidenceTypes,
                 draft.billingChannel,
                 sortedCycles[0]?.value
             );
             const reviewNeed = reviewNeedForCanonical({
                 confidenceLevel,
-                status,
+                status: productStatus,
                 source,
                 amount: latestBillAmountChoice.displayAmount,
                 category,
@@ -3450,16 +3749,24 @@ function buildCanonicalSubscriptions(
                 provider: draft.provider,
                 evidenceSummary,
             });
+            const recencyReviewReasons = [
+                reviewNeed.reviewReason,
+                recencyAdjustment.stalenessReason,
+            ].filter(Boolean);
             const statusReason =
-                status === "active"
+                productStatus === "active"
                     ? "active payment, continuation, renewal, or invoice evidence"
-                    : status === "trial"
+                    : productStatus === "likely_active"
+                    ? "strong historical evidence exists, but latest evidence is outside the recent active window"
+                    : productStatus === "stale_needs_review"
+                    ? "historical evidence is stale and should be reviewed before treating as active"
+                    : productStatus === "trial"
                     ? "trial evidence without later active payment/continuation"
-                    : status === "price_change"
+                    : productStatus === "price_change"
                     ? "active price-change evidence"
-                    : status === "invoice_due"
+                    : productStatus === "invoice_due"
                     ? "invoice or recurring bill evidence"
-                    : status === "payment_failed"
+                    : productStatus === "payment_failed"
                     ? "payment failed or card declined evidence"
                     : undefined;
 
@@ -3477,7 +3784,7 @@ function buildCanonicalSubscriptions(
                 category,
                 confidence,
                 confidenceLevel,
-                status,
+                status: productStatus,
                 source,
                 billingCycle: sortedCycles[0]?.value,
                 amount: latestBillAmountChoice.displayAmount,
@@ -3508,6 +3815,12 @@ function buildCanonicalSubscriptions(
                 effectiveDateText: firstDateOfKind(uniqueDateSemantics, ["effective_date"]),
                 selectedAmountSourceDate: latestInvoiceAmountSource?.sourceDate,
                 selectedAmountSourceSubject: latestInvoiceAmountSource?.sourceSubject,
+                lastEvidenceDate: recencyAdjustment.lastEvidenceDate,
+                lastBillingEvidenceDate: recencyAdjustment.lastBillingEvidenceDate,
+                lastActiveEvidenceDate: recencyAdjustment.lastActiveEvidenceDate,
+                evidenceAgeDays: recencyAdjustment.evidenceAgeDays,
+                recencyStatus: recencyAdjustment.recencyStatus,
+                stalenessReason: recencyAdjustment.stalenessReason,
                 amountSemantics: uniqueAmountSemantics,
                 dateSemantics: uniqueDateSemantics,
                 sourceTypes,
@@ -3526,8 +3839,10 @@ function buildCanonicalSubscriptions(
                 evidenceSummary,
                 riskSummary,
                 reasons,
-                needsReview: reviewNeed.needsReview,
-                reviewReason: reviewNeed.reviewReason,
+                needsReview:
+                    reviewNeed.needsReview ||
+                    Boolean(recencyAdjustment.stalenessReason),
+                reviewReason: recencyReviewReasons.join("; ") || undefined,
             };
         })
         .sort(
@@ -4053,6 +4368,251 @@ function buildReviewCandidates(
     );
 }
 
+function isSubscriptionLikeCategory(category: string | undefined) {
+    return /(streaming_video|streaming_music|music_audio|software_saas|ai_tools|cloud_storage|ecommerce_membership|delivery_membership|fitness|health_fitness|education|productivity|gaming_subscription|gaming|other_subscription)/i.test(
+        category ?? ""
+    );
+}
+
+function isMembershipLikeCategory(category: string | undefined) {
+    return /(ecommerce_membership|delivery_membership|gaming_subscription)/i.test(
+        category ?? ""
+    );
+}
+
+function isBillLikeCategory(category: string | undefined) {
+    return /(utilities_energy|telecom|telecom_mobile|internet_isp|insurance|finance_insurance|government|government_tax_insurance|rent|loan_credit|other_bill)/i.test(
+        category ?? ""
+    );
+}
+
+function isUtilityOrFormalBill(subscription: ImapCanonicalSubscription) {
+    const category = subscription.category ?? "";
+    const text = normalizeAsciiText(
+        [
+            subscription.displayName,
+            subscription.provider,
+            subscription.billingChannel,
+            category,
+            subscription.status,
+            ...subscription.evidenceTypes,
+            ...subscription.evidenceSummary,
+            ...subscription.reasons,
+        ]
+            .filter(Boolean)
+            .join(" ")
+    );
+    const subscriptionLike = isSubscriptionLikeCategory(category);
+
+    if (isMembershipLikeCategory(category)) return false;
+    if (isBillLikeCategory(category)) return true;
+
+    if (subscriptionLike) return false;
+
+    if (
+        subscription.status === "invoice_due" &&
+        /(utility|utilities|energy|electricity|power|prad|gaz|telecom|mobile|internet|isp|insurance|government|tax|zus|krus|czynsz|rent|loan|credit|faktura za internet|rachunek za telefon|rachunek za internet|faktura za prad)/i.test(
+            text
+        )
+    ) {
+        return true;
+    }
+
+    return (
+        !subscriptionLike &&
+        subscription.source === "recurring_group" &&
+        /(invoice|faktura|rachunek|payment due|recurring bill|kwota do zaplaty|termin platnosci)/i.test(
+            text
+        ) &&
+        /(utility|utilities|energy|electricity|power|prad|gaz|telecom|mobile|internet|isp|insurance|government|tax|zus|krus|czynsz|rent)/i.test(
+            text
+        )
+    );
+}
+
+function productBucketForCanonical(subscription: ImapCanonicalSubscription): {
+    bucket: ProductBucket;
+    primaryAction: ProductPrimaryAction;
+    userFacingReason: string;
+} {
+    const isBillOrUtility = isUtilityOrFormalBill(subscription);
+    const isSubscriptionLike = isSubscriptionLikeCategory(subscription.category);
+
+    if (subscription.status === "price_change") {
+        return {
+            bucket: "priceChanges",
+            primaryAction: "review_price_change",
+            userFacingReason: "Price-change evidence was found for an existing customer or plan.",
+        };
+    }
+
+    if (isBillOrUtility) {
+        return {
+            bucket: "billsOrUtilities",
+            primaryAction: subscription.needsReview ? "review_old_bill" : "show_as_active",
+            userFacingReason: subscription.needsReview
+                ? "A recurring bill or invoice was found, but the latest evidence is old or needs confirmation."
+                : "Recent recurring bill or invoice evidence was found.",
+        };
+    }
+
+    if (
+        isSubscriptionLike &&
+        ["active", "likely_active"].includes(subscription.status) &&
+        subscription.recencyStatus !== "stale_needs_review" &&
+        !subscription.needsReview
+    ) {
+        return {
+            bucket: "currentSubscriptions",
+            primaryAction: subscription.status === "likely_active" ? "confirm_still_active" : "show_as_active",
+            userFacingReason:
+                subscription.status === "likely_active"
+                    ? "Subscription-like evidence was found, but it is slightly outside the recent active window."
+                    : "Recent active subscription or membership evidence was found.",
+        };
+    }
+
+    if (
+        isSubscriptionLike &&
+        (subscription.needsReview ||
+            subscription.recencyStatus === "stale_needs_review" ||
+            subscription.status === "stale_needs_review" ||
+            subscription.status === "likely_active" ||
+            subscription.status === "trial")
+    ) {
+        return {
+            bucket: "needsReviewSubscriptions",
+            primaryAction: "confirm_still_active",
+            userFacingReason: subscription.stalenessReason
+                ? `Historical subscription evidence found: ${subscription.stalenessReason}.`
+                : "Subscription-like evidence was found, but it should be confirmed before showing as active.",
+        };
+    }
+
+    if (
+        ["active", "likely_active"].includes(subscription.status) &&
+        subscription.recencyStatus !== "stale_needs_review" &&
+        !subscription.needsReview
+    ) {
+        return {
+            bucket: "currentSubscriptions",
+            primaryAction: "show_as_active",
+            userFacingReason: "Recent or likely-current subscription evidence was found.",
+        };
+    }
+
+    if (
+        subscription.needsReview ||
+        subscription.recencyStatus === "stale_needs_review" ||
+        subscription.status === "stale_needs_review" ||
+        subscription.status === "likely_active"
+    ) {
+        return {
+            bucket: "needsReviewSubscriptions",
+            primaryAction: "confirm_still_active",
+            userFacingReason: subscription.stalenessReason
+                ? `Historical subscription evidence found: ${subscription.stalenessReason}.`
+                : "Subscription-like evidence was found, but it should be confirmed before showing as active.",
+        };
+    }
+
+    return {
+        bucket: "historicalSubscriptions",
+        primaryAction: "ignore_or_archive",
+        userFacingReason: "Only historical subscription evidence was found.",
+    };
+}
+
+function buildProductResult(
+    canonicalSubscriptions: ImapCanonicalSubscription[]
+): ImapProductResult {
+    const productResult: ImapProductResult = {
+        currentSubscriptions: [],
+        needsReviewSubscriptions: [],
+        historicalSubscriptions: [],
+        priceChanges: [],
+        billsOrUtilities: [],
+        scanSummary: {
+            currentSubscriptions: 0,
+            needsReviewSubscriptions: 0,
+            historicalSubscriptions: 0,
+            priceChanges: 0,
+            billsOrUtilities: 0,
+            totalCanonicalSubscriptions: canonicalSubscriptions.length,
+            recommendedDefaultMode: "review",
+            recommendedUserMessage: "Review detected subscriptions and bills before showing them as active.",
+            hasCurrentSubscriptions: false,
+            hasOnlyHistoricalEvidence: false,
+            hasPriceChanges: false,
+            hasBillsOrUtilities: false,
+        },
+    };
+
+    for (const subscription of canonicalSubscriptions) {
+        const productDecision = productBucketForCanonical(subscription);
+        const productSubscription: ProductCanonicalSubscription = {
+            ...subscription,
+            productBucket: productDecision.bucket,
+            primaryAction: productDecision.primaryAction,
+            userFacingReason: productDecision.userFacingReason,
+        };
+
+        productResult[productDecision.bucket].push(productSubscription);
+    }
+
+    productResult.scanSummary.currentSubscriptions =
+        productResult.currentSubscriptions.length;
+    productResult.scanSummary.needsReviewSubscriptions =
+        productResult.needsReviewSubscriptions.length;
+    productResult.scanSummary.historicalSubscriptions =
+        productResult.historicalSubscriptions.length;
+    productResult.scanSummary.priceChanges = productResult.priceChanges.length;
+    productResult.scanSummary.billsOrUtilities =
+        productResult.billsOrUtilities.length;
+    productResult.scanSummary.hasCurrentSubscriptions =
+        productResult.currentSubscriptions.length > 0;
+    productResult.scanSummary.hasPriceChanges =
+        productResult.priceChanges.length > 0;
+    productResult.scanSummary.hasBillsOrUtilities =
+        productResult.billsOrUtilities.length > 0;
+    productResult.scanSummary.hasOnlyHistoricalEvidence =
+        productResult.currentSubscriptions.length === 0 &&
+        (productResult.needsReviewSubscriptions.length > 0 ||
+            productResult.historicalSubscriptions.length > 0 ||
+            productResult.billsOrUtilities.some((subscription) => subscription.needsReview));
+
+    if (productResult.currentSubscriptions.length > 0) {
+        productResult.scanSummary.recommendedDefaultMode = "current";
+        productResult.scanSummary.recommendedUserMessage =
+            "We found recent active subscription or bill evidence. Review older items separately.";
+    } else if (
+        productResult.needsReviewSubscriptions.length > 0 &&
+        productResult.priceChanges.length > 0
+    ) {
+        productResult.scanSummary.recommendedDefaultMode = "review";
+        productResult.scanSummary.recommendedUserMessage =
+            "We found historical subscription evidence and one price-change notice, but no recent active subscription payments. Please confirm which historical subscriptions are still active.";
+    } else if (productResult.needsReviewSubscriptions.length > 0) {
+        productResult.scanSummary.recommendedDefaultMode = "review";
+        productResult.scanSummary.recommendedUserMessage =
+            "We found historical subscription evidence, but no recent active subscription payments. Please confirm which subscriptions are still active.";
+    } else if (productResult.priceChanges.length > 0) {
+        productResult.scanSummary.recommendedDefaultMode = "price_changes";
+        productResult.scanSummary.recommendedUserMessage =
+            "We found price-change notices, but no recent active subscription payments in this scan window.";
+    } else if (productResult.billsOrUtilities.length > 0) {
+        productResult.scanSummary.recommendedDefaultMode = "bills";
+        productResult.scanSummary.recommendedUserMessage =
+            "We found bill or utility evidence. Review stale bills before treating them as current.";
+    } else {
+        productResult.scanSummary.recommendedDefaultMode = "empty";
+        productResult.scanSummary.recommendedUserMessage =
+            "No current subscription evidence was found in this scan window.";
+    }
+
+    return productResult;
+}
+
 function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig) {
     console.log("IMAP scan summary:");
     console.log(`mailbox: ${result.mailbox}`);
@@ -4109,6 +4669,58 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
     console.log(`reviewSuppressedWeakPurchases: ${result.scanStats.reviewSuppressedWeakPurchases}`);
     console.log("");
 
+    console.log("Product result:");
+    console.log(`currentSubscriptions: ${result.productResult.scanSummary.currentSubscriptions}`);
+    console.log(`needsReviewSubscriptions: ${result.productResult.scanSummary.needsReviewSubscriptions}`);
+    console.log(`historicalSubscriptions: ${result.productResult.scanSummary.historicalSubscriptions}`);
+    console.log(`priceChanges: ${result.productResult.scanSummary.priceChanges}`);
+    console.log(`billsOrUtilities: ${result.productResult.scanSummary.billsOrUtilities}`);
+    console.log(`recommendedDefaultMode: ${result.productResult.scanSummary.recommendedDefaultMode}`);
+    console.log(`hasCurrentSubscriptions: ${result.productResult.scanSummary.hasCurrentSubscriptions ? "yes" : "no"}`);
+    console.log(`hasOnlyHistoricalEvidence: ${result.productResult.scanSummary.hasOnlyHistoricalEvidence ? "yes" : "no"}`);
+    console.log(`hasPriceChanges: ${result.productResult.scanSummary.hasPriceChanges ? "yes" : "no"}`);
+    console.log(`hasBillsOrUtilities: ${result.productResult.scanSummary.hasBillsOrUtilities ? "yes" : "no"}`);
+    console.log(`recommendedUserMessage: ${result.productResult.scanSummary.recommendedUserMessage}`);
+    console.log("");
+
+    const printProductBucket = (
+        title: string,
+        subscriptions: ProductCanonicalSubscription[]
+    ) => {
+        console.log(`${title}:`);
+
+        if (subscriptions.length === 0) {
+            console.log("none");
+            console.log("");
+            return;
+        }
+
+        subscriptions.slice(0, 10).forEach((subscription, index) => {
+            const amount = subscription.displayAmount
+                ? `${subscription.displayAmount}${subscription.amountKind ? ` (${subscription.amountKind})` : ""}`
+                : undefined;
+
+            console.log(`${index + 1}. ${subscription.displayName}`);
+            console.log(`   status: ${subscription.status} (${subscription.confidenceLevel})`);
+            console.log(`   action: ${subscription.primaryAction}`);
+            optionalLine("provider", subscription.provider);
+            optionalLine("billingChannel", subscription.billingChannel);
+            optionalLine("category", subscription.category);
+            optionalLine("amount", amount);
+            optionalLine("lastEvidenceDate", subscription.lastEvidenceDate?.slice(0, 10));
+            optionalLine("evidenceAgeDays", typeof subscription.evidenceAgeDays === "number" ? subscription.evidenceAgeDays : undefined);
+            optionalLine("reason", subscription.userFacingReason);
+        });
+
+        console.log("");
+    };
+
+    printProductBucket("Current subscriptions", result.productResult.currentSubscriptions);
+    printProductBucket("Needs review subscriptions", result.productResult.needsReviewSubscriptions);
+    printProductBucket("Price changes", result.productResult.priceChanges);
+    printProductBucket("Bills or utilities", result.productResult.billsOrUtilities);
+    printProductBucket("Historical subscriptions", result.productResult.historicalSubscriptions);
+
     console.log("Canonical subscriptions:");
 
     if (result.canonicalSubscriptions.length === 0) {
@@ -4142,6 +4754,12 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
         optionalLine("effectiveDateText", subscription.effectiveDateText);
         optionalLine("selectedAmountSourceDate", subscription.selectedAmountSourceDate?.slice(0, 10));
         optionalLine("selectedAmountSourceSubject", subscription.selectedAmountSourceSubject);
+        optionalLine("lastEvidenceDate", subscription.lastEvidenceDate?.slice(0, 10));
+        optionalLine("lastBillingEvidenceDate", subscription.lastBillingEvidenceDate?.slice(0, 10));
+        optionalLine("lastActiveEvidenceDate", subscription.lastActiveEvidenceDate?.slice(0, 10));
+        optionalLine("evidenceAgeDays", subscription.evidenceAgeDays);
+        optionalLine("recencyStatus", subscription.recencyStatus);
+        optionalLine("stalenessReason", subscription.stalenessReason);
         optionalLine("needsReview", subscription.needsReview ? "yes" : undefined);
         optionalLine("reviewReason", subscription.reviewReason);
         optionalLine("statusReason", subscription.statusReason);
@@ -4764,8 +5382,10 @@ async function main() {
         const recurringGroups = buildRecurringGroups(debugMessages);
         const canonicalSubscriptions = buildCanonicalSubscriptions(
             debugMessages,
-            recurringGroups
+            recurringGroups,
+            config
         );
+        const productResult = buildProductResult(canonicalSubscriptions);
         const reviewCandidatesBeforeFinalSuppression = buildReviewCandidates(
             debugMessages,
             canonicalSubscriptions,
@@ -4783,6 +5403,7 @@ async function main() {
             scannedMessages: debugMessages.length,
             candidatesFound,
             rejectedMessages: debugMessages.length - candidatesFound,
+            productResult,
             canonicalSubscriptions,
             reviewCandidates,
             recurringGroups,
