@@ -10,6 +10,17 @@ interface NetworkStatusBannerProps {
 
 export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
   const network = useNetworkStatus();
+  const lastFailureAt = network.lastFailureAt ?? 0;
+  const lastSuccessAt = network.lastSuccessAt ?? 0;
+  const lastFailureIsOld = lastFailureAt > 0 && Date.now() - lastFailureAt > 20000;
+
+  if (
+    network.status === 'slow' &&
+    network.activeRequests === 0 &&
+    (lastSuccessAt >= lastFailureAt || lastFailureIsOld)
+  ) {
+    return null;
+  }
 
   if (network.status === 'online' || network.status === 'unknown') {
     return null;

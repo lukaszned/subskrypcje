@@ -8,7 +8,7 @@ import React from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // Context
@@ -16,6 +16,10 @@ import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
 import { vibrantTheme } from './src/theme/vibrantTheme';
+import { getCachedDashboardSummary } from './src/api/dashboard';
+import { getCachedSubscriptions } from './src/api/subscriptions';
+import { DASHBOARD_SUMMARY_KEY } from './src/hooks/useDashboardSummary';
+import { SUBSCRIPTIONS_KEY } from './src/hooks/useSubscriptions';
 
 // Ekrany — Auth Stack
 import OnboardingScreen from './src/screens/OnboardingScreen';
@@ -33,6 +37,8 @@ import { EmailScanScreen } from './src/screens/EmailScanScreen';
 import { StatisticsScreen } from './src/screens/StatisticsScreen';
 import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
 import { GuardScreen } from './src/screens/GuardScreen';
+import { HealthScoreDetailsScreen } from './src/screens/HealthScoreDetailsScreen';
+import { SavingsDetailsScreen } from './src/screens/SavingsDetailsScreen';
 
 // ─────────────────────────────────────────────────────────────
 // Typy nawigacji
@@ -106,6 +112,8 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen name="Statistics" component={StatisticsScreen} />
       <AppStack.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
       <AppStack.Screen name="Guard" component={GuardScreen} />
+      <AppStack.Screen name="HealthScoreDetails" component={HealthScoreDetailsScreen} />
+      <AppStack.Screen name="SavingsDetails" component={SavingsDetailsScreen} />
     </AppStack.Navigator>
   );
 });
@@ -129,6 +137,38 @@ function RootNavigator() {
   );
 }
 
+function AppCacheWarmup() {
+  const { session } = useAuth();
+  const queryClient = useQueryClient();
+
+  React.useEffect(() => {
+    if (!session) return;
+
+    let isMounted = true;
+
+    Promise.all([
+      getCachedDashboardSummary(),
+      getCachedSubscriptions(),
+    ]).then(([summary, subscriptions]) => {
+      if (!isMounted) return;
+
+      if (summary) {
+        queryClient.setQueryData(DASHBOARD_SUMMARY_KEY, summary);
+      }
+
+      if (subscriptions) {
+        queryClient.setQueryData(SUBSCRIPTIONS_KEY(), subscriptions);
+      }
+    }).catch(() => undefined);
+
+    return () => {
+      isMounted = false;
+    };
+  }, [queryClient, session]);
+
+  return null;
+}
+
 // Notifications
 import { requestNotificationPermissions } from './src/utils/notifications';
 
@@ -145,6 +185,7 @@ export default function App() {
       <ErrorBoundary>
         <AuthProvider>
           <QueryClientProvider client={queryClient}>
+            <AppCacheWarmup />
             <RootNavigator />
           </QueryClientProvider>
         </AuthProvider>

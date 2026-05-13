@@ -176,11 +176,10 @@ export const DashboardScreen = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notifPermission, setNotifPermission] = useState<string>('granted');
   const [trendType, setTrendType] = useState<'planned' | 'real'>('planned');
-  const [loadSecondaryData, setLoadSecondaryData] = useState(false);
 
   // Data
   const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useDashboardSummary();
-  const secondaryEnabled = loadSecondaryData && !!summaryData && !isSummaryError;
+  const secondaryEnabled = false;
   const { data: upcomingData, refetch: refetchUpcoming } = useUpcomingPayments(30, !!summaryData);
   const { data: breakdownData, refetch: refetchBreakdown } = useCategoryBreakdown(secondaryEnabled);
   const { data: trialsData, refetch: refetchTrials } = useTrials(30, secondaryEnabled);
@@ -200,19 +199,6 @@ export const DashboardScreen = () => {
   // DIAGNOSTIC LOGGING
   console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
   if (isSummaryError) console.warn('[DashboardScreen] Summary Error:', summaryError);
-
-  useEffect(() => {
-    if (!summaryData || isSummaryError) {
-      setLoadSecondaryData(false);
-      return;
-    }
-
-    const timeoutId = setTimeout(() => {
-      setLoadSecondaryData(true);
-    }, 900);
-
-    return () => clearTimeout(timeoutId);
-  }, [summaryData, isSummaryError]);
 
   const monthlyTotal = summaryData?.monthlyTotal ?? 0;
   const yearlyTotal = summaryData?.yearlyTotal ?? 0;
@@ -1872,15 +1858,22 @@ export const DashboardScreen = () => {
   };
 
   const renderPremiumInsights = () => {
-    const healthLabel = healthData ? `${healthData.label} · ${healthData.score}/100` : 'Analiza w toku';
+    const estimatedScore = Math.max(35, Math.min(100, 100 - overdueCount * 14 - (summaryData?.trialsCount ?? 0) * 4));
+    const healthLabel = healthData
+      ? `${healthData.label} · ${healthData.score}/100`
+      : `Szacunkowo ${estimatedScore}/100 · dotknij po szczegóły`;
     const savingsLabel = savingsData && savingsData.monthlySavings > 0
       ? `Oszczędzasz ok. ${savingsData.monthlySavings.toFixed(2)} ${savingsData.baseCurrency} / mc`
-      : 'Brak anulowanych kosztów do pokazania';
+      : 'Zobacz anulowane koszty i miesięczny efekt';
     const incomePercentage = budgetImpact?.subscriptionsIncomePercentage ?? null;
 
     return (
       <View style={dynamicStyles.insightStrip}>
-        <View style={dynamicStyles.insightRow}>
+        <TouchableOpacity
+          style={dynamicStyles.insightRow}
+          activeOpacity={0.84}
+          onPress={() => navigation.navigate('HealthScoreDetails')}
+        >
           <View style={dynamicStyles.widgetIcon}>
             <Sparkles size={18} color={theme.primary} />
           </View>
@@ -1888,9 +1881,14 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.insightTitle}>Kondycja subskrypcji</Text>
             <Text style={dynamicStyles.insightDesc}>{healthLabel}</Text>
           </View>
-        </View>
+          <ChevronRight size={17} color={theme.textDim} />
+        </TouchableOpacity>
 
-        <View style={dynamicStyles.insightRow}>
+        <TouchableOpacity
+          style={dynamicStyles.insightRow}
+          activeOpacity={0.84}
+          onPress={() => navigation.navigate('SavingsDetails')}
+        >
           <View style={dynamicStyles.widgetIcon}>
             <Activity size={18} color={theme.primary} />
           </View>
@@ -1898,7 +1896,8 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.insightTitle}>Oszczędności</Text>
             <Text style={dynamicStyles.insightDesc}>{savingsLabel}</Text>
           </View>
-        </View>
+          <ChevronRight size={17} color={theme.textDim} />
+        </TouchableOpacity>
 
         {budgetImpact?.hasIncome && (
           <View style={dynamicStyles.insightRow}>

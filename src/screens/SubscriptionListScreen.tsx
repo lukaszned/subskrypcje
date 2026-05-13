@@ -17,9 +17,10 @@ import {
   Alert,
   RefreshControl,
   ScrollView,
+  ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, ArrowUpDown, Frown, ArrowLeft } from 'lucide-react-native';
+import { Search, ArrowUpDown, Frown, ArrowLeft, CalendarClock, ShieldAlert, Wallet } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../types/navigation';
@@ -28,6 +29,7 @@ import type { AppStackParamList } from '../types/navigation';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { useCancelSubscription } from '../hooks/useCancelSubscription';
 import { usePaySubscription } from '../hooks/usePaySubscription';
+import { filterAndSortSubscriptions } from '../api/subscriptions';
 
 // Typy
 import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS, SubscriptionStatus } from '../types/api';
@@ -35,7 +37,22 @@ import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS, SubscriptionStatus
 // Komponent item
 import SubscriptionListItem from './SubscriptionListItem';
 import { vibrantTheme } from '../theme/vibrantTheme';
-import { parseAppDate } from '../utils/date';
+import { daysUntilDate, parseAppDate } from '../utils/date';
+
+const toMonthlyAmount = (subscription: Subscription) => {
+  const amount = Number(subscription.amount || 0);
+
+  switch (subscription.billingCycle) {
+    case 'yearly':
+      return amount / 12;
+    case 'weekly':
+      return amount * 4.345;
+    case 'one_time':
+      return 0;
+    default:
+      return amount;
+  }
+};
 
 export const SubscriptionListScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
@@ -44,18 +61,12 @@ export const SubscriptionListScreen = () => {
   const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all'>('all');
   const [sortOption, setSortOption] = useState<{ field: string, order: 'asc' | 'desc' }>({ field: 'nextPaymentDate', order: 'asc' });
 
-  // Debounce search by doing it only on query key
-  const { data: allSubscriptions = [], isLoading, isError, error, refetch } = useSubscriptions({
-    search: searchQuery,
-    status: activeStatus === 'all' ? undefined : activeStatus,
-    sortBy: sortOption.field,
-    sortOrder: sortOption.order
-  });
+  const { data: allSubscriptions = [], isLoading, isFetching, isRefetching, isError, error, refetch } = useSubscriptions();
 
   const cancelMutation = useCancelSubscription();
   const payMutation = usePaySubscription();
 
-  const subscriptions = useMemo(() => (
+  const normalizedSubscriptions = useMemo(() => (
     allSubscriptions
       .filter((item) => !!item?.id)
       .map((item) => ({
@@ -69,6 +80,34 @@ export const SubscriptionListScreen = () => {
         isTrial: Boolean(item.isTrial),
       }))
   ), [allSubscriptions]);
+
+  const subscriptions = useMemo(() => filterAndSortSubscriptions(normalizedSubscriptions, {
+    search: searchQuery,
+    status: activeStatus === 'all' ? undefined : activeStatus,
+    sortBy: sortOption.field,
+    sortOrder: sortOption.order,
+  }), [activeStatus, normalizedSubscriptions, searchQuery, sortOption.field, sortOption.order]);
+
+  const portfolioStats = useMemo(() => {
+    const counted = normalizedSubscriptions.filter((item) => item.status !== 'canceled' && item.includeInStats !== false);
+    const monthlyTotal = counted.reduce((sum, item) => sum + toMonthlyAmount(item), 0);
+    const dueSoon = counted.filter((item) => {
+      const daysLeft = daysUntilDate(item.nextPaymentDate);
+      return daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
+    }).length;
+    const attention = counted.filter((item) => {
+      const trialDays = daysUntilDate(item.trialEndDate);
+      return item.status === 'overdue' || (item.isTrial && trialDays !== null && trialDays >= 0 && trialDays <= 7);
+    }).length;
+
+    return {
+      active: counted.length,
+      monthlyTotal,
+      dueSoon,
+      attention,
+      currency: counted[0]?.currency || 'PLN',
+    };
+  }, [normalizedSubscriptions]);
 
   const handleCancel = (id: string, name: string) => {
     Alert.alert(
@@ -162,6 +201,16 @@ export const SubscriptionListScreen = () => {
     );
   };
 
+  const renderLoadingState = () => (
+    <View style={styles.emptyStateContainer}>
+      <View style={styles.emptyIconCircle}>
+        <ActivityIndicator color={vibrantTheme.colors.primary} />
+      </View>
+      <Text style={styles.emptyTitle}>Wczytuję subskrypcje</Text>
+      <Text style={styles.emptyMessage}>Jeśli backend odpowiada wolno, pokażemy ostatni zapisany stan.</Text>
+    </View>
+  );
+
   const renderItem = ({ item }: { item: Subscription }) => {
     return (
       <SubscriptionListItem
@@ -186,6 +235,40 @@ export const SubscriptionListScreen = () => {
       />
     );
   };
+
+  const renderPortfolioPulse = () => (
+    <View style={styles.pulseCard}>
+      <View style={styles.pulseHeader}>
+        <View>
+          <Text style={styles.pulseEyebrow}>Portfolio</Text>
+          <Text style={styles.pulseTitle}>{portfolioStats.monthlyTotal.toFixed(2)} {portfolioStats.currency} / mc</Text>
+        </View>
+        {isFetching && !isLoading && (
+          <View style={styles.syncPill}>
+            <ActivityIndicator size="small" color={vibrantTheme.colors.primary} />
+            <Text style={styles.syncPillText}>Sync</Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.metricRow}>
+        <View style={styles.metricTile}>
+          <Wallet size={17} color={vibrantTheme.colors.primary} />
+          <Text style={styles.metricValue}>{portfolioStats.active}</Text>
+          <Text style={styles.metricLabel}>aktywne</Text>
+        </View>
+        <View style={styles.metricTile}>
+          <CalendarClock size={17} color={vibrantTheme.colors.cyan} />
+          <Text style={styles.metricValue}>{portfolioStats.dueSoon}</Text>
+          <Text style={styles.metricLabel}>do 7 dni</Text>
+        </View>
+        <View style={styles.metricTile}>
+          <ShieldAlert size={17} color={portfolioStats.attention > 0 ? vibrantTheme.colors.warning : vibrantTheme.colors.success} />
+          <Text style={styles.metricValue}>{portfolioStats.attention}</Text>
+          <Text style={styles.metricLabel}>uwaga</Text>
+        </View>
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -235,10 +318,15 @@ export const SubscriptionListScreen = () => {
         <FlatList
           data={subscriptions}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={subscriptions.length === 0 && !isLoading ? styles.listEmptyContent : styles.listContent}
+          contentContainerStyle={subscriptions.length === 0 ? styles.listEmptyContent : styles.listContent}
           renderItem={renderItem}
-          ListEmptyComponent={!isLoading ? renderEmptyState : null}
-          refreshControl={<RefreshControl refreshing={isLoading} onRefresh={refetch} tintColor={vibrantTheme.colors.primary} />}
+          ListHeaderComponent={normalizedSubscriptions.length > 0 ? renderPortfolioPulse : null}
+          ListEmptyComponent={isLoading ? renderLoadingState : renderEmptyState}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={vibrantTheme.colors.primary} />}
+          initialNumToRender={8}
+          maxToRenderPerBatch={8}
+          windowSize={7}
+          removeClippedSubviews={Platform.OS === 'android'}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -261,6 +349,76 @@ const styles = StyleSheet.create({
   statusTabTextActive: { color: vibrantTheme.colors.primary },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   listEmptyContent: { flex: 1, justifyContent: 'center' },
+  pulseCard: {
+    backgroundColor: vibrantTheme.colors.card,
+    borderRadius: 26,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    padding: 18,
+    marginBottom: 18,
+    ...vibrantTheme.shadows.card,
+  },
+  pulseHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
+  pulseEyebrow: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    letterSpacing: 0,
+    marginBottom: 4,
+  },
+  pulseTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 25,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  syncPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  syncPillText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  metricRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  metricTile: {
+    flex: 1,
+    minHeight: 88,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    backgroundColor: 'rgba(255,255,255,0.055)',
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  metricValue: {
+    color: vibrantTheme.colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: 0,
+  },
+  metricLabel: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+  },
   emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
   emptyIconCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: vibrantTheme.colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: vibrantTheme.colors.text, marginBottom: 12 },

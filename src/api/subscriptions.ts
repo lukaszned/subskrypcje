@@ -68,7 +68,7 @@ async function cacheSubscriptions(subscriptions: Subscription[]) {
   }
 }
 
-async function getCachedSubscriptions(): Promise<Subscription[] | null> {
+export async function getCachedSubscriptions(): Promise<Subscription[] | null> {
   try {
     const raw = await AsyncStorage.getItem(SUBSCRIPTIONS_CACHE_KEY);
     if (!raw) return null;
@@ -82,6 +82,52 @@ async function getCachedSubscriptions(): Promise<Subscription[] | null> {
 async function getCachedSubscriptionById(id: string): Promise<Subscription | null> {
   const cached = await getCachedSubscriptions();
   return cached?.find((subscription) => subscription.id === id) || null;
+}
+
+export function filterAndSortSubscriptions(
+  subscriptions: Subscription[],
+  params?: GetSubscriptionsParams
+): Subscription[] {
+  const search = params?.search?.trim().toLowerCase();
+
+  const filtered = subscriptions.filter((subscription) => {
+    if (params?.category && subscription.category !== params.category) return false;
+    if (params?.status && subscription.status !== params.status) return false;
+
+    if (search) {
+      const haystack = [
+        subscription.name,
+        subscription.provider,
+        subscription.planName,
+        subscription.category,
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      if (!haystack.includes(search)) return false;
+    }
+
+    return true;
+  });
+
+  const sortBy = params?.sortBy;
+  const sortOrder = params?.sortOrder === 'desc' ? -1 : 1;
+
+  return [...filtered].sort((a, b) => {
+    if (sortBy === 'amount') {
+      return (Number(a.amount || 0) - Number(b.amount || 0)) * sortOrder;
+    }
+
+    if (sortBy === 'name') {
+      return String(a.name || '').localeCompare(String(b.name || ''), 'pl') * sortOrder;
+    }
+
+    if (sortBy === 'nextPaymentDate') {
+      const first = a.nextPaymentDate ? new Date(a.nextPaymentDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const second = b.nextPaymentDate ? new Date(b.nextPaymentDate).getTime() : Number.MAX_SAFE_INTEGER;
+      return (first - second) * sortOrder;
+    }
+
+    return 0;
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -120,7 +166,7 @@ export async function getSubscriptions(
     return subscriptions;
   } catch (error) {
     const cached = await getCachedSubscriptions();
-    if (cached) return cached;
+    if (cached) return filterAndSortSubscriptions(cached, params);
     throw error;
   }
 }

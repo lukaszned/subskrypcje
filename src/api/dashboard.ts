@@ -64,7 +64,7 @@ async function cacheDashboardSummary(summary: DashboardSummary) {
   }
 }
 
-async function getCachedDashboardSummary(): Promise<(DashboardSummary & { __cachedAt?: number }) | null> {
+export async function getCachedDashboardSummary(): Promise<(DashboardSummary & { __cachedAt?: number }) | null> {
   try {
     const raw = await AsyncStorage.getItem(DASHBOARD_SUMMARY_CACHE_KEY);
     if (!raw) return null;

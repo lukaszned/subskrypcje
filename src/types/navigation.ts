@@ -15,6 +15,8 @@ export type AppStackParamList = {
   Statistics: undefined;
   PaymentCalendar: undefined;
   Guard: undefined;
+  HealthScoreDetails: undefined;
+  SavingsDetails: undefined;
 };
 
 export type RootStackParamList = AuthStackParamList & AppStackParamList;
