@@ -8,6 +8,19 @@ import {
     EmailDetectionDebugDetails,
     truncateEvidenceSnippet,
 } from "../services/email-detection.service";
+import {
+    buildScanCapabilityDiagnostics,
+    ImapProductScanProfile,
+    ImapRecommendedFallbackStrategy,
+    ImapScanMode,
+    ImapScanReliabilityLevel,
+    planImapScanStrategy,
+} from "../services/imap-scan-planner.service";
+import {
+    buildProductResult,
+    ProductResult,
+    ProductResultItem,
+} from "../services/subscription-product-buckets.service";
 
 type ImapSpikeConfig = {
     host: string;
@@ -19,7 +32,8 @@ type ImapSpikeConfig = {
     limit: number;
     verbose: boolean;
     outputJson: boolean;
-    scanMode: "recent_window" | "hybrid_window" | "deep";
+    productScanProfile: ImapProductScanProfile;
+    scanMode: ImapScanMode;
     scanDays: number;
     deepDays: number;
     targetedSearch: boolean;
@@ -66,7 +80,10 @@ type ImapDebugMessage = {
 };
 
 type ImapScanStats = {
-    scanMode: ImapSpikeConfig["scanMode"];
+    scanProfile: ImapSpikeConfig["productScanProfile"];
+    scanMode: ImapScanMode;
+    effectiveScanMode: ImapScanMode;
+    effectiveWindowDays: number;
     scanWindowDays: number;
     deepWindowDays?: number;
     mailboxTotalMessages: number;
@@ -112,6 +129,30 @@ type ImapScanStats = {
     reviewSuppressedWeakPurchases: number;
     mayMissYearlySubscriptions: boolean;
     coverageNote: string;
+    sinceSearchSupported: boolean;
+    bodySearchSupported: boolean;
+    headerSearchSupported: boolean;
+    uidFetchSupported: boolean;
+    metadataPrepassSupported: boolean;
+    deepFallbackSupported: boolean;
+    targetedSearchUseful: boolean;
+    headerSearchUseful: boolean;
+    metadataPrepassUseful: boolean;
+    fallbackUseful: boolean;
+    scanCapabilityReasons: string[];
+    shouldRunTargetedSearch: boolean;
+    shouldRunHeaderTargetedSearch: boolean;
+    shouldRunMetadataPrepass: boolean;
+    shouldRunDeepFallback: boolean;
+    recommendedScanModeForProvider: ImapScanMode;
+    recommendedFallbackStrategy: ImapRecommendedFallbackStrategy;
+    scanReliabilityLevel: ImapScanReliabilityLevel;
+    scanReliabilityReasons: string[];
+    deepScanAvailable: boolean;
+    deepScanRecommended: boolean;
+    deepScanReason?: string;
+    quickScanLikelyIncomplete: boolean;
+    userFacingCoverageNote: string;
 };
 
 type ImapRecurringGroup = {
@@ -250,47 +291,9 @@ type ImapReviewCandidate = {
     riskSignals: string[];
 };
 
-type ProductBucket =
-    | "currentSubscriptions"
-    | "needsReviewSubscriptions"
-    | "historicalSubscriptions"
-    | "priceChanges"
-    | "billsOrUtilities";
+type ProductCanonicalSubscription = ProductResultItem<ImapCanonicalSubscription>;
 
-type ProductPrimaryAction =
-    | "show_as_active"
-    | "confirm_still_active"
-    | "review_old_bill"
-    | "review_price_change"
-    | "ignore_or_archive";
-
-type ProductCanonicalSubscription = ImapCanonicalSubscription & {
-    productBucket: ProductBucket;
-    primaryAction: ProductPrimaryAction;
-    userFacingReason: string;
-};
-
-type ImapProductResult = {
-    currentSubscriptions: ProductCanonicalSubscription[];
-    needsReviewSubscriptions: ProductCanonicalSubscription[];
-    historicalSubscriptions: ProductCanonicalSubscription[];
-    priceChanges: ProductCanonicalSubscription[];
-    billsOrUtilities: ProductCanonicalSubscription[];
-    scanSummary: {
-        currentSubscriptions: number;
-        needsReviewSubscriptions: number;
-        historicalSubscriptions: number;
-        priceChanges: number;
-        billsOrUtilities: number;
-        totalCanonicalSubscriptions: number;
-        recommendedDefaultMode: string;
-        recommendedUserMessage: string;
-        hasCurrentSubscriptions: boolean;
-        hasOnlyHistoricalEvidence: boolean;
-        hasPriceChanges: boolean;
-        hasBillsOrUtilities: boolean;
-    };
-};
+type ImapProductResult = ProductResult<ImapCanonicalSubscription>;
 
 type ImapScanSpikeResult = {
     mailbox: string;
@@ -331,14 +334,30 @@ function parsePositiveInteger(
     return parsed;
 }
 
-function parseScanMode(value: string | undefined): ImapSpikeConfig["scanMode"] {
+function parseScanMode(value: string | undefined): ImapScanMode {
     const mode = value?.trim() || "recent_window";
 
     if (["recent_window", "hybrid_window", "deep"].includes(mode)) {
-        return mode as ImapSpikeConfig["scanMode"];
+        return mode as ImapScanMode;
     }
 
     throw new Error("IMAP_SCAN_MODE must be recent_window, hybrid_window, or deep.");
+}
+
+function parseProductScanProfile(
+    value: string | undefined
+): ImapProductScanProfile {
+    const profile = value?.trim() || "adaptive";
+
+    if (["fast", "balanced", "deep", "adaptive"].includes(profile)) {
+        return profile as ImapProductScanProfile;
+    }
+
+    throw new Error("IMAP_PRODUCT_SCAN_PROFILE must be fast, balanced, deep, or adaptive.");
+}
+
+function envHasValue(name: string) {
+    return process.env[name] !== undefined && process.env[name]?.trim() !== "";
 }
 
 function parseDeepBucketSampleMode(
@@ -385,6 +404,44 @@ function parseHeaderTargetedTerms(value: string | undefined) {
     return [...new Set([...(override ? [] : HEADER_TARGETED_SEARCH_TERMS), ...envTerms])];
 }
 
+function profileDefaultScanMode(
+    profile: ImapProductScanProfile
+): ImapScanMode {
+    if (profile === "fast") return "recent_window";
+    if (profile === "balanced") return "hybrid_window";
+    if (profile === "deep") return "deep";
+
+    // Adaptive is still provider-agnostic: it uses the broad scan pipeline in
+    // this dev spike, then reports whether a cheaper profile would be enough.
+    return "deep";
+}
+
+function profileDefaultScanDays(profile: ImapProductScanProfile) {
+    if (profile === "balanced") return 120;
+    return 90;
+}
+
+function profileDefaultDeepDays(profile: ImapProductScanProfile) {
+    if (profile === "balanced") return 365;
+    return 730;
+}
+
+function profileDefaultTargetedLimit(
+    profile: ImapProductScanProfile
+) {
+    if (profile === "balanced") return 300;
+    if (profile === "fast") return 100;
+    return 300;
+}
+
+function profileDefaultMetadataMatchLimit(
+    profile: ImapProductScanProfile
+) {
+    if (profile === "balanced") return 300;
+    if (profile === "fast") return 0;
+    return 800;
+}
+
 function getConfig(): ImapSpikeConfig {
     const host = process.env.IMAP_HOST?.trim();
     const user = process.env.IMAP_USER?.trim();
@@ -402,17 +459,33 @@ function getConfig(): ImapSpikeConfig {
         throw new Error("Missing IMAP_PASSWORD.");
     }
 
-    const scanMode = parseScanMode(process.env.IMAP_SCAN_MODE);
+    const productScanProfile = parseProductScanProfile(
+        process.env.IMAP_PRODUCT_SCAN_PROFILE
+    );
+    const scanMode = envHasValue("IMAP_SCAN_MODE")
+        ? parseScanMode(process.env.IMAP_SCAN_MODE)
+        : profileDefaultScanMode(productScanProfile);
     const deepDays = parsePositiveInteger(
         process.env.IMAP_DEEP_DAYS,
-        730,
+        profileDefaultDeepDays(productScanProfile),
         "IMAP_DEEP_DAYS"
     );
     const targetedSearchLimit = parsePositiveInteger(
         process.env.IMAP_TARGETED_LIMIT ?? process.env.IMAP_TARGETED_SEARCH_LIMIT,
-        300,
+        profileDefaultTargetedLimit(productScanProfile),
         "IMAP_TARGETED_LIMIT"
     );
+    const scanDays = parsePositiveInteger(
+        process.env.IMAP_SCAN_DAYS,
+        profileDefaultScanDays(productScanProfile),
+        "IMAP_SCAN_DAYS"
+    );
+    const metadataPrepassDefault =
+        productScanProfile !== "fast" && scanMode !== "recent_window";
+    const deepFallbackDefault =
+        productScanProfile === "deep" ||
+        productScanProfile === "adaptive" ||
+        scanMode === "deep";
 
     return {
         host,
@@ -428,12 +501,9 @@ function getConfig(): ImapSpikeConfig {
         ),
         verbose: parseBoolean(process.env.IMAP_VERBOSE, false),
         outputJson: parseBoolean(process.env.IMAP_OUTPUT_JSON, false),
+        productScanProfile,
         scanMode,
-        scanDays: parsePositiveInteger(
-            process.env.IMAP_SCAN_DAYS,
-            90,
-            "IMAP_SCAN_DAYS"
-        ),
+        scanDays,
         deepDays,
         targetedSearch: parseBoolean(
             process.env.IMAP_TARGETED_SEARCH,
@@ -444,7 +514,7 @@ function getConfig(): ImapSpikeConfig {
         targetedVerbose: parseBoolean(process.env.IMAP_TARGETED_VERBOSE, false),
         headerTargetedEnabled: parseBoolean(
             process.env.IMAP_HEADER_TARGETED_ENABLED,
-            scanMode === "deep"
+            scanMode !== "recent_window"
         ),
         headerTargetedLimit: parsePositiveInteger(
             process.env.IMAP_HEADER_TARGETED_LIMIT,
@@ -456,11 +526,11 @@ function getConfig(): ImapSpikeConfig {
         ),
         metadataPrepassEnabled: parseBoolean(
             process.env.IMAP_METADATA_PREPASS_ENABLED,
-            scanMode === "deep"
+            metadataPrepassDefault
         ),
         metadataPrepassDays: parsePositiveInteger(
             process.env.IMAP_METADATA_PREPASS_DAYS,
-            deepDays,
+            productScanProfile === "balanced" ? 365 : deepDays,
             "IMAP_METADATA_PREPASS_DAYS"
         ),
         metadataPrepassLimit: parsePositiveInteger(
@@ -475,7 +545,7 @@ function getConfig(): ImapSpikeConfig {
         ),
         metadataPrepassMatchLimit: parsePositiveInteger(
             process.env.IMAP_METADATA_PREPASS_MATCH_LIMIT,
-            800,
+            profileDefaultMetadataMatchLimit(productScanProfile),
             "IMAP_METADATA_PREPASS_MATCH_LIMIT"
         ),
         metadataPrepassVerbose: parseBoolean(
@@ -484,7 +554,7 @@ function getConfig(): ImapSpikeConfig {
         ),
         deepFallbackEnabled: parseBoolean(
             process.env.IMAP_DEEP_FALLBACK_ENABLED,
-            true
+            deepFallbackDefault
         ),
         deepBatchSize: parsePositiveInteger(
             process.env.IMAP_DEEP_BATCH_SIZE,
@@ -1654,6 +1724,10 @@ function optionalSummaryLine(
     }
 
     console.log(`${label}: ${value}`);
+}
+
+function boolToYesNo(value: boolean) {
+    return value ? "yes" : "no";
 }
 
 function extractEmailAddress(from: string) {
@@ -4368,255 +4442,76 @@ function buildReviewCandidates(
     );
 }
 
-function isSubscriptionLikeCategory(category: string | undefined) {
-    return /(streaming_video|streaming_music|music_audio|software_saas|ai_tools|cloud_storage|ecommerce_membership|delivery_membership|fitness|health_fitness|education|productivity|gaming_subscription|gaming|other_subscription)/i.test(
-        category ?? ""
-    );
-}
+function applyScanDiagnostics(
+    scanStats: ImapScanStats,
+    productResult: ImapProductResult
+) {
+    const capabilityDiagnostics = buildScanCapabilityDiagnostics(scanStats);
 
-function isMembershipLikeCategory(category: string | undefined) {
-    return /(ecommerce_membership|delivery_membership|gaming_subscription)/i.test(
-        category ?? ""
-    );
-}
+    scanStats.sinceSearchSupported = capabilityDiagnostics.sinceSearchSupported;
+    scanStats.bodySearchSupported = capabilityDiagnostics.bodySearchSupported;
+    scanStats.headerSearchSupported = capabilityDiagnostics.headerSearchSupported;
+    scanStats.uidFetchSupported = capabilityDiagnostics.uidFetchSupported;
+    scanStats.metadataPrepassSupported =
+        capabilityDiagnostics.metadataPrepassSupported;
+    scanStats.deepFallbackSupported = capabilityDiagnostics.deepFallbackSupported;
+    scanStats.targetedSearchUseful = capabilityDiagnostics.targetedSearchUseful;
+    scanStats.headerSearchUseful = capabilityDiagnostics.headerSearchUseful;
+    scanStats.metadataPrepassUseful =
+        capabilityDiagnostics.metadataPrepassUseful;
+    scanStats.fallbackUseful = capabilityDiagnostics.fallbackUseful;
+    scanStats.scanCapabilityReasons =
+        capabilityDiagnostics.scanCapabilityReasons;
 
-function isBillLikeCategory(category: string | undefined) {
-    return /(utilities_energy|telecom|telecom_mobile|internet_isp|insurance|finance_insurance|government|government_tax_insurance|rent|loan_credit|other_bill)/i.test(
-        category ?? ""
-    );
-}
+    const recommendation = planImapScanStrategy(scanStats.scanProfile, capabilityDiagnostics, {
+        scanMode: scanStats.scanMode,
+        scanDays: scanStats.scanWindowDays,
+        deepDays: scanStats.deepWindowDays,
+        recentMessagesFetched: scanStats.recentMessagesFetched,
+        mailboxTotalMessages: scanStats.mailboxTotalMessages,
+        targetedQueriesRun: scanStats.targetedQueriesRun,
+        headerTargetedQueriesRun: scanStats.headerTargetedQueriesRun,
+        metadataPrepassEnabled: scanStats.metadataPrepassEnabled,
+        deepFallbackUsed: scanStats.deepFallbackUsed,
+        fallbackUsed: scanStats.fallbackUsed,
+        mayMissYearlySubscriptions: scanStats.mayMissYearlySubscriptions,
+        hasCurrentSubscriptions: productResult.scanSummary.hasCurrentSubscriptions,
+        needsReviewSubscriptions: productResult.scanSummary.needsReviewSubscriptions,
+        historicalSubscriptions: productResult.scanSummary.historicalSubscriptions,
+        priceChanges: productResult.scanSummary.priceChanges,
+        billsOrUtilities: productResult.scanSummary.billsOrUtilities,
+    });
 
-function isUtilityOrFormalBill(subscription: ImapCanonicalSubscription) {
-    const category = subscription.category ?? "";
-    const text = normalizeAsciiText(
-        [
-            subscription.displayName,
-            subscription.provider,
-            subscription.billingChannel,
-            category,
-            subscription.status,
-            ...subscription.evidenceTypes,
-            ...subscription.evidenceSummary,
-            ...subscription.reasons,
-        ]
-            .filter(Boolean)
-            .join(" ")
-    );
-    const subscriptionLike = isSubscriptionLikeCategory(category);
-
-    if (isMembershipLikeCategory(category)) return false;
-    if (isBillLikeCategory(category)) return true;
-
-    if (subscriptionLike) return false;
-
-    if (
-        subscription.status === "invoice_due" &&
-        /(utility|utilities|energy|electricity|power|prad|gaz|telecom|mobile|internet|isp|insurance|government|tax|zus|krus|czynsz|rent|loan|credit|faktura za internet|rachunek za telefon|rachunek za internet|faktura za prad)/i.test(
-            text
-        )
-    ) {
-        return true;
-    }
-
-    return (
-        !subscriptionLike &&
-        subscription.source === "recurring_group" &&
-        /(invoice|faktura|rachunek|payment due|recurring bill|kwota do zaplaty|termin platnosci)/i.test(
-            text
-        ) &&
-        /(utility|utilities|energy|electricity|power|prad|gaz|telecom|mobile|internet|isp|insurance|government|tax|zus|krus|czynsz|rent)/i.test(
-            text
-        )
-    );
-}
-
-function productBucketForCanonical(subscription: ImapCanonicalSubscription): {
-    bucket: ProductBucket;
-    primaryAction: ProductPrimaryAction;
-    userFacingReason: string;
-} {
-    const isBillOrUtility = isUtilityOrFormalBill(subscription);
-    const isSubscriptionLike = isSubscriptionLikeCategory(subscription.category);
-
-    if (subscription.status === "price_change") {
-        return {
-            bucket: "priceChanges",
-            primaryAction: "review_price_change",
-            userFacingReason: "Price-change evidence was found for an existing customer or plan.",
-        };
-    }
-
-    if (isBillOrUtility) {
-        return {
-            bucket: "billsOrUtilities",
-            primaryAction: subscription.needsReview ? "review_old_bill" : "show_as_active",
-            userFacingReason: subscription.needsReview
-                ? "A recurring bill or invoice was found, but the latest evidence is old or needs confirmation."
-                : "Recent recurring bill or invoice evidence was found.",
-        };
-    }
-
-    if (
-        isSubscriptionLike &&
-        ["active", "likely_active"].includes(subscription.status) &&
-        subscription.recencyStatus !== "stale_needs_review" &&
-        !subscription.needsReview
-    ) {
-        return {
-            bucket: "currentSubscriptions",
-            primaryAction: subscription.status === "likely_active" ? "confirm_still_active" : "show_as_active",
-            userFacingReason:
-                subscription.status === "likely_active"
-                    ? "Subscription-like evidence was found, but it is slightly outside the recent active window."
-                    : "Recent active subscription or membership evidence was found.",
-        };
-    }
-
-    if (
-        isSubscriptionLike &&
-        (subscription.needsReview ||
-            subscription.recencyStatus === "stale_needs_review" ||
-            subscription.status === "stale_needs_review" ||
-            subscription.status === "likely_active" ||
-            subscription.status === "trial")
-    ) {
-        return {
-            bucket: "needsReviewSubscriptions",
-            primaryAction: "confirm_still_active",
-            userFacingReason: subscription.stalenessReason
-                ? `Historical subscription evidence found: ${subscription.stalenessReason}.`
-                : "Subscription-like evidence was found, but it should be confirmed before showing as active.",
-        };
-    }
-
-    if (
-        ["active", "likely_active"].includes(subscription.status) &&
-        subscription.recencyStatus !== "stale_needs_review" &&
-        !subscription.needsReview
-    ) {
-        return {
-            bucket: "currentSubscriptions",
-            primaryAction: "show_as_active",
-            userFacingReason: "Recent or likely-current subscription evidence was found.",
-        };
-    }
-
-    if (
-        subscription.needsReview ||
-        subscription.recencyStatus === "stale_needs_review" ||
-        subscription.status === "stale_needs_review" ||
-        subscription.status === "likely_active"
-    ) {
-        return {
-            bucket: "needsReviewSubscriptions",
-            primaryAction: "confirm_still_active",
-            userFacingReason: subscription.stalenessReason
-                ? `Historical subscription evidence found: ${subscription.stalenessReason}.`
-                : "Subscription-like evidence was found, but it should be confirmed before showing as active.",
-        };
-    }
-
-    return {
-        bucket: "historicalSubscriptions",
-        primaryAction: "ignore_or_archive",
-        userFacingReason: "Only historical subscription evidence was found.",
-    };
-}
-
-function buildProductResult(
-    canonicalSubscriptions: ImapCanonicalSubscription[]
-): ImapProductResult {
-    const productResult: ImapProductResult = {
-        currentSubscriptions: [],
-        needsReviewSubscriptions: [],
-        historicalSubscriptions: [],
-        priceChanges: [],
-        billsOrUtilities: [],
-        scanSummary: {
-            currentSubscriptions: 0,
-            needsReviewSubscriptions: 0,
-            historicalSubscriptions: 0,
-            priceChanges: 0,
-            billsOrUtilities: 0,
-            totalCanonicalSubscriptions: canonicalSubscriptions.length,
-            recommendedDefaultMode: "review",
-            recommendedUserMessage: "Review detected subscriptions and bills before showing them as active.",
-            hasCurrentSubscriptions: false,
-            hasOnlyHistoricalEvidence: false,
-            hasPriceChanges: false,
-            hasBillsOrUtilities: false,
-        },
-    };
-
-    for (const subscription of canonicalSubscriptions) {
-        const productDecision = productBucketForCanonical(subscription);
-        const productSubscription: ProductCanonicalSubscription = {
-            ...subscription,
-            productBucket: productDecision.bucket,
-            primaryAction: productDecision.primaryAction,
-            userFacingReason: productDecision.userFacingReason,
-        };
-
-        productResult[productDecision.bucket].push(productSubscription);
-    }
-
-    productResult.scanSummary.currentSubscriptions =
-        productResult.currentSubscriptions.length;
-    productResult.scanSummary.needsReviewSubscriptions =
-        productResult.needsReviewSubscriptions.length;
-    productResult.scanSummary.historicalSubscriptions =
-        productResult.historicalSubscriptions.length;
-    productResult.scanSummary.priceChanges = productResult.priceChanges.length;
-    productResult.scanSummary.billsOrUtilities =
-        productResult.billsOrUtilities.length;
-    productResult.scanSummary.hasCurrentSubscriptions =
-        productResult.currentSubscriptions.length > 0;
-    productResult.scanSummary.hasPriceChanges =
-        productResult.priceChanges.length > 0;
-    productResult.scanSummary.hasBillsOrUtilities =
-        productResult.billsOrUtilities.length > 0;
-    productResult.scanSummary.hasOnlyHistoricalEvidence =
-        productResult.currentSubscriptions.length === 0 &&
-        (productResult.needsReviewSubscriptions.length > 0 ||
-            productResult.historicalSubscriptions.length > 0 ||
-            productResult.billsOrUtilities.some((subscription) => subscription.needsReview));
-
-    if (productResult.currentSubscriptions.length > 0) {
-        productResult.scanSummary.recommendedDefaultMode = "current";
-        productResult.scanSummary.recommendedUserMessage =
-            "We found recent active subscription or bill evidence. Review older items separately.";
-    } else if (
-        productResult.needsReviewSubscriptions.length > 0 &&
-        productResult.priceChanges.length > 0
-    ) {
-        productResult.scanSummary.recommendedDefaultMode = "review";
-        productResult.scanSummary.recommendedUserMessage =
-            "We found historical subscription evidence and one price-change notice, but no recent active subscription payments. Please confirm which historical subscriptions are still active.";
-    } else if (productResult.needsReviewSubscriptions.length > 0) {
-        productResult.scanSummary.recommendedDefaultMode = "review";
-        productResult.scanSummary.recommendedUserMessage =
-            "We found historical subscription evidence, but no recent active subscription payments. Please confirm which subscriptions are still active.";
-    } else if (productResult.priceChanges.length > 0) {
-        productResult.scanSummary.recommendedDefaultMode = "price_changes";
-        productResult.scanSummary.recommendedUserMessage =
-            "We found price-change notices, but no recent active subscription payments in this scan window.";
-    } else if (productResult.billsOrUtilities.length > 0) {
-        productResult.scanSummary.recommendedDefaultMode = "bills";
-        productResult.scanSummary.recommendedUserMessage =
-            "We found bill or utility evidence. Review stale bills before treating them as current.";
-    } else {
-        productResult.scanSummary.recommendedDefaultMode = "empty";
-        productResult.scanSummary.recommendedUserMessage =
-            "No current subscription evidence was found in this scan window.";
-    }
-
-    return productResult;
+    scanStats.effectiveScanMode = recommendation.effectiveScanMode;
+    scanStats.effectiveWindowDays = recommendation.effectiveWindowDays;
+    scanStats.shouldRunTargetedSearch = recommendation.shouldRunTargetedSearch;
+    scanStats.shouldRunHeaderTargetedSearch =
+        recommendation.shouldRunHeaderTargetedSearch;
+    scanStats.shouldRunMetadataPrepass =
+        recommendation.shouldRunMetadataPrepass;
+    scanStats.shouldRunDeepFallback = recommendation.shouldRunDeepFallback;
+    scanStats.recommendedScanModeForProvider =
+        recommendation.recommendedScanModeForProvider;
+    scanStats.recommendedFallbackStrategy =
+        recommendation.recommendedFallbackStrategy;
+    scanStats.scanReliabilityLevel = recommendation.scanReliabilityLevel;
+    scanStats.scanReliabilityReasons =
+        recommendation.scanReliabilityReasons;
+    scanStats.deepScanAvailable = recommendation.deepScanAvailable;
+    scanStats.deepScanRecommended = recommendation.deepScanRecommended;
+    scanStats.deepScanReason = recommendation.deepScanReason;
+    scanStats.quickScanLikelyIncomplete =
+        recommendation.quickScanLikelyIncomplete;
+    scanStats.userFacingCoverageNote = recommendation.userFacingCoverageNote;
 }
 
 function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig) {
     console.log("IMAP scan summary:");
     console.log(`mailbox: ${result.mailbox}`);
+    console.log(`scanProfile: ${result.scanStats.scanProfile}`);
     console.log(`scanMode: ${result.scanStats.scanMode}`);
+    console.log(`effectiveScanMode: ${result.scanStats.effectiveScanMode}`);
+    console.log(`effectiveWindowDays: ${result.scanStats.effectiveWindowDays}`);
     console.log(`scanWindowDays: ${result.scanStats.scanWindowDays}`);
     optionalSummaryLine("deepWindowDays", result.scanStats.deepWindowDays);
     console.log(`mailboxTotalMessages: ${result.scanStats.mailboxTotalMessages}`);
@@ -4657,6 +4552,30 @@ function printHumanSummary(result: ImapScanSpikeResult, config: ImapSpikeConfig)
     optionalSummaryLine("fallbackReason", result.scanStats.fallbackReason);
     console.log(`mayMissYearlySubscriptions: ${result.scanStats.mayMissYearlySubscriptions ? "yes" : "no"}`);
     console.log(`coverageNote: ${result.scanStats.coverageNote}`);
+    console.log(`sinceSearchSupported: ${boolToYesNo(result.scanStats.sinceSearchSupported)}`);
+    console.log(`bodySearchSupported: ${boolToYesNo(result.scanStats.bodySearchSupported)}`);
+    console.log(`headerSearchSupported: ${boolToYesNo(result.scanStats.headerSearchSupported)}`);
+    console.log(`uidFetchSupported: ${boolToYesNo(result.scanStats.uidFetchSupported)}`);
+    console.log(`metadataPrepassSupported: ${boolToYesNo(result.scanStats.metadataPrepassSupported)}`);
+    console.log(`deepFallbackSupported: ${boolToYesNo(result.scanStats.deepFallbackSupported)}`);
+    console.log(`targetedSearchUseful: ${boolToYesNo(result.scanStats.targetedSearchUseful)}`);
+    console.log(`headerSearchUseful: ${boolToYesNo(result.scanStats.headerSearchUseful)}`);
+    console.log(`metadataPrepassUseful: ${boolToYesNo(result.scanStats.metadataPrepassUseful)}`);
+    console.log(`fallbackUseful: ${boolToYesNo(result.scanStats.fallbackUseful)}`);
+    optionalSummaryLine("scanCapabilityReasons", result.scanStats.scanCapabilityReasons.join("; "));
+    console.log(`shouldRunTargetedSearch: ${boolToYesNo(result.scanStats.shouldRunTargetedSearch)}`);
+    console.log(`shouldRunHeaderTargetedSearch: ${boolToYesNo(result.scanStats.shouldRunHeaderTargetedSearch)}`);
+    console.log(`shouldRunMetadataPrepass: ${boolToYesNo(result.scanStats.shouldRunMetadataPrepass)}`);
+    console.log(`shouldRunDeepFallback: ${boolToYesNo(result.scanStats.shouldRunDeepFallback)}`);
+    console.log(`recommendedScanModeForProvider: ${result.scanStats.recommendedScanModeForProvider}`);
+    console.log(`recommendedFallbackStrategy: ${result.scanStats.recommendedFallbackStrategy}`);
+    console.log(`scanReliabilityLevel: ${result.scanStats.scanReliabilityLevel}`);
+    optionalSummaryLine("scanReliabilityReasons", result.scanStats.scanReliabilityReasons.join("; "));
+    console.log(`deepScanAvailable: ${boolToYesNo(result.scanStats.deepScanAvailable)}`);
+    console.log(`deepScanRecommended: ${boolToYesNo(result.scanStats.deepScanRecommended)}`);
+    optionalSummaryLine("deepScanReason", result.scanStats.deepScanReason);
+    console.log(`quickScanLikelyIncomplete: ${boolToYesNo(result.scanStats.quickScanLikelyIncomplete)}`);
+    console.log(`userFacingCoverageNote: ${result.scanStats.userFacingCoverageNote}`);
     console.log(`scannedMessages: ${result.scannedMessages}`);
     console.log(`candidatesFound: ${result.candidatesFound}`);
     console.log(`rejectedMessages: ${result.rejectedMessages}`);
@@ -4988,7 +4907,10 @@ async function main() {
         const debugMessages: ImapDebugMessage[] = [];
         const seenMessageIds = new Set<string>();
         const scanStats: ImapScanStats = {
+            scanProfile: config.productScanProfile,
             scanMode: config.scanMode,
+            effectiveScanMode: config.scanMode,
+            effectiveWindowDays: config.scanMode === "deep" ? config.deepDays : config.scanDays,
             scanWindowDays: config.scanDays,
             deepWindowDays: config.scanMode === "deep" ? config.deepDays : undefined,
             mailboxTotalMessages: totalMessages,
@@ -5036,6 +4958,31 @@ async function main() {
             reviewSuppressedWeakPurchases: 0,
             mayMissYearlySubscriptions: config.scanMode !== "deep" && config.scanDays < 365,
             coverageNote: coverageNoteFor(config),
+            sinceSearchSupported: false,
+            bodySearchSupported: false,
+            headerSearchSupported: false,
+            uidFetchSupported: false,
+            metadataPrepassSupported: false,
+            deepFallbackSupported: false,
+            targetedSearchUseful: false,
+            headerSearchUseful: false,
+            metadataPrepassUseful: false,
+            fallbackUseful: false,
+            scanCapabilityReasons: [],
+            shouldRunTargetedSearch: false,
+            shouldRunHeaderTargetedSearch: false,
+            shouldRunMetadataPrepass: false,
+            shouldRunDeepFallback: false,
+            recommendedScanModeForProvider: config.scanMode,
+            recommendedFallbackStrategy: "recent_window_only",
+            scanReliabilityLevel: "low",
+            scanReliabilityReasons: [],
+            deepScanAvailable: true,
+            deepScanRecommended: false,
+            quickScanLikelyIncomplete:
+                config.scanMode !== "deep" &&
+                (config.scanDays < 365 || config.productScanProfile === "fast"),
+            userFacingCoverageNote: coverageNoteFor(config),
         };
 
         if (totalMessages > 0) {
@@ -5386,6 +5333,7 @@ async function main() {
             config
         );
         const productResult = buildProductResult(canonicalSubscriptions);
+        applyScanDiagnostics(scanStats, productResult);
         const reviewCandidatesBeforeFinalSuppression = buildReviewCandidates(
             debugMessages,
             canonicalSubscriptions,
