@@ -179,7 +179,7 @@ export function SavingsDetailsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
-  glowOne: { position: 'absolute', top: -130, right: -130, width: 310, height: 310, borderRadius: 155, backgroundColor: 'rgba(32,246,181,0.15)' },
+  glowOne: { position: 'absolute', top: -130, right: -130, width: 310, height: 310, borderRadius: 155, backgroundColor: 'rgba(255,255,255,0.15)' },
   glowTwo: { position: 'absolute', bottom: 80, left: -130, width: 270, height: 270, borderRadius: 135, backgroundColor: 'rgba(34,211,238,0.13)' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
   iconButton: { width: 44, height: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
@@ -209,7 +209,7 @@ const styles = StyleSheet.create({
   emptyTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900', marginBottom: 4 },
   emptyText: { color: vibrantTheme.colors.textMuted, fontSize: 12, lineHeight: 18, fontWeight: '600' },
   savingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: vibrantTheme.colors.border },
-  brandBadge: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(32,246,181,0.16)', borderWidth: 1, borderColor: 'rgba(32,246,181,0.24)' },
+  brandBadge: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
   brandLetter: { color: vibrantTheme.colors.primary, fontSize: 18, fontWeight: '900' },
   savingCopy: { flex: 1 },
   savingName: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900' },

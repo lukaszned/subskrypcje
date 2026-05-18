@@ -426,6 +426,7 @@ export interface GmailScanRequest {
   connectionId?: string;
   limit?: number;
   sinceDays?: number;
+  scanProfile?: 'fast' | 'adaptive' | 'balanced' | 'deep';
   debug?: boolean;
   dryRun?: boolean;
 }
@@ -451,7 +452,65 @@ export interface GmailScanResponse {
   rejectedMessages: number;
   querySummaries: GmailScanQuerySummary[];
   created: DetectedSubscription[];
+  productResult?: EmailScanProductResult;
+  scanProfile?: string;
+  effectiveScanMode?: string;
+  effectiveWindowDays?: number;
+  scanReliabilityLevel?: 'low' | 'medium' | 'high' | string;
+  scanReliabilityReasons?: string[];
+  deepScanAvailable?: boolean;
+  deepScanRecommended?: boolean;
+  deepScanReason?: string | null;
+  quickScanLikelyIncomplete?: boolean;
+  userFacingCoverageNote?: string | null;
   message: string;
+}
+
+export type EmailScanPrimaryAction =
+  | 'confirm_still_active'
+  | 'review_price_change'
+  | 'review_old_bill'
+  | 'ignore'
+  | string;
+
+export interface EmailScanProductItem {
+  id?: string;
+  sourceMessageId?: string;
+  provider?: string | null;
+  name?: string | null;
+  category?: string | null;
+  status?: string | null;
+  primaryAction?: EmailScanPrimaryAction;
+  action?: EmailScanPrimaryAction;
+  amount?: number | string | null;
+  currency?: string | null;
+  billingCycle?: BillingCycle | string | null;
+  billingChannel?: string | null;
+  promoAmount?: number | string | null;
+  futureAmount?: number | string | null;
+  currentAmount?: number | string | null;
+  newAmount?: number | string | null;
+  lastEvidenceAt?: string | null;
+  evidenceDate?: string | null;
+  evidenceSnippet?: string | null;
+  confidence?: number | null;
+  [key: string]: unknown;
+}
+
+export interface EmailScanProductResult {
+  currentSubscriptions: EmailScanProductItem[];
+  needsReviewSubscriptions: EmailScanProductItem[];
+  historicalSubscriptions: EmailScanProductItem[];
+  priceChanges: EmailScanProductItem[];
+  billsOrUtilities: EmailScanProductItem[];
+  scanSummary: {
+    recommendedDefaultMode?: 'current' | 'review' | 'history' | 'empty' | string;
+    recommendedUserMessage?: string | null;
+    hasCurrentSubscriptions?: boolean;
+    hasOnlyHistoricalEvidence?: boolean;
+    hasPriceChanges?: boolean;
+    hasBillsOrUtilities?: boolean;
+  };
 }
 
 export interface DetectedSubscription {

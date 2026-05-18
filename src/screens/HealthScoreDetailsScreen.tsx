@@ -223,7 +223,7 @@ export function HealthScoreDetailsScreen() {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
-  glowOne: { position: 'absolute', top: -130, right: -120, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(32,246,181,0.16)' },
+  glowOne: { position: 'absolute', top: -130, right: -120, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.16)' },
   glowTwo: { position: 'absolute', bottom: 80, left: -140, width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(139,92,246,0.14)' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
   iconButton: { width: 44, height: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },

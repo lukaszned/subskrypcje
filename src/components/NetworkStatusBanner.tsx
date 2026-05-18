@@ -3,6 +3,7 @@ import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'rea
 import { CloudOff, RotateCw, WifiOff } from 'lucide-react-native';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 interface NetworkStatusBannerProps {
   onRetry?: () => void;
@@ -10,6 +11,7 @@ interface NetworkStatusBannerProps {
 
 export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
   const network = useNetworkStatus();
+  const { theme } = useTheme();
   const lastFailureAt = network.lastFailureAt ?? 0;
   const lastSuccessAt = network.lastSuccessAt ?? 0;
   const lastFailureIsOld = lastFailureAt > 0 && Date.now() - lastFailureAt > 20000;
@@ -51,7 +53,7 @@ export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
       </View>
       {onRetry && (
         <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.8}>
-          <RotateCw size={16} color="#0B6B3A" />
+          <RotateCw size={16} color={theme.colors.primary} />
         </TouchableOpacity>
       )}
     </View>

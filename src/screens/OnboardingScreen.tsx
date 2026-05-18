@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../types/navigation';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 const { width } = Dimensions.get('window');
 
@@ -19,20 +20,21 @@ type Nav = NativeStackNavigationProp<AuthStackParamList, 'Onboarding'>;
 
 export default function OnboardingScreen() {
   const navigation = useNavigation<Nav>();
+  const { theme } = useTheme();
 
   return (
-    <LinearGradient colors={vibrantTheme.gradients.app} style={styles.container}>
-      <View style={styles.glowOne} />
-      <View style={styles.glowTwo} />
+    <LinearGradient colors={theme.gradients.app} style={styles.container}>
+      <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}2E` }]} />
+      <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}33` }]} />
       <SafeAreaView style={styles.safe}>
         <View style={styles.content}>
-          <LinearGradient colors={vibrantTheme.gradients.glass} style={styles.iconContainer}>
-            <Text style={styles.icon}>$</Text>
+          <LinearGradient colors={theme.gradients.glass} style={[styles.iconContainer, { borderColor: theme.colors.border }]}>
+            <Text style={[styles.icon, { color: theme.colors.text }]}>$</Text>
           </LinearGradient>
-          <Text style={styles.eyebrow}>Premium subscription control</Text>
-          <Text style={styles.title}>Sub-Sentry</Text>
-          <Text style={styles.subtitle}>
-            Zapanuj nad swoimi subskrypcjami i oszczedzaj pieniadze kazdego miesiaca.
+          <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>Premium subscription control</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Sub-Sentry</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>
+            Zapanuj nad swoimi subskrypcjami i oszczędzaj pieniądze każdego miesiąca.
           </Text>
         </View>
 
@@ -42,8 +44,8 @@ export default function OnboardingScreen() {
             onPress={() => navigation.navigate('Login')}
             activeOpacity={0.86}
           >
-            <LinearGradient colors={vibrantTheme.gradients.primary} style={styles.buttonGradient}>
-              <Text style={styles.buttonText}>Rozpocznij</Text>
+            <LinearGradient colors={theme.gradients.primary} style={styles.buttonGradient}>
+              <Text style={[styles.buttonText, { color: theme.colors.darkText }]}>Rozpocznij</Text>
             </LinearGradient>
           </TouchableOpacity>
         </View>
@@ -65,7 +67,7 @@ const styles = StyleSheet.create({
     width: width * 0.9,
     height: width * 0.9,
     borderRadius: width,
-    backgroundColor: 'rgba(32,246,181,0.18)',
+    backgroundColor: 'rgba(255,255,255,0.18)',
     top: -120,
     right: -120,
   },

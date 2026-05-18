@@ -3,6 +3,7 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
+  InteractionManager,
   Linking,
   Modal,
   Platform,
@@ -22,18 +23,24 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle,
+  ChevronRight,
   Clock,
   ExternalLink,
+  FileText,
   FlaskConical,
+  History,
   Inbox,
   Mail,
   RefreshCw,
+  ReceiptText,
   Search,
   Settings,
   ShieldCheck,
+  Tag,
   Wrench,
   X,
   XCircle,
+  Zap,
 } from 'lucide-react-native';
 import { ApiError } from '../lib/apiClient';
 import {
@@ -49,10 +56,13 @@ import {
   BillingCycle,
   CATEGORY_LABELS,
   DetectedSubscription,
+  EmailScanProductItem,
+  EmailScanProductResult,
   GmailScanRequest,
   SubscriptionCategory,
 } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { formatInputDate, parseAppDate } from '../utils/date';
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
@@ -75,6 +85,24 @@ const CYCLE_OPTIONS: { id: BillingCycle; label: string }[] = [
   { id: 'weekly', label: 'Tygodniowo' },
   { id: 'custom', label: 'Inny' },
 ];
+
+type ProductBucket = 'current' | 'review' | 'history' | 'price' | 'bill';
+type ProductFilter = 'all' | ProductBucket;
+
+type SelectedProductReview = {
+  item: EmailScanProductItem;
+  bucket: ProductBucket;
+  key: string;
+} | null;
+
+const PRODUCT_DECISION_LABELS: Record<string, string> = {
+  'nadal aktywne': 'Nadal aktywne',
+  anulowane: 'Anulowane',
+  'nie subskrypcja': 'Nie subskrypcja',
+  sprawdzone: 'Sprawdzone',
+  ignoruj: 'Zignorowane',
+  'przypomnij później': 'Później',
+};
 
 function formatDateTime(value: string | null) {
   if (!value) return 'Jeszcze nie skanowano';
@@ -105,8 +133,126 @@ function safeDate(value: string | null | undefined) {
   return parseAppDate(value) || new Date();
 }
 
+function getProductItemTitle(item: EmailScanProductItem) {
+  return item.name || item.provider || item.billingChannel || 'Wykryty sygnał';
+}
+
+function getProductItemAction(item: EmailScanProductItem) {
+  return item.primaryAction || item.action || 'review';
+}
+
+function formatMaybeAmount(value: unknown, currency?: string | null) {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return `${value.toFixed(2)} ${currency || ''}`.trim();
+  return String(value);
+}
+
+function formatProductDate(item: EmailScanProductItem) {
+  return formatDate(item.lastEvidenceAt || item.evidenceDate || null);
+}
+
+function getDecisionLabel(action: string | undefined) {
+  if (!action) return null;
+  return PRODUCT_DECISION_LABELS[action] || action;
+}
+
+function getProductResultFromScan(scanResult: unknown): EmailScanProductResult | null {
+  const productResult = (scanResult as any)?.productResult;
+  if (!productResult) return null;
+
+  return {
+    currentSubscriptions: Array.isArray(productResult.currentSubscriptions) ? productResult.currentSubscriptions : [],
+    needsReviewSubscriptions: Array.isArray(productResult.needsReviewSubscriptions) ? productResult.needsReviewSubscriptions : [],
+    historicalSubscriptions: Array.isArray(productResult.historicalSubscriptions) ? productResult.historicalSubscriptions : [],
+    priceChanges: Array.isArray(productResult.priceChanges) ? productResult.priceChanges : [],
+    billsOrUtilities: Array.isArray(productResult.billsOrUtilities) ? productResult.billsOrUtilities : [],
+    scanSummary: productResult.scanSummary || {},
+  };
+}
+
+const ONET_PRODUCT_RESULT_DEMO: EmailScanProductResult = {
+  currentSubscriptions: [],
+  needsReviewSubscriptions: [
+    {
+      id: 'demo-uber-one',
+      provider: 'Uber One',
+      name: 'Uber One',
+      category: 'delivery_membership',
+      status: 'stale_needs_review',
+      primaryAction: 'confirm_still_active',
+      lastEvidenceAt: '2025-03-23T10:00:00.000Z',
+      evidenceSnippet: 'Znaleziono historyczne dowody membershipu Uber One oraz płatności/invoice. Potwierdź, czy usługa nadal jest aktywna.',
+    },
+    {
+      id: 'demo-max',
+      provider: 'Max',
+      name: 'Max',
+      category: 'streaming_video',
+      amount: '29,99 zł',
+      status: 'stale_needs_review',
+      primaryAction: 'confirm_still_active',
+      evidenceSnippet: 'Historyczny dowód subskrypcji Max z kwotą 29,99 zł. Brak świeżej płatności w ostatnim oknie skanu.',
+    },
+    {
+      id: 'demo-skyshowtime',
+      provider: 'SkyShowtime',
+      name: 'SkyShowtime on Prime Video',
+      category: 'streaming_video',
+      billingChannel: 'Prime Video',
+      promoAmount: '4,00 zł',
+      futureAmount: '24,99 zł',
+      status: 'stale_needs_review',
+      primaryAction: 'confirm_still_active',
+      evidenceSnippet: 'Subskrypcja marketplace-billed przez Prime Video. Wykryto cenę promocyjną i przyszłą cenę po okresie promocji.',
+    },
+    {
+      id: 'demo-adobe',
+      provider: 'Adobe',
+      name: 'Adobe Acrobat Pro',
+      category: 'software_saas',
+      amount: '36,89 zł brutto',
+      status: 'stale_needs_review',
+      primaryAction: 'confirm_still_active',
+      evidenceSnippet: 'Historyczny dowód płatności Adobe Acrobat Pro. Wymaga potwierdzenia, czy plan nadal jest aktywny.',
+    },
+  ],
+  historicalSubscriptions: [],
+  priceChanges: [
+    {
+      id: 'demo-amazon-price',
+      provider: 'Amazon',
+      name: 'Amazon Prime',
+      category: 'ecommerce_membership',
+      currentAmount: '49,00 zł/rok',
+      newAmount: '69,00 zł/rok',
+      primaryAction: 'review_price_change',
+      evidenceSnippet: 'Wykryto notice o zmianie ceny Amazon Prime z 49 zł rocznie na 69 zł rocznie.',
+    },
+  ],
+  billsOrUtilities: [
+    {
+      id: 'demo-tauron',
+      provider: 'Tauron',
+      name: 'Tauron',
+      category: 'utilities_energy',
+      amount: '216.39 zł',
+      primaryAction: 'review_old_bill',
+      evidenceSnippet: 'Wykryto rachunek za energię. To formalny bill/utility, więc pokazujemy go osobno od subskrypcji.',
+    },
+  ],
+  scanSummary: {
+    recommendedDefaultMode: 'review',
+    hasCurrentSubscriptions: false,
+    hasOnlyHistoricalEvidence: true,
+    hasPriceChanges: true,
+    hasBillsOrUtilities: true,
+    recommendedUserMessage: 'Znaleźliśmy historyczne dowody subskrypcji i notice o zmianie ceny, ale nie znaleźliśmy świeżych płatności aktywnych subskrypcji. Potwierdź, które usługi nadal są aktywne.',
+  },
+};
+
 export const EmailScanScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'EmailScan'>>();
+  const { theme } = useTheme();
   const statusQuery = useEmailScanStatus();
   const detectionsQuery = useEmailDetections('pending', 20, 0);
   const authUrlMutation = useGmailAuthUrl();
@@ -129,11 +275,32 @@ export const EmailScanScreen = () => {
   const [isDryRun, setIsDryRun] = useState(false);
   const [isDebug, setIsDebug] = useState(false);
   const [dryRunResults, setDryRunResults] = useState<DetectedSubscription[] | null>(null);
+  const [lastScanProductResult, setLastScanProductResult] = useState<EmailScanProductResult | null>(null);
+  const [lastScanDiagnostics, setLastScanDiagnostics] = useState<{
+    scanReliabilityLevel?: string;
+    deepScanRecommended?: boolean;
+    quickScanLikelyIncomplete?: boolean;
+    userFacingCoverageNote?: string | null;
+    deepScanReason?: string | null;
+  } | null>(null);
+  const [locallyReviewedProductItems, setLocallyReviewedProductItems] = useState<Record<string, string>>({});
+  const [selectedProductReview, setSelectedProductReview] = useState<SelectedProductReview>(null);
+  const [productFilter, setProductFilter] = useState<ProductFilter>('all');
+  const [renderReviewContent, setRenderReviewContent] = useState(false);
 
   const status = statusQuery.data;
   const detections = detectionsQuery.data?.items ?? [];
   const isRefreshing = statusQuery.isFetching || detectionsQuery.isFetching;
   const isConnected = !!status?.gmailConnected;
+  const shouldShowProductResult = !!lastScanProductResult;
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setRenderReviewContent(true);
+    });
+
+    return () => task.cancel?.();
+  }, []);
 
   useEffect(() => {
     if (!selectedDetection) return;
@@ -186,6 +353,17 @@ export const EmailScanScreen = () => {
 
     scanMutation.mutate(payload, {
       onSuccess: (result) => {
+        const productResult = getProductResultFromScan(result);
+        setLastScanProductResult(productResult);
+        setLastScanDiagnostics({
+          scanReliabilityLevel: result.scanReliabilityLevel,
+          deepScanRecommended: Boolean(result.deepScanRecommended),
+          quickScanLikelyIncomplete: Boolean(result.quickScanLikelyIncomplete),
+          userFacingCoverageNote: result.userFacingCoverageNote,
+          deepScanReason: result.deepScanReason,
+        });
+        setLocallyReviewedProductItems({});
+        setProductFilter('all');
         if (payload.dryRun) {
           setDryRunResults(result.created || []);
           Alert.alert(
@@ -205,6 +383,21 @@ export const EmailScanScreen = () => {
         Alert.alert('Błąd skanowania', error?.message || 'Nie udało się przeskanować Gmaila.');
       },
     });
+  };
+
+  const handleShowDemoProductResult = () => {
+    setDryRunResults(null);
+    setLastScanProductResult(ONET_PRODUCT_RESULT_DEMO);
+    setLastScanDiagnostics({
+      scanReliabilityLevel: 'medium',
+      deepScanRecommended: false,
+      quickScanLikelyIncomplete: false,
+      userFacingCoverageNote: 'Demo pokazuje bucketowy wynik skanu: historyczne subskrypcje do potwierdzenia, zmianę ceny i rachunek utility.',
+      deepScanReason: null,
+    });
+    setLocallyReviewedProductItems({});
+    setSelectedProductReview(null);
+    setProductFilter('all');
   };
 
   const handleIgnore = (detection: DetectedSubscription) => {
@@ -275,7 +468,7 @@ export const EmailScanScreen = () => {
   const renderPrivacyCopy = () => (
     <View style={styles.privacyBox}>
       <View style={styles.privacyHeader}>
-        <ShieldCheck size={20} color="#10B981" />
+        <ShieldCheck size={20} color={theme.colors.primary} />
         <Text style={styles.privacyTitle}>Privacy-first</Text>
       </View>
       <Text style={styles.privacyText}>Skanujemy tylko wiadomości wyglądające jak rachunki, triale, odnowienia lub subskrypcje.</Text>
@@ -292,7 +485,7 @@ export const EmailScanScreen = () => {
       >
         <Wrench size={16} color="#64748B" />
         <Text style={styles.advancedTitle}>Opcje zaawansowane / Dev</Text>
-        <Settings size={16} color={showAdvanced ? "#0B6B3A" : "#94A3B8"} />
+        <Settings size={16} color={showAdvanced ? theme.colors.primary : "#94A3B8"} />
       </TouchableOpacity>
 
       {showAdvanced && (
@@ -304,7 +497,7 @@ export const EmailScanScreen = () => {
             </View>
             <TouchableOpacity
               onPress={() => setIsDryRun(!isDryRun)}
-              style={[styles.toggle, isDryRun && styles.toggleActive]}
+              style={[styles.toggle, isDryRun && { backgroundColor: theme.colors.primary }]}
             >
               <View style={[styles.toggleDot, isDryRun && styles.toggleDotActive]} />
             </TouchableOpacity>
@@ -317,7 +510,7 @@ export const EmailScanScreen = () => {
             </View>
             <TouchableOpacity
               onPress={() => setIsDebug(!isDebug)}
-              style={[styles.toggle, isDebug && styles.toggleActive]}
+              style={[styles.toggle, isDebug && { backgroundColor: theme.colors.primary }]}
             >
               <View style={[styles.toggleDot, isDebug && styles.toggleDotActive]} />
             </TouchableOpacity>
@@ -328,8 +521,17 @@ export const EmailScanScreen = () => {
             onPress={() => handleScan({ dryRun: true })}
             disabled={scanMutation.isPending}
           >
-            <FlaskConical size={18} color="#0B6B3A" />
+            <FlaskConical size={18} color={theme.colors.primary} />
             <Text style={styles.testBtnText}>Uruchom testowy skan (Dry Run)</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.demoResultBtn}
+            onPress={handleShowDemoProductResult}
+            disabled={scanMutation.isPending}
+          >
+            <ShieldCheck size={18} color={vibrantTheme.colors.darkText} />
+            <Text style={styles.demoResultBtnText}>Pokaż przykładowy wynik Onet</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -342,7 +544,7 @@ export const EmailScanScreen = () => {
     return (
       <View style={styles.dryRunSection}>
         <View style={styles.dryRunHeader}>
-          <FlaskConical size={20} color="#0B6B3A" />
+          <FlaskConical size={20} color={theme.colors.primary} />
           <Text style={styles.dryRunTitle}>Wyniki Dry Run (Podgląd)</Text>
           <TouchableOpacity onPress={() => setDryRunResults(null)}>
             <X size={20} color="#64748B" />
@@ -369,8 +571,8 @@ export const EmailScanScreen = () => {
     return (
       <View key={item.id} style={styles.detectionCard}>
         <View style={styles.detectionTop}>
-          <View style={styles.providerIcon}>
-            <Text style={styles.providerIconText}>{(item.name || item.provider || '?').charAt(0)}</Text>
+          <View style={[styles.providerIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
+            <Text style={[styles.providerIconText, { color: theme.colors.primary }]}>{(item.name || item.provider || '?').charAt(0)}</Text>
           </View>
           <View style={styles.detectionMain}>
             <Text style={styles.detectionName} numberOfLines={1}>{item.name || item.provider || 'Nieznana subskrypcja'}</Text>
@@ -404,7 +606,7 @@ export const EmailScanScreen = () => {
                 <XCircle size={18} color="#64748B" />
                 <Text style={styles.secondaryBtnText}>Ignoruj</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.primaryBtn} onPress={() => setSelectedDetection(item)}>
+              <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.colors.primary }]} onPress={() => setSelectedDetection(item)}>
                 <CheckCircle size={18} color="#FFFFFF" />
                 <Text style={styles.primaryBtnText}>Review</Text>
               </TouchableOpacity>
@@ -412,6 +614,519 @@ export const EmailScanScreen = () => {
           )}
         </View>
       </View>
+    );
+  };
+
+  const getProductItemKey = (item: EmailScanProductItem, prefix: string, index: number) =>
+    String(item.id || item.sourceMessageId || `${prefix}-${getProductItemTitle(item)}-${index}`);
+
+  const markProductItemReviewed = (key: string, action: string) => {
+    setLocallyReviewedProductItems((current) => ({ ...current, [key]: action }));
+  };
+
+  const handleProductReviewAction = (key: string, action: string) => {
+    markProductItemReviewed(key, action);
+    setSelectedProductReview(null);
+  };
+
+  const renderCoverageBanner = () => {
+    if (!lastScanDiagnostics && !lastScanProductResult?.scanSummary?.recommendedUserMessage) return null;
+
+    const note = lastScanProductResult?.scanSummary?.recommendedUserMessage ||
+      lastScanDiagnostics?.userFacingCoverageNote ||
+      lastScanDiagnostics?.deepScanReason;
+    const shouldSuggestDeepScan = Boolean(
+      lastScanDiagnostics?.deepScanRecommended ||
+      lastScanDiagnostics?.quickScanLikelyIncomplete
+    );
+
+    return (
+      <View style={styles.coverageBanner}>
+        <View style={styles.coverageTop}>
+          <View style={[styles.coverageIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
+            <Zap size={18} color={theme.colors.primary} />
+          </View>
+          <View style={styles.coverageCopy}>
+            <Text style={styles.coverageTitle}>
+              {shouldSuggestDeepScan ? 'Quick scan może być niepełny' : 'Wynik wymaga potwierdzenia'}
+            </Text>
+            {!!lastScanDiagnostics?.scanReliabilityLevel && (
+              <Text style={styles.coverageMeta}>Wiarygodność skanu: {lastScanDiagnostics.scanReliabilityLevel}</Text>
+            )}
+          </View>
+        </View>
+        {!!note && <Text style={styles.coverageText}>{note}</Text>}
+        {shouldSuggestDeepScan && (
+          <TouchableOpacity
+            style={[styles.deepScanBtn, { backgroundColor: theme.colors.primary }]}
+            activeOpacity={0.84}
+            onPress={() => handleScan({ scanProfile: 'adaptive', dryRun: isDryRun })}
+            disabled={scanMutation.isPending}
+          >
+            <Search size={17} color={theme.colors.darkText} />
+            <Text style={styles.deepScanBtnText}>Uruchom dokładniejszy skan</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  };
+
+  const renderProductItemCard = (
+    item: EmailScanProductItem,
+    bucket: 'current' | 'review' | 'history' | 'price' | 'bill',
+    index: number
+  ) => {
+    const key = getProductItemKey(item, bucket, index);
+    const reviewedAction = locallyReviewedProductItems[key];
+    const title = getProductItemTitle(item);
+    const action = getProductItemAction(item);
+    const evidenceDate = formatProductDate(item);
+    const amount =
+      formatMaybeAmount(item.amount, item.currency) ||
+      formatMaybeAmount(item.currentAmount, item.currency) ||
+      formatMaybeAmount(item.promoAmount, item.currency);
+    const newAmount = formatMaybeAmount(item.newAmount, item.currency) || formatMaybeAmount(item.futureAmount, item.currency);
+
+    return (
+      <TouchableOpacity
+        key={key}
+        style={styles.productCard}
+        activeOpacity={0.86}
+        onPress={() => setSelectedProductReview({ item, bucket, key })}
+      >
+        <View style={styles.productTop}>
+          <View style={[
+            styles.productIcon,
+            bucket !== 'price' && bucket !== 'bill' && { backgroundColor: `${theme.colors.primary}22` },
+            bucket === 'price' && styles.productIconPrice,
+            bucket === 'bill' && styles.productIconBill,
+          ]}>
+            {bucket === 'price' ? (
+              <Tag size={19} color={vibrantTheme.colors.warning} />
+            ) : bucket === 'bill' ? (
+              <ReceiptText size={19} color={vibrantTheme.colors.cyan} />
+            ) : (
+              <Mail size={19} color={theme.colors.primary} />
+            )}
+          </View>
+          <View style={styles.productMain}>
+            <Text style={styles.productTitle} numberOfLines={1}>{title}</Text>
+            <Text style={styles.productMeta} numberOfLines={1}>
+              {[item.category, item.billingChannel, evidenceDate ? `dowód: ${evidenceDate}` : null].filter(Boolean).join(' · ')}
+            </Text>
+          </View>
+          {!!reviewedAction && (
+            <View style={styles.reviewedBadge}>
+              <Text style={styles.reviewedBadgeText}>{getDecisionLabel(reviewedAction)}</Text>
+            </View>
+          )}
+        </View>
+
+        {(amount || newAmount) && (
+          <View style={styles.amountStrip}>
+            {amount && (
+              <View>
+                <Text style={styles.amountLabel}>{bucket === 'price' ? 'Obecnie / wcześniej' : 'Kwota'}</Text>
+                <Text style={styles.amountText}>{amount}</Text>
+              </View>
+            )}
+            {newAmount && (
+              <View>
+                <Text style={styles.amountLabel}>{bucket === 'price' ? 'Nowa cena' : 'Docelowo'}</Text>
+                <Text style={[styles.amountText, styles.amountTextWarn]}>{newAmount}</Text>
+              </View>
+            )}
+          </View>
+        )}
+
+        {!!item.evidenceSnippet && (
+          <Text style={styles.snippet} numberOfLines={3}>{item.evidenceSnippet}</Text>
+        )}
+
+        {bucket === 'review' && (
+          <View style={styles.productActions}>
+            <TouchableOpacity style={[styles.productPrimaryAction, { backgroundColor: theme.colors.primary }]} onPress={() => markProductItemReviewed(key, 'nadal aktywne')}>
+              <CheckCircle size={17} color={theme.colors.darkText} />
+              <Text style={styles.productPrimaryActionText}>Nadal aktywne</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.productSecondaryAction} onPress={() => markProductItemReviewed(key, 'anulowane')}>
+              <Text style={styles.productSecondaryActionText}>Anulowane</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.productSecondaryAction} onPress={() => markProductItemReviewed(key, 'nie subskrypcja')}>
+              <Text style={styles.productSecondaryActionText}>Nie subskrypcja</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {bucket !== 'review' && (
+          <View style={styles.productFooter}>
+            <Text style={styles.productActionLabel}>Akcja: {action}</Text>
+            <TouchableOpacity style={styles.productMiniAction} onPress={() => markProductItemReviewed(key, 'sprawdzone')}>
+              <Text style={[styles.productMiniActionText, { color: theme.colors.primary }]}>Oznacz jako sprawdzone</Text>
+              <ChevronRight size={15} color={theme.colors.primary} />
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
+
+  const renderProductSection = (
+    title: string,
+    caption: string,
+    icon: React.ComponentType<{ size?: number; color?: string }>,
+    items: EmailScanProductItem[],
+    bucket: 'current' | 'review' | 'history' | 'price' | 'bill'
+  ) => {
+    if (items.length === 0) return null;
+    const Icon = icon;
+
+    return (
+      <View style={styles.productSection}>
+        <View style={styles.productSectionHeader}>
+          <View style={styles.productSectionTitleRow}>
+            <View style={[styles.productSectionIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
+              <Icon size={18} color={theme.colors.primary} />
+            </View>
+            <View style={styles.productSectionCopy}>
+              <Text style={styles.productSectionTitle}>{title}</Text>
+              <Text style={styles.productSectionCaption}>{caption}</Text>
+            </View>
+          </View>
+          <Text style={[styles.productSectionCount, { color: theme.colors.primary }]}>{items.length}</Text>
+        </View>
+        {items.map((item, index) => renderProductItemCard(item, bucket, index))}
+      </View>
+    );
+  };
+
+  const renderProductResult = () => {
+    if (!lastScanProductResult) return null;
+
+    const { scanSummary } = lastScanProductResult;
+    const reviewItems = [
+      ...lastScanProductResult.needsReviewSubscriptions.map((item, index) => ({
+        item,
+        bucket: 'review' as ProductBucket,
+        key: getProductItemKey(item, 'review', index),
+      })),
+      ...lastScanProductResult.priceChanges.map((item, index) => ({
+        item,
+        bucket: 'price' as ProductBucket,
+        key: getProductItemKey(item, 'price', index),
+      })),
+      ...lastScanProductResult.billsOrUtilities.map((item, index) => ({
+        item,
+        bucket: 'bill' as ProductBucket,
+        key: getProductItemKey(item, 'bill', index),
+      })),
+    ];
+    const reviewedCount = reviewItems.filter((entry) => locallyReviewedProductItems[entry.key]).length;
+    const progressPercent = reviewItems.length > 0 ? Math.round((reviewedCount / reviewItems.length) * 100) : 0;
+    const hasAnyProductFinding =
+      lastScanProductResult.currentSubscriptions.length > 0 ||
+      lastScanProductResult.needsReviewSubscriptions.length > 0 ||
+      lastScanProductResult.historicalSubscriptions.length > 0 ||
+      lastScanProductResult.priceChanges.length > 0 ||
+      lastScanProductResult.billsOrUtilities.length > 0;
+    const pendingCount = Math.max(0, reviewItems.length - reviewedCount);
+    const productSections = [
+      {
+        bucket: 'current' as ProductBucket,
+        label: 'Aktywne',
+        title: 'Aktywne subskrypcje',
+        caption: 'Świeże dowody sugerują, że te usługi są obecnie aktywne.',
+        icon: CheckCircle,
+        items: lastScanProductResult.currentSubscriptions,
+      },
+      {
+        bucket: 'review' as ProductBucket,
+        label: 'Review',
+        title: 'Potwierdź, czy nadal aktywne',
+        caption: 'Mocne historyczne dowody, ale za stare, żeby udawać pewność.',
+        icon: History,
+        items: lastScanProductResult.needsReviewSubscriptions,
+      },
+      {
+        bucket: 'price' as ProductBucket,
+        label: 'Ceny',
+        title: 'Zmiany cen',
+        caption: 'Alerty o nowych cenach, promocjach lub wzroście kosztu planu.',
+        icon: Tag,
+        items: lastScanProductResult.priceChanges,
+      },
+      {
+        bucket: 'bill' as ProductBucket,
+        label: 'Rachunki',
+        title: 'Rachunki i usługi',
+        caption: 'Formalne rachunki i utility bills pokazane osobno od subskrypcji.',
+        icon: FileText,
+        items: lastScanProductResult.billsOrUtilities,
+      },
+      {
+        bucket: 'history' as ProductBucket,
+        label: 'Historia',
+        title: 'Historia',
+        caption: 'Archiwalne lub słabsze sygnały, które mogą pomóc w audycie.',
+        icon: Inbox,
+        items: lastScanProductResult.historicalSubscriptions,
+      },
+    ];
+    const visibleSections = productFilter === 'all'
+      ? productSections
+      : productSections.filter((section) => section.bucket === productFilter);
+    const filterItems = [
+      { id: 'all' as ProductFilter, label: 'Wszystko', count: productSections.reduce((sum, section) => sum + section.items.length, 0) },
+      ...productSections.map((section) => ({ id: section.bucket, label: section.label, count: section.items.length })),
+    ].filter((item) => item.id === 'all' || item.count > 0);
+
+    return (
+      <View style={styles.productResultWrap}>
+        <View style={styles.productHero}>
+          <View style={styles.productHeroTop}>
+            <View style={[styles.productHeroIcon, { backgroundColor: `${theme.colors.primary}28` }]}>
+              <ShieldCheck size={24} color="#FFFFFF" />
+            </View>
+            <View style={[styles.productModePill, { backgroundColor: `${theme.colors.primary}22`, borderColor: `${theme.colors.primary}44` }]}>
+              <Text style={[styles.productModePillText, { color: theme.colors.primary }]}>{scanSummary.recommendedDefaultMode || 'review'}</Text>
+            </View>
+          </View>
+          <Text style={styles.productHeroTitle}>
+            {scanSummary.recommendedDefaultMode === 'review'
+              ? 'Znaleźliśmy rzeczy do potwierdzenia'
+              : 'Wynik skanu skrzynki'}
+          </Text>
+          <Text style={styles.productHeroText}>
+            {scanSummary.recommendedUserMessage ||
+              'Wynik jest podzielony na aktywne subskrypcje, rzeczy do potwierdzenia, zmiany cen oraz rachunki.'}
+          </Text>
+        </View>
+
+        {renderCoverageBanner()}
+
+        {hasAnyProductFinding && (
+          <View style={styles.reviewCockpitCard}>
+            <View style={styles.reviewCockpitHeader}>
+              <View>
+                <Text style={styles.reviewCockpitEyebrow}>Kolejka decyzji</Text>
+                <Text style={styles.reviewCockpitTitle}>
+                  {pendingCount > 0 ? `${pendingCount} rzeczy czeka na decyzję` : 'Wszystko lokalnie sprawdzone'}
+                </Text>
+              </View>
+              <View style={[styles.reviewCockpitScore, { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
+                <Text style={[styles.reviewCockpitScoreValue, { color: theme.colors.primary }]}>{reviewedCount}</Text>
+                <Text style={styles.reviewCockpitScoreLabel}>gotowe</Text>
+              </View>
+            </View>
+            <View style={styles.reviewStatsGrid}>
+              <View style={styles.reviewStatBox}>
+                <Text style={styles.reviewStatValue}>{lastScanProductResult.needsReviewSubscriptions.length}</Text>
+                <Text style={styles.reviewStatLabel}>do potwierdzenia</Text>
+              </View>
+              <View style={styles.reviewStatBox}>
+                <Text style={styles.reviewStatValue}>{lastScanProductResult.priceChanges.length}</Text>
+                <Text style={styles.reviewStatLabel}>zmian cen</Text>
+              </View>
+              <View style={styles.reviewStatBox}>
+                <Text style={styles.reviewStatValue}>{lastScanProductResult.billsOrUtilities.length}</Text>
+                <Text style={styles.reviewStatLabel}>rachunków</Text>
+              </View>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              nestedScrollEnabled
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={styles.productFilterRow}
+            >
+              {filterItems.map((item) => {
+                const isActive = productFilter === item.id;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    style={[styles.productFilterChip, isActive && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]}
+                    onPress={() => setProductFilter(item.id)}
+                    activeOpacity={0.84}
+                  >
+                    <Text style={[styles.productFilterText, isActive && { color: theme.colors.darkText }]}>
+                      {item.label}
+                    </Text>
+                    <Text style={[styles.productFilterCount, isActive && { color: theme.colors.darkText }]}>
+                      {item.count}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          </View>
+        )}
+
+        {reviewItems.length > 0 && (
+          <View style={styles.reviewProgressCard}>
+            <View style={styles.reviewProgressTop}>
+              <View>
+                <Text style={styles.reviewProgressTitle}>Postęp review</Text>
+                <Text style={styles.reviewProgressText}>
+                  {reviewedCount}/{reviewItems.length} decyzji lokalnie oznaczonych
+                </Text>
+              </View>
+              <Text style={[styles.reviewProgressPercent, { color: theme.colors.primary }]}>{progressPercent}%</Text>
+            </View>
+            <View style={styles.reviewProgressTrack}>
+              <View style={[styles.reviewProgressFill, { width: `${progressPercent}%`, backgroundColor: theme.colors.primary }]} />
+            </View>
+            <Text style={styles.reviewProgressHint}>
+              Decyzje są na razie lokalne. Front przygotowuje UX i przyszły payload review bez zmian w backendzie.
+            </Text>
+          </View>
+        )}
+
+        {!hasAnyProductFinding && (
+          <View style={styles.emptyState}>
+            <Inbox size={32} color="#94A3B8" />
+            <Text style={styles.emptyTitle}>Brak pewnych wyników</Text>
+            <Text style={styles.emptyText}>
+              Nie traktujemy tego jako dowodu, że nie masz subskrypcji. Jeśli skan był szybki, uruchom dokładniejszy profil.
+            </Text>
+          </View>
+        )}
+        {visibleSections.map((section) =>
+          renderProductSection(
+            section.title,
+            section.caption,
+            section.icon,
+            section.items,
+            section.bucket
+          )
+        )}
+      </View>
+    );
+  };
+
+  const renderProductReviewModal = () => {
+    const review = selectedProductReview;
+    if (!review) return null;
+
+    const { item, bucket, key } = review;
+    const title = getProductItemTitle(item);
+    const action = getProductItemAction(item);
+    const evidenceDate = formatProductDate(item);
+    const amount =
+      formatMaybeAmount(item.amount, item.currency) ||
+      formatMaybeAmount(item.currentAmount, item.currency) ||
+      formatMaybeAmount(item.promoAmount, item.currency);
+    const newAmount = formatMaybeAmount(item.newAmount, item.currency) || formatMaybeAmount(item.futureAmount, item.currency);
+    const isReviewBucket = bucket === 'review';
+
+    return (
+      <Modal visible transparent animationType="slide">
+        <View style={styles.productModalOverlay}>
+          <View style={styles.productModal}>
+            <View style={styles.productModalHandle} />
+            <View style={styles.productModalHeader}>
+              <View style={styles.productModalTitleBlock}>
+                <Text style={styles.productModalEyebrow}>
+                  {bucket === 'price' ? 'Zmiana ceny' : bucket === 'bill' ? 'Rachunek / utility' : 'Review item'}
+                </Text>
+                <Text style={styles.productModalTitle}>{title}</Text>
+              </View>
+              <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedProductReview(null)}>
+                <X size={21} color={vibrantTheme.colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode="on-drag"
+              scrollEventThrottle={16}
+              decelerationRate="fast"
+            >
+              <View style={styles.productModalInfoGrid}>
+                <View style={styles.productModalInfo}>
+                  <Text style={styles.productModalInfoLabel}>Kategoria</Text>
+                  <Text style={styles.productModalInfoValue}>{item.category || 'brak'}</Text>
+                </View>
+                <View style={styles.productModalInfo}>
+                  <Text style={styles.productModalInfoLabel}>Akcja</Text>
+                  <Text style={styles.productModalInfoValue}>{action}</Text>
+                </View>
+                <View style={styles.productModalInfo}>
+                  <Text style={styles.productModalInfoLabel}>Dowód</Text>
+                  <Text style={styles.productModalInfoValue}>{evidenceDate || 'historyczny'}</Text>
+                </View>
+                <View style={styles.productModalInfo}>
+                  <Text style={styles.productModalInfoLabel}>Kanał</Text>
+                  <Text style={styles.productModalInfoValue}>{item.billingChannel || item.provider || 'email'}</Text>
+                </View>
+              </View>
+
+              {(amount || newAmount) && (
+                <View style={styles.productModalAmountBox}>
+                  {amount && (
+                    <View>
+                      <Text style={styles.amountLabel}>{bucket === 'price' ? 'Obecnie / wcześniej' : 'Kwota'}</Text>
+                      <Text style={styles.productModalAmount}>{amount}</Text>
+                    </View>
+                  )}
+                  {newAmount && (
+                    <View>
+                      <Text style={styles.amountLabel}>{bucket === 'price' ? 'Nowa cena' : 'Docelowo'}</Text>
+                      <Text style={[styles.productModalAmount, styles.amountTextWarn]}>{newAmount}</Text>
+                    </View>
+                  )}
+                </View>
+              )}
+
+              <View style={styles.productModalEvidence}>
+                <Text style={styles.evidenceLabel}>Dlaczego to pokazujemy?</Text>
+                <Text style={styles.evidenceText}>
+                  {item.evidenceSnippet ||
+                    'Backend sklasyfikował ten sygnał do osobnego bucketu produktowego. Użytkownik powinien go potwierdzić przed dodaniem do aktywnych subskrypcji.'}
+                </Text>
+              </View>
+
+              <View style={[styles.futurePayloadBox, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
+                <Text style={[styles.futurePayloadTitle, { color: theme.colors.primary }]}>Przyszły payload dla backendu</Text>
+                <Text style={styles.futurePayloadText}>
+                  itemId: {String(item.id || item.sourceMessageId || key)}{'\n'}
+                  bucket: {bucket}{'\n'}
+                  primaryAction: {action}{'\n'}
+                  reviewedAt: client timestamp
+                </Text>
+              </View>
+
+              {isReviewBucket ? (
+                <View style={styles.productModalActions}>
+                  <TouchableOpacity style={[styles.productModalPrimary, { backgroundColor: theme.colors.primary }]} onPress={() => handleProductReviewAction(key, 'nadal aktywne')}>
+                    <CheckCircle size={18} color={theme.colors.darkText} />
+                    <Text style={styles.productModalPrimaryText}>Nadal aktywne</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.productModalSecondary} onPress={() => handleProductReviewAction(key, 'anulowane')}>
+                    <Text style={styles.productModalSecondaryText}>Anulowane</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.productModalSecondary} onPress={() => handleProductReviewAction(key, 'nie subskrypcja')}>
+                    <Text style={styles.productModalSecondaryText}>Nie subskrypcja</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.productModalGhost} onPress={() => handleProductReviewAction(key, 'przypomnij później')}>
+                    <Text style={styles.productModalGhostText}>Przypomnij później</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.productModalActions}>
+                  <TouchableOpacity style={[styles.productModalPrimary, { backgroundColor: theme.colors.primary }]} onPress={() => handleProductReviewAction(key, 'sprawdzone')}>
+                    <CheckCircle size={18} color={theme.colors.darkText} />
+                    <Text style={styles.productModalPrimaryText}>Oznacz jako sprawdzone</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.productModalGhost} onPress={() => handleProductReviewAction(key, 'ignoruj')}>
+                    <Text style={styles.productModalGhostText}>Ignoruj</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     );
   };
 
@@ -429,7 +1144,13 @@ export const EmailScanScreen = () => {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode="on-drag"
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+          >
             {selectedDetection?.evidenceSnippet && (
               <View style={styles.evidenceBox}>
                 <Text style={styles.evidenceLabel}>Fragment dowodu</Text>
@@ -455,10 +1176,10 @@ export const EmailScanScreen = () => {
                 {CURRENCIES.map((item) => (
                   <TouchableOpacity
                     key={item}
-                    style={[styles.pill, currency === item && styles.pillActive]}
+                    style={[styles.pill, currency === item && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                     onPress={() => setCurrency(item)}
                   >
-                    <Text style={[styles.pillText, currency === item && styles.pillTextActive]}>{item}</Text>
+                    <Text style={[styles.pillText, currency === item && { color: theme.colors.primary }]}>{item}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -466,14 +1187,14 @@ export const EmailScanScreen = () => {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Cykl</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pillRow}>
                 {CYCLE_OPTIONS.map((item) => (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.pill, cycle === item.id && styles.pillActive]}
+                    style={[styles.pill, cycle === item.id && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                     onPress={() => setCycle(item.id)}
                   >
-                    <Text style={[styles.pillText, cycle === item.id && styles.pillTextActive]}>{item.label}</Text>
+                    <Text style={[styles.pillText, cycle === item.id && { color: theme.colors.primary }]}>{item.label}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -482,7 +1203,7 @@ export const EmailScanScreen = () => {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Następna płatność</Text>
               <TouchableOpacity style={styles.dateButton} onPress={() => setShowNextPicker(true)}>
-                <Clock size={18} color="#0B6B3A" />
+                <Clock size={18} color={theme.colors.primary} />
                 <Text style={styles.dateButtonText}>{formatDate(nextPaymentDate.toISOString())}</Text>
               </TouchableOpacity>
               {showNextPicker && (
@@ -500,14 +1221,14 @@ export const EmailScanScreen = () => {
 
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Kategoria</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.pillRow}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={styles.pillRow}>
                 {CATEGORY_OPTIONS.map((item) => (
                   <TouchableOpacity
                     key={item.id}
-                    style={[styles.pill, category === item.id && styles.pillActive]}
+                    style={[styles.pill, category === item.id && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                     onPress={() => setCategory(item.id)}
                   >
-                    <Text style={[styles.pillText, category === item.id && styles.pillTextActive]}>{item.label}</Text>
+                    <Text style={[styles.pillText, category === item.id && { color: theme.colors.primary }]}>{item.label}</Text>
                   </TouchableOpacity>
                 ))}
               </ScrollView>
@@ -533,7 +1254,7 @@ export const EmailScanScreen = () => {
             </View>
 
             <TouchableOpacity
-              style={[styles.acceptBtn, (!canAccept || acceptMutation.isPending) && styles.acceptBtnDisabled]}
+              style={[styles.acceptBtn, { backgroundColor: theme.colors.primary }, (!canAccept || acceptMutation.isPending) && styles.acceptBtnDisabled]}
               onPress={handleAccept}
               disabled={acceptMutation.isPending}
             >
@@ -553,24 +1274,29 @@ export const EmailScanScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={24} color={vibrantTheme.colors.text} />
+          <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Email Scan</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Email Scan</Text>
         <TouchableOpacity onPress={refresh} style={styles.iconBtn}>
-          <RefreshCw size={20} color="#0B6B3A" />
+          <RefreshCw size={20} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor="#0B6B3A" />}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        nestedScrollEnabled
+        scrollEventThrottle={16}
+        decelerationRate="fast"
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={refresh} tintColor={theme.colors.primary} />}
       >
-        <View style={styles.heroCard}>
-          <View style={styles.heroIcon}>
+        <View style={[styles.heroCard, { backgroundColor: theme.colors.cardStrong, borderColor: theme.colors.borderStrong, shadowColor: theme.colors.primary }]}>
+          <View style={[styles.heroIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
             <Mail size={26} color="#FFFFFF" />
           </View>
           <Text style={styles.heroTitle}>Wykrywanie z Gmaila</Text>
@@ -584,15 +1310,15 @@ export const EmailScanScreen = () => {
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <Text style={styles.cardTitle}>Status</Text>
-            <View style={[styles.statusBadge, isConnected ? styles.statusBadgeOk : styles.statusBadgeMuted]}>
-              <Text style={[styles.statusBadgeText, isConnected ? styles.statusBadgeTextOk : styles.statusBadgeTextMuted]}>
+            <View style={[styles.statusBadge, isConnected ? { backgroundColor: `${theme.colors.primary}22` } : styles.statusBadgeMuted]}>
+              <Text style={[styles.statusBadgeText, isConnected ? { color: theme.colors.primary } : styles.statusBadgeTextMuted]}>
                 {isConnected ? 'Gmail połączony' : 'Niepołączony'}
               </Text>
             </View>
           </View>
 
           {statusQuery.isLoading ? (
-            <ActivityIndicator color="#0B6B3A" style={{ marginVertical: 20 }} />
+            <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: 20 }} />
           ) : (
             <>
               <View style={styles.statGrid}>
@@ -614,7 +1340,7 @@ export const EmailScanScreen = () => {
           )}
 
           {!isConnected ? (
-            <TouchableOpacity style={styles.connectBtn} onPress={handleConnect} disabled={authUrlMutation.isPending}>
+            <TouchableOpacity style={[styles.connectBtn, { backgroundColor: theme.colors.primary }]} onPress={handleConnect} disabled={authUrlMutation.isPending}>
               {authUrlMutation.isPending ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
@@ -627,9 +1353,9 @@ export const EmailScanScreen = () => {
           ) : (
             <>
               {scanMutation.isPending && (
-              <View style={styles.scanningState}>
-                <View style={styles.scanningIcon}>
-                  <ActivityIndicator color="#0B6B3A" />
+              <View style={[styles.scanningState, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
+                <View style={[styles.scanningIcon, { backgroundColor: theme.colors.cardStrong }]}>
+                  <ActivityIndicator color={theme.colors.primary} />
                 </View>
                 <View style={styles.scanningCopy}>
                   <Text style={styles.scanningTitle}>Szukam Twoich subskrypcji...</Text>
@@ -637,7 +1363,7 @@ export const EmailScanScreen = () => {
                 </View>
               </View>
               )}
-              <TouchableOpacity style={styles.scanBtn} onPress={() => handleScan()} disabled={scanMutation.isPending}>
+              <TouchableOpacity style={[styles.scanBtn, { backgroundColor: theme.colors.primary }]} onPress={() => handleScan()} disabled={scanMutation.isPending}>
                 {scanMutation.isPending ? (
                   <ActivityIndicator color="#FFFFFF" />
                 ) : (
@@ -653,16 +1379,20 @@ export const EmailScanScreen = () => {
 
         {isConnected && renderAdvancedOptions()}
 
-        {renderDryRunResults()}
+        {renderReviewContent ? renderDryRunResults() : null}
 
+        {renderReviewContent && shouldShowProductResult && renderProductResult()}
+
+        {renderReviewContent && !shouldShowProductResult && (
+        <>
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Kandydatury do sprawdzenia</Text>
-          <Text style={styles.sectionCounter}>{detectionsQuery.data?.count ?? 0}</Text>
+          <Text style={[styles.sectionCounter, { color: theme.colors.primary }]}>{detectionsQuery.data?.count ?? 0}</Text>
         </View>
 
         {detectionsQuery.isLoading ? (
           <View style={styles.emptyState}>
-            <ActivityIndicator color="#0B6B3A" />
+            <ActivityIndicator color={theme.colors.primary} />
           </View>
         ) : detections.length === 0 ? (
           <View style={styles.emptyState}>
@@ -675,9 +1405,19 @@ export const EmailScanScreen = () => {
         ) : (
           detections.map((item) => renderDetectionCard(item))
         )}
+        </>
+        )}
+        {!renderReviewContent && (
+          <View style={styles.emptyState}>
+            <ActivityIndicator color={theme.colors.primary} />
+            <Text style={styles.emptyTitle}>Przygotowuję wyniki</Text>
+            <Text style={styles.emptyText}>Najpierw ładujemy główne akcje, żeby ekran szybciej reagował na gesty.</Text>
+          </View>
+        )}
       </ScrollView>
 
       {renderReviewModal()}
+      {renderProductReviewModal()}
     </SafeAreaView>
   );
 };
@@ -711,11 +1451,11 @@ const styles = StyleSheet.create({
   heroTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF', marginBottom: 8 },
   heroText: { fontSize: 14, color: vibrantTheme.colors.textMuted, lineHeight: 20 },
   privacyBox: {
-    backgroundColor: 'rgba(32,246,181,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 20,
     padding: 16,
     borderWidth: 1,
-    borderColor: 'rgba(32,246,181,0.22)',
+    borderColor: 'rgba(255,255,255,0.22)',
     marginBottom: 16,
   },
   privacyHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
@@ -737,7 +1477,7 @@ const styles = StyleSheet.create({
   statusHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
   cardTitle: { fontSize: 17, fontWeight: '900', color: vibrantTheme.colors.text },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10 },
-  statusBadgeOk: { backgroundColor: 'rgba(32,246,181,0.14)' },
+  statusBadgeOk: { backgroundColor: 'rgba(255,255,255,0.14)' },
   statusBadgeMuted: { backgroundColor: 'rgba(255,255,255,0.08)' },
   statusBadgeText: { fontSize: 12, fontWeight: '800' },
   statusBadgeTextOk: { color: vibrantTheme.colors.primary },
@@ -768,12 +1508,12 @@ const styles = StyleSheet.create({
   scanningState: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(32,246,181,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 18,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: 'rgba(32,246,181,0.22)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   scanningIcon: {
     width: 42,
@@ -801,6 +1541,377 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 16, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 12 },
   emptyText: { fontSize: 13, color: vibrantTheme.colors.textMuted, textAlign: 'center', lineHeight: 19, marginTop: 6 },
+  productResultWrap: { marginTop: 2 },
+  productHero: {
+    backgroundColor: vibrantTheme.colors.cardStrong,
+    borderRadius: 28,
+    padding: 20,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.borderStrong,
+  },
+  productHeroTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 },
+  productHeroIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 17,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productModePill: {
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  productModePillText: { color: vibrantTheme.colors.primary, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
+  productHeroTitle: { color: vibrantTheme.colors.text, fontSize: 22, fontWeight: '900', marginBottom: 8 },
+  productHeroText: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 20, fontWeight: '600' },
+  coverageBanner: {
+    backgroundColor: 'rgba(251,191,36,0.12)',
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(251,191,36,0.28)',
+  },
+  coverageTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 10 },
+  coverageIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  coverageCopy: { flex: 1 },
+  coverageTitle: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900' },
+  coverageMeta: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 2 },
+  coverageText: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, fontWeight: '600' },
+  deepScanBtn: {
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: vibrantTheme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  deepScanBtnText: { color: vibrantTheme.colors.darkText, fontSize: 13, fontWeight: '900' },
+  reviewProgressCard: {
+    backgroundColor: vibrantTheme.colors.card,
+    borderRadius: 22,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  reviewProgressTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 12,
+  },
+  reviewProgressTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
+  reviewProgressText: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', marginTop: 3 },
+  reviewProgressPercent: { color: vibrantTheme.colors.primary, fontSize: 20, fontWeight: '900' },
+  reviewProgressTrack: {
+    height: 10,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    overflow: 'hidden',
+    marginBottom: 10,
+  },
+  reviewProgressFill: { height: '100%', borderRadius: 999, backgroundColor: vibrantTheme.colors.primary },
+  reviewProgressHint: { color: vibrantTheme.colors.textSubtle, fontSize: 11, lineHeight: 16, fontWeight: '700' },
+  reviewCockpitCard: {
+    backgroundColor: vibrantTheme.colors.cardStrong,
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.borderStrong,
+  },
+  reviewCockpitHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: 14,
+    marginBottom: 14,
+  },
+  reviewCockpitEyebrow: {
+    color: vibrantTheme.colors.textSubtle,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  reviewCockpitTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 23,
+  },
+  reviewCockpitScore: {
+    minWidth: 62,
+    borderRadius: 18,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+    alignItems: 'center',
+  },
+  reviewCockpitScoreValue: { color: vibrantTheme.colors.primary, fontSize: 20, fontWeight: '900' },
+  reviewCockpitScoreLabel: { color: vibrantTheme.colors.textMuted, fontSize: 10, fontWeight: '800', marginTop: 1 },
+  reviewStatsGrid: { flexDirection: 'row', gap: 9, marginBottom: 14 },
+  reviewStatBox: {
+    flex: 1,
+    minHeight: 66,
+    borderRadius: 18,
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    justifyContent: 'space-between',
+  },
+  reviewStatValue: { color: vibrantTheme.colors.text, fontSize: 20, fontWeight: '900' },
+  reviewStatLabel: { color: vibrantTheme.colors.textMuted, fontSize: 10, lineHeight: 13, fontWeight: '800' },
+  productFilterRow: { gap: 8, paddingRight: 4 },
+  productFilterChip: {
+    minHeight: 38,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 7,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  productFilterChipActive: {
+    backgroundColor: vibrantTheme.colors.primary,
+    borderColor: vibrantTheme.colors.primary,
+  },
+  productFilterText: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '900' },
+  productFilterTextActive: { color: vibrantTheme.colors.darkText },
+  productFilterCount: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    overflow: 'hidden',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: vibrantTheme.colors.text,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  productFilterCountActive: {
+    backgroundColor: 'rgba(0,0,0,0.14)',
+    color: vibrantTheme.colors.darkText,
+  },
+  productSection: { marginBottom: 18 },
+  productSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  productSectionTitleRow: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
+  productSectionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  productSectionCopy: { flex: 1 },
+  productSectionTitle: { color: vibrantTheme.colors.text, fontSize: 16, fontWeight: '900' },
+  productSectionCaption: { color: vibrantTheme.colors.textMuted, fontSize: 12, lineHeight: 17, marginTop: 2 },
+  productSectionCount: { color: vibrantTheme.colors.primary, fontSize: 15, fontWeight: '900' },
+  productCard: {
+    backgroundColor: vibrantTheme.colors.card,
+    borderRadius: 22,
+    padding: 15,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  productTop: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
+  productIcon: {
+    width: 42,
+    height: 42,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 11,
+  },
+  productIconPrice: { backgroundColor: 'rgba(251,191,36,0.12)' },
+  productIconBill: { backgroundColor: 'rgba(34,211,238,0.12)' },
+  productMain: { flex: 1 },
+  productTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
+  productMeta: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 3 },
+  reviewedBadge: {
+    backgroundColor: 'rgba(52,211,153,0.12)',
+    borderRadius: 999,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderWidth: 1,
+    borderColor: 'rgba(52,211,153,0.22)',
+  },
+  reviewedBadgeText: { color: vibrantTheme.colors.success, fontSize: 10, fontWeight: '900' },
+  amountStrip: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 16,
+    padding: 12,
+    marginBottom: 10,
+  },
+  amountLabel: { color: vibrantTheme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  amountText: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 },
+  amountTextWarn: { color: vibrantTheme.colors.warning },
+  productActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
+  productPrimaryAction: {
+    flexGrow: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: vibrantTheme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 7,
+    paddingHorizontal: 12,
+  },
+  productPrimaryActionText: { color: vibrantTheme.colors.darkText, fontSize: 12, fontWeight: '900' },
+  productSecondaryAction: {
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  productSecondaryActionText: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '900' },
+  productFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12 },
+  productActionLabel: { flex: 1, color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700' },
+  productMiniAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  productMiniActionText: { color: vibrantTheme.colors.primary, fontSize: 12, fontWeight: '900' },
+  productModalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    backgroundColor: 'rgba(0,0,0,0.58)',
+  },
+  productModal: {
+    maxHeight: '88%',
+    backgroundColor: vibrantTheme.colors.bg2,
+    borderTopLeftRadius: 30,
+    borderTopRightRadius: 30,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  productModalHandle: {
+    width: 44,
+    height: 5,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+    alignSelf: 'center',
+    marginBottom: 16,
+  },
+  productModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+  },
+  productModalTitleBlock: { flex: 1 },
+  productModalEyebrow: {
+    color: vibrantTheme.colors.primary,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  productModalTitle: { color: vibrantTheme.colors.text, fontSize: 22, fontWeight: '900', letterSpacing: 0 },
+  productModalInfoGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
+  productModalInfo: {
+    width: '48%',
+    minHeight: 76,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    padding: 12,
+    justifyContent: 'space-between',
+  },
+  productModalInfoLabel: { color: vibrantTheme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
+  productModalInfoValue: { color: vibrantTheme.colors.text, fontSize: 13, fontWeight: '900' },
+  productModalAmountBox: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 20,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    marginBottom: 14,
+  },
+  productModalAmount: { color: vibrantTheme.colors.text, fontSize: 19, fontWeight: '900', marginTop: 4 },
+  productModalEvidence: {
+    backgroundColor: vibrantTheme.colors.card,
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    marginBottom: 14,
+  },
+  futurePayloadBox: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    marginBottom: 16,
+  },
+  futurePayloadTitle: { color: vibrantTheme.colors.primary, fontSize: 13, fontWeight: '900', marginBottom: 6 },
+  futurePayloadText: { color: vibrantTheme.colors.textMuted, fontSize: 12, lineHeight: 18, fontWeight: '700' },
+  productModalActions: { gap: 10, paddingBottom: 10 },
+  productModalPrimary: {
+    minHeight: 50,
+    borderRadius: 16,
+    backgroundColor: vibrantTheme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  productModalPrimaryText: { color: vibrantTheme.colors.darkText, fontSize: 14, fontWeight: '900' },
+  productModalSecondary: {
+    minHeight: 48,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  productModalSecondaryText: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900' },
+  productModalGhost: { minHeight: 46, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  productModalGhostText: { color: vibrantTheme.colors.textMuted, fontSize: 13, fontWeight: '900' },
   detectionCard: {
     backgroundColor: vibrantTheme.colors.card,
     borderRadius: 22,
@@ -819,7 +1930,7 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 14,
-    backgroundColor: 'rgba(32,246,181,0.13)',
+    backgroundColor: 'rgba(255,255,255,0.13)',
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 12,
@@ -885,7 +1996,7 @@ const styles = StyleSheet.create({
   notesInput: { minHeight: 78, paddingTop: 12, textAlignVertical: 'top' },
   pillRow: { flexDirection: 'row', gap: 8, paddingRight: 8 },
   pill: { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  pillActive: { backgroundColor: 'rgba(32,246,181,0.16)', borderWidth: 1, borderColor: vibrantTheme.colors.primary },
+  pillActive: { backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: vibrantTheme.colors.primary },
   pillText: { fontSize: 13, fontWeight: '800', color: vibrantTheme.colors.textMuted },
   pillTextActive: { color: vibrantTheme.colors.primary },
   dateButton: {
@@ -980,7 +2091,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: 'rgba(32,246,181,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 14,
     paddingVertical: 12,
     marginTop: 8,
@@ -990,13 +2101,28 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     color: vibrantTheme.colors.primary,
   },
+  demoResultBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: vibrantTheme.colors.primary,
+    borderRadius: 14,
+    paddingVertical: 12,
+    marginTop: 10,
+  },
+  demoResultBtnText: {
+    fontSize: 13,
+    fontWeight: '900',
+    color: vibrantTheme.colors.darkText,
+  },
   dryRunSection: {
-    backgroundColor: 'rgba(32,246,181,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 24,
     padding: 16,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(32,246,181,0.22)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
   dryRunHeader: {
     flexDirection: 'row',
@@ -1026,7 +2152,7 @@ const styles = StyleSheet.create({
   },
   dryRunDivider: {
     height: 1,
-    backgroundColor: 'rgba(32,246,181,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.2)',
     marginTop: 16,
   },
   previewBadge: {

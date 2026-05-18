@@ -39,11 +39,13 @@ import { useSubscriptionCancelGuide } from '../hooks/useSubscriptionCancelGuide'
 import { useCancelGuideRequest } from '../hooks/useCancelGuideRequest';
 import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'SubscriptionDetail'>>();
+  const { theme } = useTheme();
   const { id } = route.params;
 
   const { data: sub, isLoading: isSubLoading } = useSubscription(id);
@@ -63,9 +65,9 @@ export const SubscriptionDetailScreen = () => {
 
   if (isLoading || !sub) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={vibrantTheme.colors.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={theme.colors.text} /></TouchableOpacity>
         </View>
         <View style={{ padding: 20 }}>
           <View style={{ alignItems: 'center', marginBottom: 30 }}>
@@ -73,7 +75,7 @@ export const SubscriptionDetailScreen = () => {
             <View style={{ width: 150, height: 24, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 8 }} />
             <View style={{ width: 100, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
           </View>
-          <View style={{ height: 200, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 20 }} />
+          <View style={{ height: 200, backgroundColor: theme.colors.card, borderRadius: 24, padding: 20 }} />
         </View>
       </SafeAreaView>
     );
@@ -149,7 +151,7 @@ export const SubscriptionDetailScreen = () => {
     }
     if (sub.isTrial) return { label: 'Trial', color: vibrantTheme.colors.warning, bg: 'rgba(251,191,36,0.16)' };
     if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: vibrantTheme.colors.warning, bg: 'rgba(251,191,36,0.16)' };
-    return { label: 'Aktywna', color: vibrantTheme.colors.primary, bg: 'rgba(32,246,181,0.16)' };
+    return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}24` };
   })();
 
   const cancelReadiness = (() => {
@@ -167,8 +169,8 @@ export const SubscriptionDetailScreen = () => {
         title: 'Instrukcja anulowania gotowa',
         desc: 'Możesz przejść przez Cancel Assistant i zamknąć usługę krok po kroku.',
         icon: ShieldCheck,
-        color: vibrantTheme.colors.primary,
-        bg: 'rgba(32,246,181,0.14)',
+        color: theme.colors.primary,
+        bg: `${theme.colors.primary}22`,
       };
     }
     if (sub.cancelUrl) {
@@ -191,24 +193,24 @@ export const SubscriptionDetailScreen = () => {
   const CancelReadinessIcon = cancelReadiness.icon;
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.glowTop} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.glowTop, { backgroundColor: `${theme.colors.primary}29` }]} />
       <View style={styles.glowBottom} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={vibrantTheme.colors.text} />
+        <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerEyebrow}>Subskrypcja</Text>
           <Text style={styles.headerTitle}>Szczegóły planu</Text>
         </View>
-        <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}>
-          <Edit size={20} color={vibrantTheme.colors.primary} />
+        <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}>
+          <Edit size={20} color={theme.colors.primary} />
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.heroCard}>
+        <LinearGradient colors={theme.gradients.hero} style={[styles.heroCard, { shadowColor: theme.colors.primary }]}>
           <View style={styles.heroTopRow}>
             <View style={styles.logoContainer}>
               <Text style={styles.logoText}>{sub.name.charAt(0)}</Text>
@@ -237,8 +239,8 @@ export const SubscriptionDetailScreen = () => {
 
         <View style={styles.actionsRow}>
           {sub.status !== 'canceled' && (
-            <TouchableOpacity style={styles.actionBtn} onPress={handlePay} disabled={payMutation.isPending}>
-              {payMutation.isPending ? <ActivityIndicator size="small" color={vibrantTheme.colors.darkText} /> : <CheckCircle size={20} color={vibrantTheme.colors.darkText} />}
+            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]} onPress={handlePay} disabled={payMutation.isPending}>
+              {payMutation.isPending ? <ActivityIndicator size="small" color={theme.colors.darkText} /> : <CheckCircle size={20} color={theme.colors.darkText} />}
               <Text style={styles.actionBtnText}>Oznacz jako opłaconą</Text>
             </TouchableOpacity>
           )}
@@ -256,8 +258,8 @@ export const SubscriptionDetailScreen = () => {
 
         <View style={styles.decisionGrid}>
           <View style={styles.decisionCard}>
-            <View style={styles.decisionIcon}>
-              <Calendar size={19} color={vibrantTheme.colors.primary} />
+            <View style={[styles.decisionIcon, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
+              <Calendar size={19} color={theme.colors.primary} />
             </View>
             <View style={styles.decisionText}>
               <Text style={styles.decisionTitle}>Termin płatności</Text>
@@ -270,8 +272,8 @@ export const SubscriptionDetailScreen = () => {
           </View>
 
           <View style={styles.decisionCard}>
-            <View style={styles.decisionIcon}>
-              <CreditCard size={19} color={vibrantTheme.colors.primary} />
+            <View style={[styles.decisionIcon, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
+              <CreditCard size={19} color={theme.colors.primary} />
             </View>
             <View style={styles.decisionText}>
               <Text style={styles.decisionTitle}>Metoda płatności</Text>
@@ -480,7 +482,7 @@ const styles = StyleSheet.create({
     width: 330,
     height: 330,
     borderRadius: 165,
-    backgroundColor: 'rgba(32,246,181,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   glowBottom: {
     position: 'absolute',
@@ -521,7 +523,7 @@ const styles = StyleSheet.create({
   canceledBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },
   decisionGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   decisionCard: { flex: 1, backgroundColor: vibrantTheme.colors.card, borderRadius: 22, padding: 15, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  decisionIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: 'rgba(32,246,181,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(32,246,181,0.24)' },
+  decisionIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
   decisionText: { flex: 1 },
   decisionTitle: { color: vibrantTheme.colors.text, fontSize: 13, fontWeight: '900' },
   decisionDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 5 },

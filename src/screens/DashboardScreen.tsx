@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   FlatList,
   Alert,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -64,6 +65,7 @@ import {
   DashboardActivityItem
 } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
 
 const { width } = Dimensions.get('window');
@@ -98,8 +100,8 @@ const getBrandToken = (name?: string | null, provider?: string | null): BrandTok
   if (source.includes('strava')) return { bg: '#FC4C02', fg: '#FFFFFF', label: 'S', weight: '900' };
 
   return {
-    bg: '#E8F3EC',
-    fg: '#0B6B3A',
+    bg: '#F1F5F9',
+    fg: '#334155',
     label: (name || provider || '?').charAt(0).toUpperCase(),
     weight: '900',
   };
@@ -171,11 +173,13 @@ export const DashboardScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Dashboard'>>();
   const insets = useSafeAreaInsets();
   const { signOut } = useAuth();
+  const { theme: appTheme } = useTheme();
   
   const [isDark, setIsDark] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [notifPermission, setNotifPermission] = useState<string>('granted');
   const [trendType, setTrendType] = useState<'planned' | 'real'>('planned');
+  const [renderDeferredSections, setRenderDeferredSections] = useState(false);
 
   // Data
   const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useDashboardSummary();
@@ -191,6 +195,14 @@ export const DashboardScreen = () => {
 
   const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(secondaryEnabled);
   useNotificationPreview(false);
+
+  useEffect(() => {
+    const task = InteractionManager.runAfterInteractions(() => {
+      setRenderDeferredSections(true);
+    });
+
+    return () => task.cancel?.();
+  }, []);
 
   const isLoading = isSummaryLoading;
   const isError = isSummaryError;
@@ -305,16 +317,16 @@ export const DashboardScreen = () => {
 
   // THEME COLORS (inline simple theme for now)
   const theme = useMemo(() => ({
-    background: vibrantTheme.colors.bg,
-    card: vibrantTheme.colors.card,
-    text: vibrantTheme.colors.text,
-    textDim: vibrantTheme.colors.textMuted,
-    border: vibrantTheme.colors.border,
-    primary: vibrantTheme.colors.primary,
-    success: vibrantTheme.colors.success,
-    warning: vibrantTheme.colors.warning,
-    error: vibrantTheme.colors.danger,
-  }), [isDark]);
+    background: appTheme.colors.bg,
+    card: appTheme.colors.card,
+    text: appTheme.colors.text,
+    textDim: appTheme.colors.textMuted,
+    border: appTheme.colors.border,
+    primary: appTheme.colors.primary,
+    success: appTheme.colors.success,
+    warning: appTheme.colors.warning,
+    error: appTheme.colors.danger,
+  }), [appTheme]);
 
   const dynamicStyles = useMemo(() => StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: theme.background },
@@ -325,7 +337,7 @@ export const DashboardScreen = () => {
       width: width * 0.9,
       height: width * 0.9,
       borderRadius: width,
-      backgroundColor: 'rgba(32,246,181,0.12)',
+      backgroundColor: `${theme.primary}1F`,
       top: -160,
       right: -140,
     },
@@ -341,12 +353,12 @@ export const DashboardScreen = () => {
     dashboardNotice: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#E8F3EC',
+      backgroundColor: `${theme.primary}18`,
       borderRadius: 18,
       padding: 14,
       marginBottom: 16,
       borderWidth: 1,
-      borderColor: '#CFE5D6',
+      borderColor: `${theme.primary}33`,
       gap: 10,
     },
     dashboardNoticeError: {
@@ -498,6 +510,35 @@ export const DashboardScreen = () => {
       fontWeight: '700',
       color: theme.text,
     },
+    todayHeader: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+      gap: 12,
+    },
+    todaySubtitle: {
+      color: theme.textDim,
+      fontSize: 12,
+      fontWeight: '700',
+      lineHeight: 17,
+      marginTop: 4,
+    },
+    todayBadge: {
+      minWidth: 34,
+      height: 34,
+      borderRadius: 14,
+      backgroundColor: `${theme.primary}24`,
+      borderWidth: 1,
+      borderColor: `${theme.primary}3D`,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    todayBadgeText: {
+      color: theme.primary,
+      fontSize: 14,
+      fontWeight: '900',
+    },
     seeAllBtn: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -646,12 +687,12 @@ export const DashboardScreen = () => {
       color: theme.textDim,
     },
     savingsCard: {
-      backgroundColor: '#ECFDF5',
+      backgroundColor: `${theme.primary}14`,
       borderRadius: 20,
       padding: 20,
       marginBottom: 24,
       borderWidth: 1,
-      borderColor: '#A7F3D0',
+      borderColor: `${theme.primary}33`,
     },
     savingsHeader: {
       flexDirection: 'row',
@@ -662,7 +703,7 @@ export const DashboardScreen = () => {
       width: 40,
       height: 40,
       borderRadius: 12,
-      backgroundColor: '#D1FAE5',
+      backgroundColor: `${theme.primary}22`,
       alignItems: 'center',
       justifyContent: 'center',
       marginRight: 12,
@@ -670,21 +711,21 @@ export const DashboardScreen = () => {
     savingsTitle: {
       fontSize: 14,
       fontWeight: '600',
-      color: '#065F46',
+      color: theme.primary,
     },
     savingsAmount: {
       fontSize: 20,
       fontWeight: '800',
-      color: '#059669',
+      color: theme.primary,
     },
     savingsFooter: {
       borderTopWidth: 1,
-      borderTopColor: '#D1FAE5',
+      borderTopColor: `${theme.primary}24`,
       paddingTop: 12,
     },
     savingsFooterText: {
       fontSize: 13,
-      color: '#047857',
+      color: theme.textDim,
       lineHeight: 18,
     },
     overdueSection: {
@@ -982,7 +1023,7 @@ export const DashboardScreen = () => {
       fontWeight: '800',
     },
     heroMetaLabel: {
-      color: '#BFEAD2',
+      color: 'rgba(255,255,255,0.72)',
       fontSize: 11,
       fontWeight: '700',
       marginTop: 3,
@@ -1024,9 +1065,9 @@ export const DashboardScreen = () => {
       borderRadius: 15,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(32,246,181,0.13)',
+      backgroundColor: `${theme.primary}21`,
       borderWidth: 1,
-      borderColor: 'rgba(32,246,181,0.22)',
+      borderColor: `${theme.primary}38`,
     },
     widgetTitle: {
       fontSize: 16,
@@ -1086,7 +1127,7 @@ export const DashboardScreen = () => {
       flex: 1,
       justifyContent: 'flex-end',
       borderRadius: 8,
-      backgroundColor: '#E9F4EE',
+      backgroundColor: `${theme.primary}16`,
       overflow: 'hidden',
     },
     miniChartBar: {
@@ -1137,9 +1178,9 @@ export const DashboardScreen = () => {
       borderRadius: 16,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(32,246,181,0.14)',
+      backgroundColor: `${theme.primary}24`,
       borderWidth: 1,
-      borderColor: 'rgba(32,246,181,0.24)',
+      borderColor: `${theme.primary}3D`,
     },
     decisionBody: {
       flex: 1,
@@ -1367,8 +1408,8 @@ export const DashboardScreen = () => {
         <View style={[dynamicStyles.activityCard, dynamicStyles.shadowSm]}>
           {activityData.items.slice(0, 5).map((item, idx) => (
             <View key={item.id} style={[dynamicStyles.activityItem, idx === 0 && { borderTopWidth: 0 }]}>
-              <View style={[dynamicStyles.activityIcon, { backgroundColor: item.type === 'paid' ? '#F0FDF4' : item.type === 'canceled' ? '#FEF2F2' : '#F1F5F9' }]}>
-                <History size={16} color={item.type === 'paid' ? '#10B981' : item.type === 'canceled' ? '#EF4444' : '#64748B'} />
+              <View style={[dynamicStyles.activityIcon, { backgroundColor: item.type === 'paid' ? `${theme.primary}20` : item.type === 'canceled' ? '#FEF2F2' : theme.border }]}>
+                <History size={16} color={item.type === 'paid' ? theme.primary : item.type === 'canceled' ? '#EF4444' : theme.textDim} />
               </View>
               <View style={dynamicStyles.activityContent}>
                 <Text style={dynamicStyles.activityMessage} numberOfLines={1}>
@@ -1713,7 +1754,7 @@ export const DashboardScreen = () => {
     const average = activeCount > 0 ? monthlyTotal / activeCount : 0;
 
     return (
-      <LinearGradient colors={vibrantTheme.gradients.hero} style={dynamicStyles.heroDashboardCard}>
+      <LinearGradient colors={appTheme.gradients.hero} style={dynamicStyles.heroDashboardCard}>
         <Text style={dynamicStyles.heroEyebrow}>Całkowity koszt miesięczny</Text>
         <View style={dynamicStyles.heroAmountRow}>
           <Text style={dynamicStyles.heroAmount}>{monthlyTotal.toFixed(2)}</Text>
@@ -1857,6 +1898,77 @@ export const DashboardScreen = () => {
     );
   };
 
+  const renderTodayFocus = () => {
+    const nextPayment = upcomingData?.items?.[0];
+    const riskCount = (summaryData?.trialsCount ?? 0) + overdueCount;
+    const focusCards = [
+      nextPayment ? {
+        id: 'payment',
+        icon: CalendarDays,
+        title: 'Najbliższa płatność',
+        desc: `${nextPayment.name} · ${formatRelativeDay(nextPayment.nextPaymentDate)} · ${nextPayment.amount.toFixed(2)} ${nextPayment.currency}`,
+        cta: 'Sprawdź termin',
+        onPress: () => navigation.navigate('SubscriptionDetail', { id: nextPayment.id }),
+      } : {
+        id: 'calendar',
+        icon: CalendarDays,
+        title: 'Kalendarz płatności',
+        desc: 'Zobacz, które tygodnie będą najdroższe i kiedy warto mieć bufor.',
+        cta: 'Otwórz kalendarz',
+        onPress: () => navigation.navigate('PaymentCalendar'),
+      },
+      riskCount > 0 ? {
+        id: 'guard',
+        icon: ShieldCheck,
+        title: 'Guard wykrył ryzyko',
+        desc: `${riskCount} rzeczy wymaga uwagi: triale, zaległości albo brak gotowej ścieżki anulowania.`,
+        cta: 'Otwórz Guard',
+        onPress: () => navigation.navigate('Guard'),
+      } : {
+        id: 'scan',
+        icon: Sparkles,
+        title: 'Audit skrzynki',
+        desc: 'Wykryj historyczne subskrypcje, zmiany cen i rachunki do review.',
+        cta: 'Otwórz Email Scan',
+        onPress: () => navigation.navigate('EmailScan'),
+      },
+    ];
+
+    return (
+      <View style={dynamicStyles.sectionContainer}>
+        <View style={dynamicStyles.todayHeader}>
+          <View>
+            <Text style={dynamicStyles.sectionTitle}>Dziś do sprawdzenia</Text>
+            <Text style={dynamicStyles.todaySubtitle}>Najkrótsza droga do decyzji, nie kolejna lista.</Text>
+          </View>
+          <View style={dynamicStyles.todayBadge}>
+            <Text style={dynamicStyles.todayBadgeText}>{focusCards.length}</Text>
+          </View>
+        </View>
+        <View style={dynamicStyles.decisionGrid}>
+          {focusCards.map((card) => (
+            <TouchableOpacity
+              key={card.id}
+              style={dynamicStyles.decisionCard}
+              activeOpacity={0.86}
+              onPress={card.onPress}
+            >
+              <View style={dynamicStyles.decisionAccent}>
+                <card.icon size={20} color={theme.primary} />
+              </View>
+              <View style={dynamicStyles.decisionBody}>
+                <Text style={dynamicStyles.decisionTitle}>{card.title}</Text>
+                <Text style={dynamicStyles.decisionDesc}>{card.desc}</Text>
+                <Text style={dynamicStyles.decisionCta}>{card.cta}</Text>
+              </View>
+              <ChevronRight size={18} color={theme.textDim} />
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+    );
+  };
+
   const renderPremiumInsights = () => {
     const estimatedScore = Math.max(35, Math.min(100, 100 - overdueCount * 14 - (summaryData?.trialsCount ?? 0) * 4));
     const healthLabel = healthData
@@ -1923,31 +2035,31 @@ export const DashboardScreen = () => {
       nextPayment ? {
         id: 'next-payment',
         icon: CalendarDays,
-        title: 'Najblizsza platnosc',
+        title: 'Najbliższa płatność',
         desc: `${nextPayment.name} · ${formatRelativeDay(nextPayment.nextPaymentDate)} · ${nextPayment.amount.toFixed(2)} ${nextPayment.currency}`,
-        cta: 'Otworz szczegoly',
+        cta: 'Otwórz szczegóły',
         onPress: () => navigation.navigate('SubscriptionDetail', { id: nextPayment.id }),
       } : {
         id: 'calendar',
         icon: CalendarDays,
-        title: 'Kalendarz platnosci',
-        desc: 'Zobacz liste subskrypcji posortowana po najblizszym terminie.',
-        cta: 'Otworz kalendarz',
+        title: 'Kalendarz płatności',
+        desc: 'Zobacz listę subskrypcji posortowaną po najbliższym terminie.',
+        cta: 'Otwórz kalendarz',
         onPress: () => navigation.navigate('PaymentCalendar'),
       },
       nextTrial ? {
         id: 'trial',
         icon: Clock,
         title: 'Trial radar',
-        desc: `${nextTrial.name} konczy sie za ${formatDays(nextTrial.daysLeft)}. To dobry moment na decyzje.`,
-        cta: 'Sprawdz trial',
+        desc: `${nextTrial.name} kończy się za ${formatDays(nextTrial.daysLeft)}. To dobry moment na decyzję.`,
+        cta: 'Sprawdź trial',
         onPress: () => navigation.navigate('SubscriptionDetail', { id: nextTrial.id }),
       } : {
         id: 'email-scan',
         icon: Sparkles,
         title: 'Automatyczne wykrywanie',
-        desc: 'Przeskanuj Gmaila i dodawaj tylko te kandydatury, ktore zatwierdzisz.',
-        cta: 'Otworz Gmail Scan',
+        desc: 'Przeskanuj Gmaila i dodawaj tylko te kandydatury, które zatwierdzisz.',
+        cta: 'Otwórz Gmail Scan',
         onPress: () => navigation.navigate('EmailScan'),
       },
     ];
@@ -2068,6 +2180,10 @@ export const DashboardScreen = () => {
         style={dynamicStyles.container}
         contentContainerStyle={dynamicStyles.content}
         showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        scrollEventThrottle={16}
+        decelerationRate="fast"
         refreshControl={
           <RefreshControl refreshing={isRefreshing} onRefresh={handleRefresh} tintColor={theme.primary} />
         }
@@ -2082,8 +2198,13 @@ export const DashboardScreen = () => {
           {renderStatsWidget()}
           {renderGuardWidget()}
         </View>
-        {renderPremiumInsights()}
-        {renderDecisionCenter()}
+        {renderDeferredSections && (
+          <>
+            {renderPremiumInsights()}
+            {renderTodayFocus()}
+            {renderDecisionCenter()}
+          </>
+        )}
 
         {false && (<>
         {renderHeader()}
@@ -2107,7 +2228,7 @@ export const DashboardScreen = () => {
                 <ArrowRight size={16} color="#6366F1" />
               </TouchableOpacity>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dynamicStyles.horizontalListPadding}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={dynamicStyles.horizontalListPadding}>
               {upcomingItems.map((item, idx) => (
                 <React.Fragment key={item.id}>
                   {renderUpcomingPayment({ item })}
@@ -2123,7 +2244,7 @@ export const DashboardScreen = () => {
             <View style={dynamicStyles.sectionHeader}>
               <Text style={dynamicStyles.sectionTitle}>Kończące się okresy próbne</Text>
             </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={dynamicStyles.horizontalListPadding}>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={dynamicStyles.horizontalListPadding}>
               {(trialsData?.items ?? []).map((item, idx) => (
                 <React.Fragment key={item.id}>
                   {renderTrialItem({ item })}

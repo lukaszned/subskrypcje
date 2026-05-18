@@ -47,11 +47,11 @@ interface Props {
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   'rozrywka':     { bg: '#E0E7FF', text: '#4F46E5' },
   'narzędzia':    { bg: '#DBEAFE', text: '#2563EB' },
-  'zdrowie':      { bg: '#DCFCE7', text: '#16A34A' },
+  'zdrowie':      { bg: '#F1F5F9', text: '#16A34A' },
   'edukacja':     { bg: '#FEF9C3', text: '#CA8A04' },
   'produktywność':{ bg: '#FCE7F3', text: '#BE185D' },
   'zakupy':       { bg: '#FEF3C7', text: '#D97706' },
-  'finanse':      { bg: '#ECFDF5', text: '#059669' },
+  'finanse':      { bg: '#F8FAFC', text: '#059669' },
   'transport':    { bg: '#F0F9FF', text: '#0284C7' },
   'inne':         { bg: '#F1F5F9', text: '#64748B' },
 };
@@ -69,7 +69,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
     amount: Number(item.amount || 0),
     currency: item.currency || 'PLN',
     nextPaymentDate: item.nextPaymentDate || '-',
-    cycle: item.cycle || 'Co miesiÄ…c',
+    cycle: item.cycle || 'Co miesiąc',
     status: item.status || 'pending',
     isTrial: Boolean(item.isTrial),
   };
@@ -79,7 +79,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
   const getStatusInfo = (status: string, isTrial?: boolean) => {
     if (isTrial) return { label: 'Trial', color: '#F59E0B', bg: '#FFFBEB' };
     switch (status) {
-      case 'paid': return { label: 'Opłacona', color: '#10B981', bg: '#DCFCE7' };
+      case 'paid': return { label: 'Opłacona', color: '#10B981', bg: '#F1F5F9' };
       case 'overdue': return { label: 'Zaległa', color: '#EF4444', bg: '#FEE2E2' };
       case 'canceled': return { label: 'Anulowana', color: '#64748B', bg: '#F1F5F9' };
       default: return { label: 'Aktywna', color: '#6366F1', bg: '#EEF2FF' };

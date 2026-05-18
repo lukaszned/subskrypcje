@@ -12,6 +12,7 @@ import {
 import { X, ExternalLink, Clock, AlertTriangle, CheckCircle, ShieldAlert, AlertCircle } from 'lucide-react-native';
 import { useCancelGuide } from '../hooks/useCancelGuide';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 interface Props {
   isVisible: boolean;
@@ -32,6 +33,7 @@ export const CancelAssistantModal: React.FC<Props> = ({
   onRequestGuide,
   isRequestingGuide = false,
 }) => {
+  const { theme } = useTheme();
   const { data: guide, isLoading } = useCancelGuide(subscriptionId);
   const [step, setStep] = useState<'info' | 'confirm'>('info');
 
@@ -63,7 +65,7 @@ export const CancelAssistantModal: React.FC<Props> = ({
 
           {isLoading ? (
             <View style={styles.center}>
-              <ActivityIndicator size="large" color="#6366F1" />
+              <ActivityIndicator size="large" color={theme.colors.primary} />
               <Text style={styles.loadingText}>Szukam poradnika dla {subscriptionName}...</Text>
             </View>
           ) : !guide || !hasInstructions ? (
@@ -75,14 +77,14 @@ export const CancelAssistantModal: React.FC<Props> = ({
               </Text>
               {onRequestGuide && (
                 <TouchableOpacity
-                  style={styles.btn}
+                  style={[styles.btn, { backgroundColor: theme.colors.primary }]}
                   onPress={onRequestGuide}
                   disabled={isRequestingGuide}
                 >
                   {isRequestingGuide ? (
-                    <ActivityIndicator size="small" color="#FFFFFF" />
+                    <ActivityIndicator size="small" color={theme.colors.darkText} />
                   ) : (
-                    <AlertCircle size={20} color="#FFFFFF" />
+                    <AlertCircle size={20} color={theme.colors.darkText} />
                   )}
                   <Text style={styles.btnText}>Zgłoś brak instrukcji anulowania</Text>
                 </TouchableOpacity>
@@ -122,7 +124,7 @@ export const CancelAssistantModal: React.FC<Props> = ({
               <View style={styles.instructions}>
                 {guide.instructions.map((inst, idx) => (
                   <View key={idx} style={styles.instructionRow}>
-                    <View style={styles.stepCircle}><Text style={styles.stepNumber}>{idx + 1}</Text></View>
+                    <View style={[styles.stepCircle, { backgroundColor: `${theme.colors.primary}22` }]}><Text style={[styles.stepNumber, { color: theme.colors.primary }]}>{idx + 1}</Text></View>
                     <Text style={styles.instructionText}>{inst}</Text>
                   </View>
                 ))}
@@ -136,20 +138,20 @@ export const CancelAssistantModal: React.FC<Props> = ({
               )}
 
               {guide.cancelUrl ? (
-                <TouchableOpacity style={styles.btn} onPress={handleOpenProvider}>
-                  <ExternalLink size={20} color="#FFFFFF" />
+                <TouchableOpacity style={[styles.btn, { backgroundColor: theme.colors.primary }]} onPress={handleOpenProvider}>
+                  <ExternalLink size={20} color={theme.colors.darkText} />
                   <Text style={styles.btnText}>Przejdź do strony anulowania</Text>
                 </TouchableOpacity>
               ) : (
-                <TouchableOpacity style={styles.btn} onPress={() => setStep('confirm')}>
-                  <CheckCircle size={20} color="#FFFFFF" />
+                <TouchableOpacity style={[styles.btn, { backgroundColor: theme.colors.primary }]} onPress={() => setStep('confirm')}>
+                  <CheckCircle size={20} color={theme.colors.darkText} />
                   <Text style={styles.btnText}>Przejdź do potwierdzenia</Text>
                 </TouchableOpacity>
               )}
             </ScrollView>
           ) : (
             <View style={styles.center}>
-              <CheckCircle size={56} color="#10B981" style={styles.iconSpaced} />
+              <CheckCircle size={56} color={theme.colors.primary} style={styles.iconSpaced} />
               <Text style={styles.title}>Udało się anulować?</Text>
               <Text style={styles.desc}>
                 Jeśli potwierdzisz, oznaczymy subskrypcję w aplikacji jako "Anulowana". Pamiętaj, że to nie zwalnia Cię z obowiązku faktycznego wypowiedzenia umowy u dostawcy.
@@ -252,7 +254,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: vibrantTheme.colors.textMuted,
   },
-  easy: { backgroundColor: '#ECFDF5' },
+  easy: { backgroundColor: '#F8FAFC' },
   easyText: { color: '#10B981' },
   medium: { backgroundColor: '#FFFBEB' },
   mediumText: { color: '#F59E0B' },
@@ -271,7 +273,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(32,246,181,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,

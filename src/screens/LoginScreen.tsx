@@ -14,12 +14,14 @@ import { Lock, Mail } from 'lucide-react-native';
 import type { AuthStackParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
 export default function LoginScreen() {
   const navigation = useNavigation<Nav>();
   const { signIn } = useAuth();
+  const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -37,27 +39,27 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient colors={vibrantTheme.gradients.app} style={styles.safe}>
-      <View style={styles.glowOne} />
-      <View style={styles.glowTwo} />
+    <LinearGradient colors={theme.gradients.app} style={styles.safe}>
+      <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}33` }]} />
+      <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}29` }]} />
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
           <View style={styles.hero}>
-            <Text style={styles.brand}>Sub-Sentry</Text>
+            <Text style={[styles.brand, { color: theme.colors.primary }]}>Sub-Sentry</Text>
             <Text style={styles.title}>Zaloguj sie</Text>
-            <Text style={styles.subtitle}>Kontroluj subskrypcje spokojnie, bez chaosu w platnosciach.</Text>
+            <Text style={styles.subtitle}>Kontroluj subskrypcje spokojnie, bez chaosu w płatnościach.</Text>
           </View>
 
-          <LinearGradient colors={vibrantTheme.gradients.glass} style={styles.card}>
+          <LinearGradient colors={theme.gradients.glass} style={[styles.card, { borderColor: theme.colors.border }]}>
             <View style={styles.inputShell}>
-              <Mail size={20} color={vibrantTheme.colors.primary} />
+              <Mail size={20} color={theme.colors.primary} />
               <TextInput
                 style={styles.input}
                 placeholder="Email"
-                placeholderTextColor={vibrantTheme.colors.textSubtle}
+                placeholderTextColor={theme.colors.textSubtle}
                 value={email}
                 onChangeText={setEmail}
                 keyboardType="email-address"
@@ -67,11 +69,11 @@ export default function LoginScreen() {
             </View>
 
             <View style={styles.inputShell}>
-              <Lock size={20} color={vibrantTheme.colors.primary} />
+              <Lock size={20} color={theme.colors.primary} />
               <TextInput
                 style={styles.input}
                 placeholder="Haslo"
-                placeholderTextColor={vibrantTheme.colors.textSubtle}
+                placeholderTextColor={theme.colors.textSubtle}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
@@ -84,9 +86,9 @@ export default function LoginScreen() {
               disabled={!email || !password || isLoading}
               activeOpacity={0.86}
             >
-              <LinearGradient colors={vibrantTheme.gradients.primary} style={styles.buttonGradient}>
+              <LinearGradient colors={theme.gradients.primary} style={styles.buttonGradient}>
                 {isLoading
-                  ? <ActivityIndicator color={vibrantTheme.colors.darkText} />
+                  ? <ActivityIndicator color={theme.colors.darkText} />
                   : <Text style={styles.buttonText}>Zaloguj</Text>
                 }
               </LinearGradient>

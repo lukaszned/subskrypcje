@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Plus, Search } from 'lucide-react-native';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 interface EmptyStateProps {
   title: string;
@@ -20,29 +21,30 @@ export const EmptyState = ({
   isDark,
   type = 'add'
 }: EmptyStateProps) => {
-  const theme = {
-    bg: isDark === false ? '#F8FAFC' : vibrantTheme.colors.bg,
-    text: isDark === false ? '#0F172A' : vibrantTheme.colors.text,
-    textDim: isDark === false ? '#64748B' : vibrantTheme.colors.textMuted,
-    card: isDark === false ? '#FFFFFF' : vibrantTheme.colors.card,
-    iconBg: isDark === false ? '#EEF2FF' : 'rgba(32,246,181,0.12)',
+  const { theme: appTheme } = useTheme();
+  const localTheme = {
+    bg: isDark === false ? '#F8FAFC' : appTheme.colors.bg,
+    text: isDark === false ? '#0F172A' : appTheme.colors.text,
+    textDim: isDark === false ? '#64748B' : appTheme.colors.textMuted,
+    card: isDark === false ? '#FFFFFF' : appTheme.colors.card,
+    iconBg: isDark === false ? `${appTheme.colors.primary}16` : `${appTheme.colors.primary}1F`,
   };
 
   return (
     <View style={styles.container}>
-      <View style={[styles.iconContainer, { backgroundColor: theme.iconBg }]}>
+      <View style={[styles.iconContainer, { backgroundColor: localTheme.iconBg }]}>
         {type === 'search' ? (
-          <Search size={40} color={vibrantTheme.colors.primary} />
+          <Search size={40} color={appTheme.colors.primary} />
         ) : (
-          <Plus size={40} color={vibrantTheme.colors.primary} />
+          <Plus size={40} color={appTheme.colors.primary} />
         )}
       </View>
-      <Text style={[styles.title, { color: theme.text }]}>{title}</Text>
-      <Text style={[styles.message, { color: theme.textDim }]}>{message}</Text>
+      <Text style={[styles.title, { color: localTheme.text }]}>{title}</Text>
+      <Text style={[styles.message, { color: localTheme.textDim }]}>{message}</Text>
       
       {onAction && actionLabel && (
-        <TouchableOpacity style={styles.button} onPress={onAction} activeOpacity={0.8}>
-          <Text style={styles.buttonText}>{actionLabel}</Text>
+        <TouchableOpacity style={[styles.button, { backgroundColor: appTheme.colors.primary, shadowColor: appTheme.colors.primary }]} onPress={onAction} activeOpacity={0.8}>
+          <Text style={[styles.buttonText, { color: appTheme.colors.darkText }]}>{actionLabel}</Text>
         </TouchableOpacity>
       )}
     </View>

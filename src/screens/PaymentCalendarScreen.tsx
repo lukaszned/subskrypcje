@@ -341,7 +341,7 @@ const styles = StyleSheet.create({
     borderRadius: 160,
     top: -130,
     right: -120,
-    backgroundColor: 'rgba(32,246,181,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   glowTwo: {
     position: 'absolute',
@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     borderColor: vibrantTheme.colors.border,
   },
   horizonTabActive: {
-    backgroundColor: 'rgba(32,246,181,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     borderColor: vibrantTheme.colors.primary,
   },
   horizonTabText: {
@@ -503,8 +503,8 @@ const styles = StyleSheet.create({
     borderColor: vibrantTheme.colors.border,
   },
   weekDayBusy: {
-    backgroundColor: 'rgba(32,246,181,0.14)',
-    borderColor: 'rgba(32,246,181,0.32)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
+    borderColor: 'rgba(255,255,255,0.32)',
   },
   weekDayName: {
     color: vibrantTheme.colors.textSubtle,
@@ -551,9 +551,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(32,246,181,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderWidth: 1,
-    borderColor: 'rgba(32,246,181,0.24)',
+    borderColor: 'rgba(255,255,255,0.24)',
   },
   nextBody: { flex: 1 },
   nextTitle: {
@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(32,246,181,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
   },
   brandMarkDanger: {
     backgroundColor: 'rgba(255,77,109,0.16)',

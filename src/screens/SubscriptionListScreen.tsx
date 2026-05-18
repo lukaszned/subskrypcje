@@ -37,6 +37,7 @@ import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS, SubscriptionStatus
 // Komponent item
 import SubscriptionListItem from './SubscriptionListItem';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, parseAppDate } from '../utils/date';
 
 const toMonthlyAmount = (subscription: Subscription) => {
@@ -56,6 +57,7 @@ const toMonthlyAmount = (subscription: Subscription) => {
 
 export const SubscriptionListScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
+  const { theme } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all'>('all');
@@ -172,7 +174,7 @@ export const SubscriptionListScreen = () => {
           <Frown size={48} color="#94A3B8" />
           <Text style={styles.emptyTitle}>Błąd ładowania</Text>
           <Text style={styles.emptyMessage} numberOfLines={3}>
-            {error?.message || 'Nie udalo sie pobrac listy subskrypcji.'}
+            {error?.message || 'Nie udało się pobrać listy subskrypcji.'}
           </Text>
           <TouchableOpacity style={styles.addButton} onPress={() => refetch()}>
             <Text style={styles.addButtonText}>Ponów</Text>
@@ -204,7 +206,7 @@ export const SubscriptionListScreen = () => {
   const renderLoadingState = () => (
     <View style={styles.emptyStateContainer}>
       <View style={styles.emptyIconCircle}>
-        <ActivityIndicator color={vibrantTheme.colors.primary} />
+        <ActivityIndicator color={theme.colors.primary} />
       </View>
       <Text style={styles.emptyTitle}>Wczytuję subskrypcje</Text>
       <Text style={styles.emptyMessage}>Jeśli backend odpowiada wolno, pokażemy ostatni zapisany stan.</Text>
@@ -225,7 +227,7 @@ export const SubscriptionListScreen = () => {
             if (!d) return '-';
             return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
           })() : '-',
-          cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle || 'Co miesiÄ…c',
+          cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle || 'Co miesiąc',
           status: item.status,
           isTrial: item.isTrial,
         }}
@@ -245,24 +247,24 @@ export const SubscriptionListScreen = () => {
         </View>
         {isFetching && !isLoading && (
           <View style={styles.syncPill}>
-            <ActivityIndicator size="small" color={vibrantTheme.colors.primary} />
+            <ActivityIndicator size="small" color={theme.colors.primary} />
             <Text style={styles.syncPillText}>Sync</Text>
           </View>
         )}
       </View>
       <View style={styles.metricRow}>
         <View style={styles.metricTile}>
-          <Wallet size={17} color={vibrantTheme.colors.primary} />
+          <Wallet size={17} color={theme.colors.primary} />
           <Text style={styles.metricValue}>{portfolioStats.active}</Text>
           <Text style={styles.metricLabel}>aktywne</Text>
         </View>
         <View style={styles.metricTile}>
-          <CalendarClock size={17} color={vibrantTheme.colors.cyan} />
+          <CalendarClock size={17} color={theme.colors.cyan} />
           <Text style={styles.metricValue}>{portfolioStats.dueSoon}</Text>
           <Text style={styles.metricLabel}>do 7 dni</Text>
         </View>
         <View style={styles.metricTile}>
-          <ShieldAlert size={17} color={portfolioStats.attention > 0 ? vibrantTheme.colors.warning : vibrantTheme.colors.success} />
+          <ShieldAlert size={17} color={portfolioStats.attention > 0 ? theme.colors.warning : theme.colors.primary} />
           <Text style={styles.metricValue}>{portfolioStats.attention}</Text>
           <Text style={styles.metricLabel}>uwaga</Text>
         </View>
@@ -271,12 +273,12 @@ export const SubscriptionListScreen = () => {
   );
 
   return (
-    <SafeAreaView style={styles.safeArea}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={vibrantTheme.colors.text} /></TouchableOpacity>
-          <View style={styles.searchContainer}>
-            <Search size={20} color={vibrantTheme.colors.textMuted} style={styles.searchIcon} />
+          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={theme.colors.text} /></TouchableOpacity>
+          <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <Search size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
             <TextInput
               style={styles.searchInput}
               placeholder="Szukaj..."
@@ -288,13 +290,19 @@ export const SubscriptionListScreen = () => {
             style={[styles.sortButton, { flexDirection: 'row', width: 'auto', paddingHorizontal: 12 }]}
             onPress={toggleSort}
           >
-            <ArrowUpDown size={18} color={vibrantTheme.colors.primary} style={{ marginRight: 6 }} />
-            <Text style={{ color: vibrantTheme.colors.primary, fontWeight: '800', fontSize: 12 }}>{getSortLabel()}</Text>
+            <ArrowUpDown size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
+            <Text style={{ color: theme.colors.primary, fontWeight: '800', fontSize: 12 }}>{getSortLabel()}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.filterSection}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.statusTabs}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            nestedScrollEnabled
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={styles.statusTabs}
+          >
             {[
               { id: 'all', label: 'Wszystkie' },
               { id: 'pending', label: 'Aktywne' },
@@ -304,10 +312,10 @@ export const SubscriptionListScreen = () => {
             ].map(tab => (
               <TouchableOpacity
                 key={tab.id}
-                style={[styles.statusTab, activeStatus === tab.id && styles.statusTabActive]}
+                style={[styles.statusTab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeStatus === tab.id && { backgroundColor: `${theme.colors.primary}2E`, borderColor: theme.colors.primary }]}
                 onPress={() => setActiveStatus(tab.id as any)}
               >
-                <Text style={[styles.statusTabText, activeStatus === tab.id && styles.statusTabTextActive]}>
+                <Text style={[styles.statusTabText, { color: theme.colors.textMuted }, activeStatus === tab.id && { color: theme.colors.primary }]}>
                   {tab.label}
                 </Text>
               </TouchableOpacity>
@@ -322,10 +330,14 @@ export const SubscriptionListScreen = () => {
           renderItem={renderItem}
           ListHeaderComponent={normalizedSubscriptions.length > 0 ? renderPortfolioPulse : null}
           ListEmptyComponent={isLoading ? renderLoadingState : renderEmptyState}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={vibrantTheme.colors.primary} />}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          windowSize={7}
+          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.colors.primary} />}
+          initialNumToRender={6}
+          maxToRenderPerBatch={6}
+          updateCellsBatchingPeriod={50}
+          windowSize={5}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
+          scrollEventThrottle={16}
           removeClippedSubviews={Platform.OS === 'android'}
         />
       </KeyboardAvoidingView>
@@ -344,7 +356,7 @@ const styles = StyleSheet.create({
   filterSection: { paddingBottom: 16 },
   statusTabs: { paddingHorizontal: 20, gap: 10 },
   statusTab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 16, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  statusTabActive: { backgroundColor: 'rgba(32,246,181,0.18)', borderColor: vibrantTheme.colors.primary },
+  statusTabActive: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: vibrantTheme.colors.primary },
   statusTabText: { fontSize: 13, fontWeight: '700', color: vibrantTheme.colors.textMuted },
   statusTabTextActive: { color: vibrantTheme.colors.primary },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },

@@ -15,7 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ErrorBoundary } from './src/components/ErrorBoundary';
 import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
-import { vibrantTheme } from './src/theme/vibrantTheme';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { getCachedDashboardSummary } from './src/api/dashboard';
 import { getCachedSubscriptions } from './src/api/subscriptions';
 import { DASHBOARD_SUMMARY_KEY } from './src/hooks/useDashboardSummary';
@@ -120,11 +120,12 @@ const AppNavigator = React.memo(function AppNavigator() {
 
 function RootNavigator() {
   const { session, isLoading } = useAuth();
+  const { theme } = useTheme();
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: vibrantTheme.colors.bg }}>
-        <ActivityIndicator size="large" color={vibrantTheme.colors.primary} />
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.bg }}>
+        <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
   }
@@ -183,12 +184,14 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
-        <AuthProvider>
-          <QueryClientProvider client={queryClient}>
-            <AppCacheWarmup />
-            <RootNavigator />
-          </QueryClientProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <QueryClientProvider client={queryClient}>
+              <AppCacheWarmup />
+              <RootNavigator />
+            </QueryClientProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );

@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { 
   X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, 
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
-  PiggyBank, Truck, Globe, AlertCircle, ArrowRight 
+  PiggyBank, Truck, Globe, AlertCircle, ArrowRight, ShieldCheck
 } from 'lucide-react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -41,6 +41,7 @@ import type { PopularSubscription } from '../data/subscriptionPlans';
 import { SubscriptionCategory, BillingCycle } from '../types/api';
 import { ApiError } from '../lib/apiClient';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { formatInputDate, parseAppDate } from '../utils/date';
 
 const CATEGORIES: Array<{
@@ -50,13 +51,13 @@ const CATEGORIES: Array<{
   textColor: string;
   icon: any;
 }> = [
-  { id: 'entertainment', label: 'Rozrywka',      color: '#E8F3EC', textColor: '#0B6B3A', icon: Film },
+  { id: 'entertainment', label: 'Rozrywka',      color: '#F1F5F9', textColor: '#334155', icon: Film },
   { id: 'utilities',     label: 'Narzędzia',     color: '#DBEAFE', textColor: '#2563EB', icon: Wifi },
-  { id: 'health',        label: 'Zdrowie',        color: '#DCFCE7', textColor: '#16A34A', icon: Heart },
+  { id: 'health',        label: 'Zdrowie',        color: '#F1F5F9', textColor: '#16A34A', icon: Heart },
   { id: 'education',     label: 'Edukacja',       color: '#FEF9C3', textColor: '#CA8A04', icon: GraduationCap },
   { id: 'productivity',  label: 'Produktywność',  color: '#FCE7F3', textColor: '#BE185D', icon: Briefcase },
   { id: 'shopping',      label: 'Zakupy',         color: '#FEF3C7', textColor: '#D97706', icon: ShoppingBag },
-  { id: 'finance',       label: 'Finanse',        color: '#ECFDF5', textColor: '#059669', icon: PiggyBank },
+  { id: 'finance',       label: 'Finanse',        color: '#F8FAFC', textColor: '#059669', icon: PiggyBank },
   { id: 'transport',     label: 'Transport',      color: '#F0F9FF', textColor: '#0284C7', icon: Truck },
   { id: 'other',         label: 'Inne',           color: '#F1F5F9', textColor: '#64748B', icon: Globe },
 ];
@@ -71,6 +72,7 @@ const CYCLES: Array<{ id: BillingCycle; label: string }> = [
 export const ManualAddScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'AddSubscription'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
+  const { theme } = useTheme();
   const subscriptionId = route.params?.subscriptionId;
 
   const amountInputRef = useRef<TextInput>(null);
@@ -106,6 +108,54 @@ export const ManualAddScreen = () => {
     if (isShared && peopleCount > 0) return parsedAmount / peopleCount;
     return parsedAmount;
   }, [parsedAmount, isShared, peopleCount]);
+
+  const selectedPlanInsights = useMemo(() => {
+    const plans = selectedService?.availablePlans || [];
+    if (plans.length === 0) return [];
+
+    const monthlyEquivalent = (price: number, billingCycle?: BillingCycle) =>
+      billingCycle === 'yearly' ? price / 12 : price;
+    const cheapestPlan = [...plans].sort(
+      (a, b) => monthlyEquivalent(a.price, a.billingCycle) - monthlyEquivalent(b.price, b.billingCycle)
+    )[0];
+    const yearlyPlan = plans.find((plan) => plan.billingCycle === 'yearly');
+    const selectedMonthly = parsedAmount > 0 ? monthlyEquivalent(parsedAmount, cycle) : null;
+    const insights: Array<{ title: string; desc: string }> = [];
+
+    if (cheapestPlan) {
+      insights.push({
+        title: 'Najtańszy wariant',
+        desc: `${cheapestPlan.name}: ok. ${monthlyEquivalent(cheapestPlan.price, cheapestPlan.billingCycle).toFixed(2)} ${currency} / mc`,
+      });
+    }
+
+    if (yearlyPlan && selectedMonthly) {
+      const yearlyMonthly = monthlyEquivalent(yearlyPlan.price, 'yearly');
+      const monthlySaving = selectedMonthly - yearlyMonthly;
+      if (monthlySaving > 1) {
+        insights.push({
+          title: 'Warto sprawdzić roczny plan',
+          desc: `Może obniżyć koszt o ok. ${monthlySaving.toFixed(2)} ${currency} / mc.`,
+        });
+      }
+    }
+
+    if (plans.some((plan) => plan.name.toLowerCase().includes('student'))) {
+      insights.push({
+        title: 'Możliwa zniżka studencka',
+        desc: 'Jeśli masz status studenta, wybierz plan Student albo zapisz notatkę do sprawdzenia.',
+      });
+    }
+
+    if (plans.some((plan) => /family|duo|rodzin/i.test(plan.name))) {
+      insights.push({
+        title: 'Plan współdzielony',
+        desc: 'Duo/Family często daje niższy koszt na osobę przy legalnym współdzieleniu.',
+      });
+    }
+
+    return insights.slice(0, 3);
+  }, [cycle, currency, parsedAmount, selectedService]);
 
   const [isSubmitted, setIsSubmitted] = useState(false);
 
@@ -275,22 +325,22 @@ export const ManualAddScreen = () => {
     };
   
     return (
-      <SafeAreaView style={styles.safeArea}>
-        <View style={styles.appGlowTop} />
-        <View style={styles.appGlowBottom} />
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+        <View style={[styles.appGlowTop, { backgroundColor: `${theme.colors.primary}29` }]} />
+        <View style={[styles.appGlowBottom, { backgroundColor: `${theme.colors.cyan}24` }]} />
         <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.inner}>
               <View style={styles.header}>
                 <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}>
-                  <X size={22} color={vibrantTheme.colors.text} />
+                  <X size={22} color={theme.colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
                   <Text style={styles.headerEyebrow}>{subscriptionId ? 'Edycja subskrypcji' : 'Nowa subskrypcja'}</Text>
                   <Text style={styles.headerTitle}>Skonfiguruj plan</Text>
                 </View>
-                <View style={styles.headerStepBadge}>
-                  <Text style={styles.headerStepText}>{isValid ? 'Gotowe' : 'Setup'}</Text>
+                <View style={[styles.headerStepBadge, { backgroundColor: `${theme.colors.primary}24`, borderColor: `${theme.colors.primary}44` }]}>
+                  <Text style={[styles.headerStepText, { color: theme.colors.primary }]}>{isValid ? 'Gotowe' : 'Setup'}</Text>
                 </View>
               </View>
   
@@ -299,8 +349,12 @@ export const ManualAddScreen = () => {
                 showsVerticalScrollIndicator={false} 
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
+                keyboardDismissMode="on-drag"
+                nestedScrollEnabled
+                scrollEventThrottle={16}
+                decelerationRate="fast"
               >
-              <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.amountHeader}>
+              <LinearGradient colors={theme.gradients.hero} style={[styles.amountHeader, { shadowColor: theme.colors.primary }]}>
                 <Text style={styles.amountLabel}>Kwota subskrypcji</Text>
                 
                 {selectedService?.availablePlans && selectedService.availablePlans.length > 0 ? (
@@ -323,6 +377,8 @@ export const ManualAddScreen = () => {
                     <ScrollView 
                       horizontal 
                       showsHorizontalScrollIndicator={false} 
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
                       contentContainerStyle={styles.plansScrollContent}
                     >
                       {selectedService.availablePlans.map((plan) => {
@@ -332,7 +388,7 @@ export const ManualAddScreen = () => {
                           key={`${plan.name}-${plan.price}`}
                           style={[
                             styles.planCard,
-                            isActivePlan && styles.planCardActive
+                            isActivePlan && [styles.planCardActive, { borderColor: theme.colors.primary }]
                           ]}
                           onPress={() => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -342,18 +398,18 @@ export const ManualAddScreen = () => {
                             scrollToForm();
                           }}
                         >
-                          <Text style={[styles.planCardName, isActivePlan && styles.planCardNameActive]} numberOfLines={1}>
+                          <Text style={[styles.planCardName, isActivePlan && { color: theme.colors.primary }]} numberOfLines={1}>
                             {plan.name}
                           </Text>
                           <View style={styles.planCardPriceRow}>
-                            <Text style={[styles.planCardPrice, isActivePlan && styles.planCardPriceActive]}>
+                            <Text style={[styles.planCardPrice, isActivePlan && { color: theme.colors.primary }]}>
                               {plan.price.toFixed(2)}
                             </Text>
-                            <Text style={[styles.planCardCurrency, isActivePlan && styles.planCardCurrencyActive]}>
+                            <Text style={[styles.planCardCurrency, isActivePlan && { color: theme.colors.primary }]}>
                               {currency}
                             </Text>
                           </View>
-                          <Text style={[styles.planCardCycle, isActivePlan && styles.planCardCycleActive]}>
+                          <Text style={[styles.planCardCycle, isActivePlan && { color: theme.colors.primary }]}>
                             {plan.billingCycle === 'yearly' ? 'Rocznie' : 'Miesięcznie'}
                           </Text>
                         </TouchableOpacity>
@@ -371,8 +427,22 @@ export const ManualAddScreen = () => {
                         }}
                       >
                         <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
-                        <ArrowRight size={16} color={vibrantTheme.colors.darkText} />
+                        <ArrowRight size={16} color={theme.colors.darkText} />
                       </TouchableOpacity>
+                    )}
+
+                    {selectedPlanInsights.length > 0 && (
+                      <View style={styles.planInsights}>
+                        {selectedPlanInsights.map((insight) => (
+                          <View key={insight.title} style={styles.planInsightRow}>
+                            <View style={styles.planInsightDot} />
+                            <View style={styles.planInsightCopy}>
+                              <Text style={styles.planInsightTitle}>{insight.title}</Text>
+                              <Text style={styles.planInsightDesc}>{insight.desc}</Text>
+                            </View>
+                          </View>
+                        ))}
+                      </View>
                     )}
                   </View>
                 ) : (
@@ -397,10 +467,10 @@ export const ManualAddScreen = () => {
                     {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
                       <TouchableOpacity 
                         key={c} 
-                        style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
+                        style={[styles.currencyPill, currency === c && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                         onPress={() => setCurrency(c)}
                       >
-                        <Text style={[styles.currencyPillText, currency === c && styles.currencyPillTextActive]}>{c}</Text>
+                        <Text style={[styles.currencyPillText, currency === c && { color: theme.colors.primary }]}>{c}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -418,9 +488,9 @@ export const ManualAddScreen = () => {
               </LinearGradient>
 
               <View style={styles.formSection}>
-                <View style={[styles.infoBox, { marginBottom: 20 }]}>
-                  <AlertCircle size={16} color={vibrantTheme.colors.primary} style={{ marginRight: 8 }} />
-                  <Text style={styles.infoBoxText}>
+                <View style={[styles.infoBox, { marginBottom: 20, backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
+                  <AlertCircle size={16} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                  <Text style={[styles.infoBoxText, { color: theme.colors.textMuted }]}>
                     Wystarczy nazwa, koszt, cykl i data płatności. Resztę możesz uzupełnić później.
                   </Text>
                 </View>
@@ -437,7 +507,7 @@ export const ManualAddScreen = () => {
                   <View style={styles.rowBetween}>
                     <Text style={styles.label}>Nazwa</Text>
                     {filteredSuggestions.length > 0 && (
-                      <Text style={[styles.label, { color: vibrantTheme.colors.primary }]}>Sugestie</Text>
+                      <Text style={[styles.label, { color: theme.colors.primary }]}>Sugestie</Text>
                     )}
                   </View>
                   
@@ -445,6 +515,8 @@ export const ManualAddScreen = () => {
                     <ScrollView 
                       horizontal 
                       showsHorizontalScrollIndicator={false} 
+                      nestedScrollEnabled
+                      keyboardShouldPersistTaps="handled"
                       style={styles.suggestionsScroll}
                       contentContainerStyle={styles.suggestionsContent}
                     >
@@ -466,10 +538,7 @@ export const ManualAddScreen = () => {
                   <TextInput 
                     style={[styles.textInput, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: '#EF4444' }]} 
                     value={name} 
-                    onChangeText={(val) => {
-                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                      setName(val);
-                    }} 
+                    onChangeText={setName}
                     placeholder="np. Netflix" 
                     placeholderTextColor="#94A3B8"
                   />
@@ -496,14 +565,14 @@ export const ManualAddScreen = () => {
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Cykl</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                     {CYCLES.map(c => (
                       <TouchableOpacity 
                         key={c.id} 
-                        style={[styles.pill, cycle === c.id && styles.pillActive]}
+                        style={[styles.pill, cycle === c.id && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                         onPress={() => setCycle(c.id)}
                       >
-                        <Text style={[styles.pillText, cycle === c.id && styles.pillTextActive]}>{c.label}</Text>
+                        <Text style={[styles.pillText, cycle === c.id && { color: theme.colors.primary }]}>{c.label}</Text>
                       </TouchableOpacity>
                     ))}
                   </ScrollView>
@@ -512,7 +581,7 @@ export const ManualAddScreen = () => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Następna płatność</Text>
                   <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
-                    <Calendar size={20} color={vibrantTheme.colors.primary} style={{ marginRight: 8 }} />
+                    <Calendar size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
                     <Text style={styles.dateText}>{formatDate(date)}</Text>
                   </TouchableOpacity>
                   {showDatePicker && (
@@ -527,7 +596,7 @@ export const ManualAddScreen = () => {
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Kategoria</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
                     {CATEGORIES.map(cat => (
                       <TouchableOpacity 
                         key={cat.id} 
@@ -546,7 +615,7 @@ export const ManualAddScreen = () => {
                     <Text style={styles.labelOptional}>Trial</Text>
                     <TouchableOpacity 
                       onPress={() => setIsTrial(!isTrial)}
-                      style={[styles.toggle, isTrial && styles.toggleActive]}
+                      style={[styles.toggle, isTrial && { backgroundColor: theme.colors.primary }]}
                     >
                       <View style={[styles.toggleDot, isTrial && styles.toggleDotActive]} />
                     </TouchableOpacity>
@@ -579,14 +648,14 @@ export const ManualAddScreen = () => {
                         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                         setIsShared(!isShared);
                       }}
-                      style={[styles.toggle, isShared && styles.toggleActive]}
+                      style={[styles.toggle, isShared && { backgroundColor: theme.colors.primary }]}
                     >
                       <View style={[styles.toggleDot, isShared && styles.toggleDotActive]} />
                     </TouchableOpacity>
                   </View>
                   
                   {isShared && (
-                    <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.07)', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: vibrantTheme.colors.border }}>
+                    <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.07)', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border }}>
                       <Text style={[styles.labelOptional, { marginBottom: 12 }]}>Liczba osób</Text>
                       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
                         <TouchableOpacity 
@@ -595,7 +664,7 @@ export const ManualAddScreen = () => {
                         >
                           <Text style={styles.stepperBtnText}>-</Text>
                         </TouchableOpacity>
-                        <Text style={{ fontSize: 24, fontWeight: '700', color: vibrantTheme.colors.text, minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
+                        <Text style={{ fontSize: 24, fontWeight: '700', color: theme.colors.text, minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
                         <TouchableOpacity 
                           style={styles.stepperBtn}
                           onPress={() => setPeopleCount(peopleCount + 1)}
@@ -608,7 +677,7 @@ export const ManualAddScreen = () => {
                   
                   {isShared && parsedAmount > 0 && (
                     <View style={{ marginTop: 12, alignItems: 'center' }}>
-                      <Text style={{ fontSize: 16, fontWeight: '800', color: vibrantTheme.colors.primary }}>
+                      <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.primary }}>
                         Twój koszt: {finalCalculatedCost.toFixed(2)} {currency}
                       </Text>
                     </View>
@@ -620,19 +689,19 @@ export const ManualAddScreen = () => {
                 <View style={styles.formCard}>
                   <View style={styles.sectionHeaderBlock}>
                     <Text style={styles.sectionHeaderTitle}>Opcje dodatkowe</Text>
-                    <Text style={styles.sectionHeaderHint}>Anulowanie, notatki i statystyki</Text>
+                    <Text style={styles.sectionHeaderHint}>Notatki, statystyki i późniejsza optymalizacja</Text>
                   </View>
 
                 <View style={styles.optionalGroup}>
-                  <Text style={styles.labelOptional}>Link do anulowania</Text>
-                  <TextInput
-                    style={styles.textInput}
-                    value={cancelUrl}
-                    onChangeText={setCancelUrl}
-                    placeholder="https://..."
-                    placeholderTextColor={vibrantTheme.colors.textSubtle}
-                    autoCapitalize="none"
-                  />
+                  <View style={[styles.cancelAssistantHint, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
+                    <ShieldCheck size={18} color={theme.colors.primary} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.cancelAssistantHintTitle}>Anulowanie obsłuży Cancel Assistant</Text>
+                      <Text style={styles.cancelAssistantHintText}>
+                        Nie musisz wklejać linku ręcznie. Instrukcje i linki anulowania pokażemy w szczegółach subskrypcji.
+                      </Text>
+                    </View>
+                  </View>
                 </View>
 
                 <View style={styles.optionalGroup}>
@@ -642,7 +711,7 @@ export const ManualAddScreen = () => {
                     value={notes}
                     onChangeText={setNotes}
                     placeholder="Wpisz dodatkowe informacje..."
-                    placeholderTextColor={vibrantTheme.colors.textSubtle}
+                    placeholderTextColor={theme.colors.textSubtle}
                     multiline
                   />
                 </View>
@@ -652,12 +721,12 @@ export const ManualAddScreen = () => {
                     <Text style={styles.labelOptional}>Uwzględnij w statystykach</Text>
                     <TouchableOpacity 
                       onPress={() => setIncludeInStats(!includeInStats)}
-                      style={[styles.toggle, includeInStats && styles.toggleActive]}
+                      style={[styles.toggle, includeInStats && { backgroundColor: theme.colors.primary }]}
                     >
                       <View style={[styles.toggleDot, includeInStats && styles.toggleDotActive]} />
                     </TouchableOpacity>
                   </View>
-                  <Text style={[styles.infoBoxText, { marginTop: 8, color: vibrantTheme.colors.textMuted }]}>
+                  <Text style={[styles.infoBoxText, { marginTop: 8, color: theme.colors.textMuted }]}>
                     Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
                   </Text>
                 </View>
@@ -682,17 +751,17 @@ export const ManualAddScreen = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.saveButton, isLoading && styles.saveButtonLoading]}
+                  style={[styles.saveButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }, isLoading && styles.saveButtonLoading]}
                   onPress={handleSave}
                   disabled={isLoading || !isValid}
                   activeOpacity={0.8}
                 >
                   {isLoading ? (
-                    <ActivityIndicator color={vibrantTheme.colors.darkText} />
+                    <ActivityIndicator color={theme.colors.darkText} />
                   ) : (
                     <>
                       <Text style={styles.saveButtonText}>Zapisz subskrypcję</Text>
-                      <ArrowRight size={20} color={vibrantTheme.colors.darkText} />
+                      <ArrowRight size={20} color={theme.colors.darkText} />
                     </>
                   )}
                 </TouchableOpacity>
@@ -716,7 +785,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(32,246,181,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
   },
   appGlowBottom: {
     position: 'absolute',
@@ -732,7 +801,7 @@ const styles = StyleSheet.create({
   headerCenter: { flex: 1 },
   headerEyebrow: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
   headerTitle: { fontSize: 23, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 2 },
-  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: 'rgba(32,246,181,0.14)', borderWidth: 1, borderColor: 'rgba(32,246,181,0.28)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   headerStepText: { color: vibrantTheme.colors.primary, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   scrollContent: { paddingBottom: 44, flexGrow: 1, paddingHorizontal: 16 },
   amountHeader: {
@@ -850,7 +919,7 @@ const styles = StyleSheet.create({
   labelOptional: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
   textInput: { fontSize: 16, backgroundColor: 'rgba(255,255,255,0.09)', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 14, color: vibrantTheme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: vibrantTheme.colors.border },
   pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', marginRight: 8, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  pillActive: { backgroundColor: 'rgba(32,246,181,0.16)', borderColor: vibrantTheme.colors.primary },
+  pillActive: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: vibrantTheme.colors.primary },
   pillText: { color: vibrantTheme.colors.textMuted, fontWeight: '700' },
   pillTextActive: { color: vibrantTheme.colors.primary },
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.09)', padding: 15, borderRadius: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border },
@@ -864,12 +933,12 @@ const styles = StyleSheet.create({
   toggleDotActive: { transform: [{ translateX: 22 }] },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(32,246,181,0.13)',
+    backgroundColor: 'rgba(255,255,255,0.13)',
     padding: 12,
     borderRadius: 18,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(32,246,181,0.24)',
+    borderColor: 'rgba(255,255,255,0.24)',
   },
   infoBoxText: {
     flex: 1,
@@ -1037,7 +1106,7 @@ const styles = StyleSheet.create({
     maxWidth: 100,
   },
   planCardNameActive: {
-    color: '#0B6B3A',
+    color: '#334155',
   },
   planCardPriceRow: {
     flexDirection: 'row',
@@ -1050,7 +1119,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   planCardPriceActive: {
-    color: '#0B6B3A',
+    color: '#334155',
   },
   planCardCurrency: {
     color: 'rgba(255,255,255,0.8)',
@@ -1059,7 +1128,7 @@ const styles = StyleSheet.create({
     marginLeft: 2,
   },
   planCardCurrencyActive: {
-    color: '#0B6B3A',
+    color: '#334155',
     opacity: 0.7,
   },
   planCardCycle: {
@@ -1091,6 +1160,63 @@ const styles = StyleSheet.create({
     color: vibrantTheme.colors.darkText,
     fontSize: 14,
     fontWeight: '900',
+  },
+  planInsights: {
+    marginHorizontal: 24,
+    marginTop: 16,
+    borderRadius: 18,
+    backgroundColor: 'rgba(0,0,0,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.18)',
+    padding: 12,
+    gap: 10,
+  },
+  planInsightRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+  },
+  planInsightDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#FFFFFF',
+    marginTop: 6,
+  },
+  planInsightCopy: { flex: 1 },
+  planInsightTitle: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  planInsightDesc: {
+    color: 'rgba(255,255,255,0.74)',
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  cancelAssistantHint: {
+    flexDirection: 'row',
+    gap: 12,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 18,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.22)',
+  },
+  cancelAssistantHintTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  cancelAssistantHintText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '600',
   },
   stepperBtn: {
     width: 44,

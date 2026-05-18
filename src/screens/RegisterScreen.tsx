@@ -13,12 +13,14 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AuthStackParamList } from '../types/navigation';
 import { useAuth } from '../context/AuthContext';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 type Nav = NativeStackNavigationProp<AuthStackParamList, 'Register'>;
 
 export default function RegisterScreen() {
   const navigation = useNavigation<Nav>();
   const { signUp } = useAuth();
+  const { theme } = useTheme();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -45,21 +47,21 @@ export default function RegisterScreen() {
   };
 
   return (
-    <LinearGradient colors={vibrantTheme.gradients.app} style={styles.safe}>
-      <View style={styles.glowOne} />
-      <View style={styles.glowTwo} />
+    <LinearGradient colors={theme.gradients.app} style={styles.safe}>
+      <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}2E` }]} />
+      <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}33` }]} />
       <SafeAreaView style={styles.safe}>
         <KeyboardAvoidingView
           style={styles.container}
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         >
-          <Text style={styles.title}>Utworz konto</Text>
-          <Text style={styles.subtitle}>Witaj w Sub-Sentry</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Utwórz konto</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Witaj w Sub-Sentry</Text>
 
           <TextInput
             style={styles.input}
             placeholder="Email"
-            placeholderTextColor={vibrantTheme.colors.textSubtle}
+            placeholderTextColor={theme.colors.textSubtle}
             value={email}
             onChangeText={setEmail}
             keyboardType="email-address"
@@ -69,7 +71,7 @@ export default function RegisterScreen() {
           <TextInput
             style={styles.input}
             placeholder="Haslo (min. 6 znakow)"
-            placeholderTextColor={vibrantTheme.colors.textSubtle}
+            placeholderTextColor={theme.colors.textSubtle}
             value={password}
             onChangeText={setPassword}
             secureTextEntry
@@ -81,10 +83,10 @@ export default function RegisterScreen() {
             disabled={!email || !password || isLoading}
             activeOpacity={0.86}
           >
-            <LinearGradient colors={vibrantTheme.gradients.primary} style={styles.buttonGradient}>
+            <LinearGradient colors={theme.gradients.primary} style={styles.buttonGradient}>
               {isLoading
-                ? <ActivityIndicator color={vibrantTheme.colors.darkText} />
-                : <Text style={styles.buttonText}>Zarejestruj sie</Text>
+                ? <ActivityIndicator color={theme.colors.darkText} />
+                : <Text style={[styles.buttonText, { color: theme.colors.darkText }]}>Zarejestruj się</Text>
               }
             </LinearGradient>
           </TouchableOpacity>
@@ -93,7 +95,7 @@ export default function RegisterScreen() {
             style={styles.link}
             onPress={() => navigation.navigate('Login')}
           >
-            <Text style={styles.linkText}>Masz juz konto? Zaloguj sie</Text>
+            <Text style={[styles.linkText, { color: theme.colors.primary }]}>Masz już konto? Zaloguj się</Text>
           </TouchableOpacity>
         </KeyboardAvoidingView>
       </SafeAreaView>
@@ -103,7 +105,7 @@ export default function RegisterScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
-  glowOne: { position: 'absolute', width: 280, height: 280, borderRadius: 180, backgroundColor: 'rgba(32,246,181,0.18)', top: -90, right: -100 },
+  glowOne: { position: 'absolute', width: 280, height: 280, borderRadius: 180, backgroundColor: 'rgba(255,255,255,0.18)', top: -90, right: -100 },
   glowTwo: { position: 'absolute', width: 240, height: 240, borderRadius: 160, backgroundColor: 'rgba(139,92,246,0.2)', bottom: 120, left: -100 },
   container: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
   title: { fontSize: 40, fontWeight: '900', color: vibrantTheme.colors.text, marginBottom: 8 },

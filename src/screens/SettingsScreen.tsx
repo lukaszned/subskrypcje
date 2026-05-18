@@ -11,7 +11,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet, User, LogOut } from 'lucide-react-native';
+import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet, User, LogOut, Palette } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
@@ -19,6 +19,7 @@ import { useEmailScanStatus } from '../hooks/useEmailScan';
 import { useAuth } from '../context/AuthContext';
 import type { AppStackParamList } from '../types/navigation';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme, ThemeName } from '../theme/ThemeContext';
 
 const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
@@ -28,6 +29,8 @@ export const SettingsScreen = () => {
   const { data: settings, isLoading } = useUserSettings();
   const { data: emailScanStatus } = useEmailScanStatus();
   const updateMutation = useUpdateUserSettings();
+  const { theme, themeName, setThemeName, themes } = useTheme();
+  const themeOptions = Object.values(themes);
 
   // Local state for the form
   const [currency, setCurrency] = useState('PLN');
@@ -70,15 +73,15 @@ export const SettingsScreen = () => {
   };
 
   const renderProfileHeader = () => (
-    <View style={styles.profileHeader}>
-      <View style={styles.avatarContainer}>
-        <User size={32} color="#FFFFFF" />
+    <View style={[styles.profileHeader, { backgroundColor: theme.colors.cardStrong, borderColor: theme.colors.border }]}>
+      <View style={[styles.avatarContainer, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
+        <User size={32} color={theme.colors.darkText} />
       </View>
       <View style={styles.profileInfo}>
         <Text style={styles.profileName}>{user?.email?.split('@')[0] || 'Użytkownik'}</Text>
-        <Text style={styles.profileEmail}>{user?.email || 'brak email'}</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>Plan Premium</Text>
+        <Text style={[styles.profileEmail, { color: theme.colors.textMuted }]}>{user?.email || 'brak email'}</Text>
+        <View style={[styles.badge, { backgroundColor: `${theme.colors.primary}22`, borderColor: theme.colors.primary }]}>
+          <Text style={[styles.badgeText, { color: theme.colors.primary }]}>Plan Premium</Text>
         </View>
       </View>
     </View>
@@ -86,29 +89,29 @@ export const SettingsScreen = () => {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#0B6B3A" />
+          <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.header, { backgroundColor: theme.colors.bg, borderBottomColor: theme.colors.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <ArrowLeft size={24} color="#14251B" />
+          <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Ustawienia</Text>
+        <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Ustawienia</Text>
         <TouchableOpacity
           onPress={handleSave}
           disabled={updateMutation.isPending}
         >
           {updateMutation.isPending ? (
-            <ActivityIndicator size="small" color="#0B6B3A" />
+            <ActivityIndicator size="small" color={theme.colors.primary} />
           ) : (
-            <Text style={styles.saveBtnText}>Zapisz</Text>
+            <Text style={[styles.saveBtnText, { color: theme.colors.primary }]}>Zapisz</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -116,12 +119,63 @@ export const SettingsScreen = () => {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         {renderProfileHeader()}
         <View style={styles.section}>
+          <Text style={[styles.sectionLabel, { color: theme.colors.textSubtle }]}>Wygląd aplikacji</Text>
+          <View style={[styles.settingItem, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <View style={[styles.settingInfo, { marginBottom: 14 }]}>
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Palette size={20} color={theme.colors.primary} />
+              </View>
+              <View style={styles.settingTextBlock}>
+                <Text style={[styles.settingTitle, { color: theme.colors.text }]}>Motyw kolorystyczny</Text>
+                <Text style={[styles.settingDesc, { color: theme.colors.textMuted }]}>
+                  Premium Glassmorphism & Glow w wybranej palecie
+                </Text>
+              </View>
+            </View>
+            <View style={styles.themePickerRow}>
+              {themeOptions.map((item) => {
+                const selected = themeName === item.name;
+                return (
+                  <TouchableOpacity
+                    key={item.name}
+                    style={styles.themeOption}
+                    activeOpacity={0.82}
+                    onPress={() => setThemeName(item.name as ThemeName)}
+                  >
+                    <View
+                      style={[
+                        styles.themeSwatchOuter,
+                        selected && {
+                          borderColor: item.colors.primary,
+                          shadowColor: item.colors.primary,
+                          shadowOpacity: 0.36,
+                        },
+                      ]}
+                    >
+                      <View
+                        style={[
+                          styles.themeSwatch,
+                          { backgroundColor: item.colors.primary },
+                          item.name === 'monochrome' && styles.themeSwatchMono,
+                        ]}
+                      />
+                    </View>
+                    <Text style={[styles.themeOptionText, selected && { color: theme.colors.primary }]}>
+                      {item.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+        </View>
+        <View style={styles.section}>
           <Text style={styles.sectionLabel}>Finanse</Text>
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E8F3EC' }]}>
-                <CreditCard size={20} color="#0B6B3A" />
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <CreditCard size={20} color={theme.colors.primary} />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Waluta bazowa</Text>
@@ -132,10 +186,10 @@ export const SettingsScreen = () => {
               {USER_SETTING_CURRENCIES.map(c => (
                 <TouchableOpacity
                   key={c}
-                  style={[styles.currencyPill, currency === c && styles.currencyPillActive]}
+                  style={[styles.currencyPill, currency === c && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                   onPress={() => setCurrency(c)}
                 >
-                  <Text style={[styles.currencyPillText, currency === c && styles.currencyPillTextActive]}>{c}</Text>
+                  <Text style={[styles.currencyPillText, { color: theme.colors.textMuted }, currency === c && { color: theme.colors.primary }]}>{c}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -164,10 +218,10 @@ export const SettingsScreen = () => {
                 {USER_SETTING_CURRENCIES.map(c => (
                   <TouchableOpacity
                     key={c}
-                    style={[styles.miniPill, incomeCurrency === c && styles.miniPillActive]}
+                    style={[styles.miniPill, incomeCurrency === c && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
                     onPress={() => setIncomeCurrency(c)}
                   >
-                    <Text style={[styles.miniPillText, incomeCurrency === c && styles.miniPillTextActive]}>{c}</Text>
+                    <Text style={[styles.miniPillText, { color: theme.colors.textMuted }, incomeCurrency === c && { color: theme.colors.primary }]}>{c}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -180,8 +234,8 @@ export const SettingsScreen = () => {
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#F0FDF4' }]}>
-                <Bell size={20} color="#0B6B3A" />
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Bell size={20} color={theme.colors.primary} />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Powiadomienia Push</Text>
@@ -191,7 +245,7 @@ export const SettingsScreen = () => {
             <Switch
               value={notifsEnabled}
               onValueChange={setNotifsEnabled}
-              trackColor={{ false: '#DDE6DF', true: '#0B6B3A' }}
+              trackColor={{ false: '#DDE6DF', true: theme.colors.primary }}
             />
           </View>
 
@@ -226,10 +280,10 @@ export const SettingsScreen = () => {
               {[1, 2, 3, 5, 7].map(d => (
                 <TouchableOpacity
                   key={d}
-                  style={[styles.reminderPill, reminderDays === d && styles.reminderPillActive]}
+                  style={[styles.reminderPill, reminderDays === d && { backgroundColor: theme.colors.primary }]}
                   onPress={() => setReminderDays(d)}
                 >
-                  <Text style={[styles.reminderPillText, reminderDays === d && styles.reminderPillTextActive]}>{d}d</Text>
+                  <Text style={[styles.reminderPillText, { color: theme.colors.textMuted }, reminderDays === d && { color: theme.colors.darkText }]}>{d}d</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -245,15 +299,15 @@ export const SettingsScreen = () => {
             onPress={() => navigation.navigate('EmailScan')}
           >
             <View style={[styles.settingInfo, { marginBottom: 0 }]}>
-              <View style={[styles.iconContainer, { backgroundColor: '#E8F3EC' }]}>
-                <Mail size={20} color="#0B6B3A" />
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
+                <Mail size={20} color={theme.colors.primary} />
               </View>
               <View style={styles.settingTextBlock}>
                 <View style={styles.settingTitleRow}>
                   <Text style={styles.settingTitle}>Wykrywanie z Gmaila</Text>
                   {emailScanStatus?.pendingDetectionsCount ? (
-                    <View style={styles.pendingBadge}>
-                      <Text style={styles.pendingBadgeText}>{emailScanStatus.pendingDetectionsCount}</Text>
+                    <View style={[styles.pendingBadge, { backgroundColor: theme.colors.primary }]}>
+                      <Text style={[styles.pendingBadgeText, { color: theme.colors.darkText }]}>{emailScanStatus.pendingDetectionsCount}</Text>
                     </View>
                   ) : null}
                 </View>
@@ -348,6 +402,42 @@ const styles = StyleSheet.create({
   settingTitle: { fontSize: 15, fontWeight: '900', color: vibrantTheme.colors.text },
   settingDesc: { fontSize: 12, color: vibrantTheme.colors.textMuted, marginTop: 2 },
   settingTextBlock: { flex: 1 },
+  themePickerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  themeOption: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 8,
+  },
+  themeSwatchOuter: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    borderWidth: 2,
+    borderColor: 'rgba(255,255,255,0.14)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 10 },
+    shadowRadius: 18,
+    elevation: 4,
+  },
+  themeSwatch: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+  },
+  themeSwatchMono: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+  },
+  themeOptionText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
+  },
   settingTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   pendingBadge: {
     minWidth: 22,
@@ -369,7 +459,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent'
   },
   currencyPillActive: {
-    backgroundColor: 'rgba(32,246,181,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     borderColor: vibrantTheme.colors.primary
   },
   currencyPillText: { fontSize: 13, fontWeight: '700', color: vibrantTheme.colors.textMuted },
@@ -412,7 +502,7 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   miniPillActive: {
-    backgroundColor: 'rgba(32,246,181,0.16)',
+    backgroundColor: 'rgba(255,255,255,0.16)',
     borderColor: vibrantTheme.colors.primary,
   },
   miniPillText: {
@@ -462,7 +552,7 @@ const styles = StyleSheet.create({
   },
   badge: {
     alignSelf: 'flex-start',
-    backgroundColor: 'rgba(32,246,181,0.14)',
+    backgroundColor: 'rgba(255,255,255,0.14)',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
