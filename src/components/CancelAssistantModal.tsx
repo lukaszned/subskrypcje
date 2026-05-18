@@ -255,7 +255,7 @@ const styles = StyleSheet.create({
     color: vibrantTheme.colors.textMuted,
   },
   easy: { backgroundColor: '#F8FAFC' },
-  easyText: { color: '#10B981' },
+  easyText: { color: '#334155' },
   medium: { backgroundColor: '#FFFBEB' },
   mediumText: { color: '#F59E0B' },
   hard: { backgroundColor: '#FEF2F2' },

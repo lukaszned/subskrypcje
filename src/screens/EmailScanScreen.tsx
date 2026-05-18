@@ -1760,14 +1760,14 @@ const styles = StyleSheet.create({
   productTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
   productMeta: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 3 },
   reviewedBadge: {
-    backgroundColor: 'rgba(52,211,153,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.12)',
     borderRadius: 999,
     paddingHorizontal: 9,
     paddingVertical: 5,
     borderWidth: 1,
-    borderColor: 'rgba(52,211,153,0.22)',
+    borderColor: 'rgba(255,255,255,0.22)',
   },
-  reviewedBadgeText: { color: vibrantTheme.colors.success, fontSize: 10, fontWeight: '900' },
+  reviewedBadgeText: { color: '#CBD5E1', fontSize: 10, fontWeight: '900' },
   amountStrip: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -2075,7 +2075,7 @@ const styles = StyleSheet.create({
     padding: 2,
   },
   toggleActive: {
-    backgroundColor: '#10B981',
+    backgroundColor: '#CBD5E1',
   },
   toggleDot: {
     width: 20,

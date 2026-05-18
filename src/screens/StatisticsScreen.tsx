@@ -152,18 +152,18 @@ export const StatisticsScreen = () => {
                   <Text style={styles.savingLabel}>Po anulowaniu</Text>
                   <Text style={styles.savingName} numberOfLines={1}>{savingSimulation.top.subscription.name}</Text>
                 </View>
-                <TrendingDown size={24} color={vibrantTheme.colors.success} />
+                <TrendingDown size={24} color={theme.colors.primary} />
               </View>
               <View style={styles.savingMetricGrid}>
                 <View style={styles.savingMetric}>
                   <Text style={styles.savingMetricLabel}>Miesięcznie mniej</Text>
-                  <Text style={styles.savingMetricValue}>
+                  <Text style={[styles.savingMetricValue, { color: theme.colors.primary }]}>
                     {savingSimulation.monthlySaving.toFixed(2)} {savingSimulation.currency}
                   </Text>
                 </View>
                 <View style={styles.savingMetric}>
                   <Text style={styles.savingMetricLabel}>Rocznie mniej</Text>
-                  <Text style={styles.savingMetricValue}>
+                  <Text style={[styles.savingMetricValue, { color: theme.colors.primary }]}>
                     {savingSimulation.yearlySaving.toFixed(0)} {savingSimulation.currency}
                   </Text>
                 </View>
@@ -175,7 +175,7 @@ export const StatisticsScreen = () => {
                 </View>
                 <View style={styles.beforeAfterRow}>
                   <Text style={styles.beforeAfterLabel}>Po decyzji</Text>
-                  <Text style={[styles.beforeAfterValue, { color: vibrantTheme.colors.success }]}>
+                  <Text style={[styles.beforeAfterValue, { color: theme.colors.primary }]}>
                     {savingSimulation.afterMonthly.toFixed(2)} {savingSimulation.currency}
                   </Text>
                 </View>
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     marginBottom: 5,
   },
   savingMetricValue: {
-    color: vibrantTheme.colors.success,
+    color: '#CBD5E1',
     fontSize: 17,
     fontWeight: '900',
   },

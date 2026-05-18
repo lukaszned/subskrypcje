@@ -21,6 +21,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { Swipeable } from 'react-native-gesture-handler';
 import { CheckCircle, XCircle } from 'lucide-react-native';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 
 export interface SubscriptionItem {
   id: string;
@@ -47,11 +48,11 @@ interface Props {
 const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
   'rozrywka':     { bg: '#E0E7FF', text: '#4F46E5' },
   'narzędzia':    { bg: '#DBEAFE', text: '#2563EB' },
-  'zdrowie':      { bg: '#F1F5F9', text: '#16A34A' },
+  'zdrowie':      { bg: '#F1F5F9', text: '#334155' },
   'edukacja':     { bg: '#FEF9C3', text: '#CA8A04' },
   'produktywność':{ bg: '#FCE7F3', text: '#BE185D' },
   'zakupy':       { bg: '#FEF3C7', text: '#D97706' },
-  'finanse':      { bg: '#F8FAFC', text: '#059669' },
+  'finanse':      { bg: '#F8FAFC', text: '#334155' },
   'transport':    { bg: '#F0F9FF', text: '#0284C7' },
   'inne':         { bg: '#F1F5F9', text: '#64748B' },
 };
@@ -62,6 +63,7 @@ function getCategoryStyle(category: string) {
 }
 
 const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
+  const { theme } = useTheme();
   const safeItem: SubscriptionItem = {
     ...item,
     name: item.name || 'Subskrypcja',
@@ -79,7 +81,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
   const getStatusInfo = (status: string, isTrial?: boolean) => {
     if (isTrial) return { label: 'Trial', color: '#F59E0B', bg: '#FFFBEB' };
     switch (status) {
-      case 'paid': return { label: 'Opłacona', color: '#10B981', bg: '#F1F5F9' };
+      case 'paid': return { label: 'Opłacona', color: theme.colors.primary, bg: `${theme.colors.primary}18` };
       case 'overdue': return { label: 'Zaległa', color: '#EF4444', bg: '#FEE2E2' };
       case 'canceled': return { label: 'Anulowana', color: '#64748B', bg: '#F1F5F9' };
       default: return { label: 'Aktywna', color: '#6366F1', bg: '#EEF2FF' };
@@ -104,7 +106,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
       <View style={styles.actionsContainer}>
         {/* Opłać — zielony */}
         <TouchableOpacity
-          style={[styles.actionButton, styles.payAction]}
+          style={[styles.actionButton, styles.payAction, { backgroundColor: theme.colors.primary }]}
           onPress={() => onPause(safeItem.id)}
           activeOpacity={0.8}
         >
@@ -291,7 +293,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   payAction: {
-    backgroundColor: '#12F7B0',
+    backgroundColor: '#CBD5E1',
   },
   cancelAction: {
     backgroundColor: '#FF3B6B',

@@ -225,7 +225,7 @@ export const DashboardScreen = () => {
       color: (() => {
         switch (item.category) {
           case 'entertainment': return '#6366F1';
-          case 'productivity': return '#10B981';
+          case 'productivity': return appTheme.colors.primary;
           case 'utilities': return '#3B82F6';
           case 'finance': return '#F59E0B';
           case 'health': return '#EF4444';
@@ -243,7 +243,7 @@ export const DashboardScreen = () => {
         }
       })()
     }));
-  }, [breakdownData]);
+  }, [appTheme.colors.primary, breakdownData]);
 
   // Memoized Trend Data
   const memoizedTrends = useMemo(() => {
@@ -1336,8 +1336,8 @@ export const DashboardScreen = () => {
     
     const getStatusColor = () => {
       switch (status) {
-        case 'excellent': return '#10B981';
-        case 'good': return '#6366F1';
+        case 'excellent': return theme.primary;
+        case 'good': return theme.primary;
         case 'needs_attention': return '#F59E0B';
         case 'risky': return '#EF4444';
         default: return theme.primary;
@@ -1544,7 +1544,7 @@ export const DashboardScreen = () => {
       <View style={[dynamicStyles.savingsCard, dynamicStyles.shadowSm]}>
         <View style={dynamicStyles.savingsHeader}>
           <View style={dynamicStyles.savingsIconContainer}>
-            <Activity size={20} color="#10B981" />
+            <Activity size={20} color={theme.primary} />
           </View>
           <View>
             <Text style={dynamicStyles.savingsTitle}>Szacowana oszczędność</Text>
@@ -1668,7 +1668,7 @@ export const DashboardScreen = () => {
     return (
       <View style={dynamicStyles.sectionContainer}>
         <Text style={dynamicStyles.sectionTitle}>Pełen obraz subskrypcji</Text>
-        <View style={[dynamicStyles.breakdownCard, dynamicStyles.shadowSm, { marginTop: 8, borderColor: theme.primary, backgroundColor: isDark ? '#1E293B' : '#EEF2FF' }]}>
+        <View style={[dynamicStyles.breakdownCard, dynamicStyles.shadowSm, { marginTop: 8, borderColor: `${theme.primary}44`, backgroundColor: `${theme.primary}14` }]}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
             <View style={{ backgroundColor: theme.primary, padding: 10, borderRadius: 12 }}>
               <Lightbulb size={24} color="#FFFFFF" />
@@ -1931,6 +1931,14 @@ export const DashboardScreen = () => {
         desc: 'Wykryj historyczne subskrypcje, zmiany cen i rachunki do review.',
         cta: 'Otwórz Email Scan',
         onPress: () => navigation.navigate('EmailScan'),
+      },
+      {
+        id: 'review-queue',
+        icon: ShieldCheck,
+        title: 'Kolejka decyzji',
+        desc: 'Szybko oznacz: zostawiam, anulowac albo sprawdze pozniej.',
+        cta: 'Otworz review',
+        onPress: () => navigation.navigate('SubscriptionReviewQueue'),
       },
     ];
 

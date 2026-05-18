@@ -160,7 +160,7 @@ export const SubscriptionDetailScreen = () => {
         title: 'Subskrypcja anulowana',
         desc: 'Ta usługa nie powinna już generować kolejnych płatności.',
         icon: CheckCircle,
-        color: vibrantTheme.colors.success,
+        color: theme.colors.primary,
         bg: 'rgba(52,211,153,0.14)',
       };
     }
@@ -390,14 +390,14 @@ export const SubscriptionDetailScreen = () => {
             <View style={styles.historyList}>
               {paymentsData.items.map((payment: any, index: number) => (
                 <View key={payment.id} style={styles.historyItem}>
-                  <View style={[styles.historyDot, { backgroundColor: '#10B981' }]} />
+                  <View style={[styles.historyDot, { backgroundColor: theme.colors.primary }]} />
                   {index < paymentsData.items.length - 1 && <View style={styles.historyLine} />}
                   <View style={styles.historyMain}>
                     <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                       <Text style={styles.historyTitle}>
                         Płatność {payment.amount.toFixed(2)} {payment.currency}
                       </Text>
-                      <Text style={[styles.historyTitle, { color: '#10B981' }]}>ZAKSIĘGOWANO</Text>
+                      <Text style={[styles.historyTitle, { color: theme.colors.primary }]}>ZAKSIĘGOWANO</Text>
                     </View>
                     <Text style={styles.historyDate}>
                       {new Date(payment.paidAt).toLocaleDateString('pl-PL', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
@@ -432,7 +432,7 @@ export const SubscriptionDetailScreen = () => {
                 <View key={event.id} style={styles.historyItem}>
                   <View style={[
                     styles.historyDot, 
-                    { backgroundColor: event.type === 'paid' ? '#10B981' : event.type === 'canceled' ? '#EF4444' : '#6366F1' }
+                    { backgroundColor: event.type === 'paid' ? theme.colors.primary : event.type === 'canceled' ? '#EF4444' : theme.colors.cyan }
                   ]} />
                   {index < historyData.items.length - 1 && <View style={styles.historyLine} />}
                   <View style={styles.historyMain}>

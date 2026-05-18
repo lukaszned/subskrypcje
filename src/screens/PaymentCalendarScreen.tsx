@@ -25,6 +25,7 @@ import { useSubscriptions } from '../hooks/useSubscriptions';
 import type { AppStackParamList } from '../types/navigation';
 import type { Subscription } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 
 type CalendarItem = Subscription & {
@@ -55,6 +56,7 @@ function getBrandInitial(item: CalendarItem) {
 
 export const PaymentCalendarScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'PaymentCalendar'>>();
+  const { theme } = useTheme();
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(30);
   const { data: subscriptions = [], isLoading, isError, error, refetch, isRefetching } = useSubscriptions();
 
@@ -138,21 +140,21 @@ export const PaymentCalendarScreen = () => {
   const renderContent = () => {
     if (isLoading) {
       return (
-        <View style={styles.centerState}>
-          <ActivityIndicator color={vibrantTheme.colors.primary} />
-          <Text style={styles.centerText}>Buduję kalendarz płatności...</Text>
+        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <ActivityIndicator color={theme.colors.primary} />
+          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>Buduję kalendarz płatności...</Text>
         </View>
       );
     }
 
     if (isError) {
       return (
-        <View style={styles.centerState}>
+        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <AlertCircle size={32} color={vibrantTheme.colors.danger} />
-          <Text style={styles.centerTitle}>Nie udało się pobrać płatności</Text>
-          <Text style={styles.centerText}>{error?.message || 'Sprawdź połączenie i spróbuj ponownie.'}</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => refetch()}>
-            <Text style={styles.retryButtonText}>Spróbuj ponownie</Text>
+          <Text style={[styles.centerTitle, { color: theme.colors.text }]}>Nie udało się pobrać płatności</Text>
+          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>{error?.message || 'Sprawdź połączenie i spróbuj ponownie.'}</Text>
+          <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => refetch()}>
+            <Text style={[styles.retryButtonText, { color: theme.colors.darkText }]}>Spróbuj ponownie</Text>
           </TouchableOpacity>
         </View>
       );
@@ -160,12 +162,12 @@ export const PaymentCalendarScreen = () => {
 
     if (groupedItems.length === 0) {
       return (
-        <View style={styles.centerState}>
-          <Sparkles size={34} color={vibrantTheme.colors.primary} />
-          <Text style={styles.centerTitle}>Spokojny horyzont</Text>
-          <Text style={styles.centerText}>Nie widzę zaplanowanych płatności w wybranym okresie.</Text>
-          <TouchableOpacity style={styles.retryButton} onPress={() => navigation.navigate('AddSubscription')}>
-            <Text style={styles.retryButtonText}>Dodaj subskrypcję</Text>
+        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Sparkles size={34} color={theme.colors.primary} />
+          <Text style={[styles.centerTitle, { color: theme.colors.text }]}>Spokojny horyzont</Text>
+          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>Nie widzę zaplanowanych płatności w wybranym okresie.</Text>
+          <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => navigation.navigate('AddSubscription')}>
+            <Text style={[styles.retryButtonText, { color: theme.colors.darkText }]}>Dodaj subskrypcję</Text>
           </TouchableOpacity>
         </View>
       );
@@ -177,10 +179,10 @@ export const PaymentCalendarScreen = () => {
           <View key={group.key} style={styles.dayGroup}>
             <View style={styles.dayHeader}>
               <View>
-                <Text style={styles.dayTitle}>{formatDateHeading(group.date)}</Text>
-                <Text style={styles.daySubtitle}>{formatRelativeDay(group.date)}</Text>
+                <Text style={[styles.dayTitle, { color: theme.colors.text }]}>{formatDateHeading(group.date)}</Text>
+                <Text style={[styles.daySubtitle, { color: theme.colors.textMuted }]}>{formatRelativeDay(group.date)}</Text>
               </View>
-              <Text style={styles.dayTotal}>
+              <Text style={[styles.dayTotal, { color: theme.colors.primary }]}>
                 {group.total.toFixed(2)} {group.currency}
               </Text>
             </View>
@@ -192,26 +194,26 @@ export const PaymentCalendarScreen = () => {
               return (
                 <TouchableOpacity
                   key={item.id}
-                  style={styles.paymentCard}
+                  style={[styles.paymentCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
                   activeOpacity={0.86}
                   onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
                 >
-                  <View style={[styles.brandMark, isOverdue && styles.brandMarkDanger, isSoon && styles.brandMarkWarning]}>
-                    <Text style={styles.brandMarkText}>{getBrandInitial(item)}</Text>
+                  <View style={[styles.brandMark, { backgroundColor: `${theme.colors.primary}18` }, isOverdue && styles.brandMarkDanger, isSoon && styles.brandMarkWarning]}>
+                    <Text style={[styles.brandMarkText, { color: theme.colors.text }]}>{getBrandInitial(item)}</Text>
                   </View>
                   <View style={styles.paymentMain}>
-                    <Text style={styles.paymentName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.paymentMeta} numberOfLines={1}>
+                    <Text style={[styles.paymentName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
+                    <Text style={[styles.paymentMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>
                       {[item.provider, item.planName].filter(Boolean).join(' · ') || item.billingCycle}
                     </Text>
                   </View>
                   <View style={styles.paymentAmountBlock}>
-                    <Text style={styles.paymentAmount}>{item.amount.toFixed(2)} {item.currency}</Text>
-                    <Text style={[styles.paymentStatus, isOverdue && styles.paymentStatusDanger, isSoon && styles.paymentStatusWarning]}>
+                    <Text style={[styles.paymentAmount, { color: theme.colors.text }]}>{item.amount.toFixed(2)} {item.currency}</Text>
+                    <Text style={[styles.paymentStatus, { color: theme.colors.textMuted }, isOverdue && styles.paymentStatusDanger, isSoon && styles.paymentStatusWarning]}>
                       {formatRelativeDay(item.paymentDate)}
                     </Text>
                   </View>
-                  <ChevronRight size={17} color={vibrantTheme.colors.textSubtle} />
+                  <ChevronRight size={17} color={theme.colors.textSubtle} />
                 </TouchableOpacity>
               );
             })}
@@ -222,17 +224,17 @@ export const PaymentCalendarScreen = () => {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.glowOne} />
-      <View style={styles.glowTwo} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}26` }]} />
+      <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}20` }]} />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={vibrantTheme.colors.text} />
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Kalendarz płatności</Text>
-          <Text style={styles.subtitle}>Cashflow subskrypcji bez zaskoczeń</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Kalendarz płatności</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Cashflow subskrypcji bez zaskoczeń</Text>
         </View>
       </View>
 
@@ -243,11 +245,11 @@ export const PaymentCalendarScreen = () => {
           <RefreshControl
             refreshing={isRefetching}
             onRefresh={refetch}
-            tintColor={vibrantTheme.colors.primary}
+            tintColor={theme.colors.primary}
           />
         }
       >
-        <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.heroCard}>
+        <LinearGradient colors={theme.gradients.hero} style={[styles.heroCard, { shadowColor: theme.colors.primary }]}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>
               <CalendarDays size={22} color="#FFFFFF" />
@@ -279,10 +281,14 @@ export const PaymentCalendarScreen = () => {
           {HORIZONS.map((value) => (
             <TouchableOpacity
               key={value}
-              style={[styles.horizonTab, horizon === value && styles.horizonTabActive]}
+              style={[
+                styles.horizonTab,
+                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
+                horizon === value && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary },
+              ]}
               onPress={() => setHorizon(value)}
             >
-              <Text style={[styles.horizonTabText, horizon === value && styles.horizonTabTextActive]}>
+              <Text style={[styles.horizonTabText, { color: theme.colors.textMuted }, horizon === value && { color: theme.colors.primary }]}>
                 {value} dni
               </Text>
             </TouchableOpacity>
@@ -294,14 +300,14 @@ export const PaymentCalendarScreen = () => {
             const isBusy = day.count > 0;
 
             return (
-              <View key={day.key} style={[styles.weekDay, isBusy && styles.weekDayBusy]}>
-                <Text style={[styles.weekDayName, isBusy && styles.weekDayNameBusy]}>
+              <View key={day.key} style={[styles.weekDay, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, isBusy && { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
+                <Text style={[styles.weekDayName, { color: theme.colors.textSubtle }, isBusy && { color: theme.colors.primary }]}>
                   {day.date.toLocaleDateString('pl-PL', { weekday: 'short' })}
                 </Text>
-                <Text style={[styles.weekDayNumber, isBusy && styles.weekDayNumberBusy]}>
+                <Text style={[styles.weekDayNumber, { color: theme.colors.textMuted }, isBusy && { color: theme.colors.text }]}>
                   {day.date.getDate()}
                 </Text>
-                <View style={[styles.weekDot, isBusy && styles.weekDotBusy]} />
+                <View style={[styles.weekDot, isBusy && { backgroundColor: theme.colors.primary }]} />
               </View>
             );
           })}
@@ -309,20 +315,20 @@ export const PaymentCalendarScreen = () => {
 
         {summary.next && (
           <TouchableOpacity
-            style={styles.nextCard}
+            style={[styles.nextCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
             activeOpacity={0.86}
             onPress={() => navigation.navigate('SubscriptionDetail', { id: summary.next!.id })}
           >
-            <View style={styles.nextIcon}>
-              <Clock size={18} color={vibrantTheme.colors.primary} />
+            <View style={[styles.nextIcon, { backgroundColor: `${theme.colors.primary}1F`, borderColor: `${theme.colors.primary}33` }]}>
+              <Clock size={18} color={theme.colors.primary} />
             </View>
             <View style={styles.nextBody}>
-              <Text style={styles.nextTitle}>Najbliższa decyzja</Text>
-              <Text style={styles.nextDesc}>
+              <Text style={[styles.nextTitle, { color: theme.colors.text }]}>Najbliższa decyzja</Text>
+              <Text style={[styles.nextDesc, { color: theme.colors.textMuted }]}>
                 {summary.next.name} · {formatRelativeDay(summary.next.paymentDate)} · {summary.next.amount.toFixed(2)} {summary.next.currency}
               </Text>
             </View>
-            <CreditCard size={19} color={vibrantTheme.colors.textMuted} />
+            <CreditCard size={19} color={theme.colors.textMuted} />
           </TouchableOpacity>
         )}
 
@@ -477,7 +483,7 @@ const styles = StyleSheet.create({
   },
   horizonTabActive: {
     backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: vibrantTheme.colors.primary,
+    borderColor: '#CBD5E1',
   },
   horizonTabText: {
     color: vibrantTheme.colors.textMuted,
@@ -485,7 +491,7 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   horizonTabTextActive: {
-    color: vibrantTheme.colors.primary,
+    color: '#CBD5E1',
   },
   weekRail: {
     flexDirection: 'row',
@@ -513,7 +519,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   weekDayNameBusy: {
-    color: vibrantTheme.colors.primary,
+    color: '#CBD5E1',
   },
   weekDayNumber: {
     color: vibrantTheme.colors.textMuted,
@@ -532,7 +538,7 @@ const styles = StyleSheet.create({
     marginTop: 7,
   },
   weekDotBusy: {
-    backgroundColor: vibrantTheme.colors.primary,
+    backgroundColor: '#CBD5E1',
   },
   nextCard: {
     flexDirection: 'row',
@@ -593,7 +599,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   dayTotal: {
-    color: vibrantTheme.colors.primary,
+    color: '#CBD5E1',
     fontSize: 13,
     fontWeight: '900',
   },
@@ -686,7 +692,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: vibrantTheme.colors.primary,
+    backgroundColor: '#CBD5E1',
     borderRadius: 16,
     paddingVertical: 12,
     paddingHorizontal: 18,

@@ -29,6 +29,7 @@ import type { AppStackParamList } from '../types/navigation';
 import type { BillingCycle, Subscription } from '../types/api';
 import { LOCAL_SUBSCRIPTION_PLANS, PopularSubscription, SubscriptionPlanVariant } from '../data/subscriptionPlans';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 
 type GuardIssue = {
@@ -99,14 +100,15 @@ function findCatalogPlan(subscription: Subscription): { service: PopularSubscrip
   return { service, plan: nearestPlan };
 }
 
-function getSeverityColor(severity: GuardIssue['severity']) {
+function getSeverityColor(severity: GuardIssue['severity'], primary: string) {
   if (severity === 'critical') return vibrantTheme.colors.danger;
   if (severity === 'warning') return vibrantTheme.colors.warning;
-  return vibrantTheme.colors.primary;
+  return primary;
 }
 
 export const GuardScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Guard'>>();
+  const { theme } = useTheme();
   const { data: subscriptions = [], isLoading, isError, error, refetch, isRefetching } = useSubscriptions();
 
   const activeSubscriptions = useMemo(
@@ -220,16 +222,16 @@ export const GuardScreen = () => {
   const renderIssue = (item: GuardIssue) => (
     <TouchableOpacity
       key={item.id}
-      style={styles.issueRow}
+      style={[styles.issueRow, { borderTopColor: theme.colors.border }]}
       activeOpacity={0.86}
       onPress={() => item.subscriptionId && navigation.navigate('SubscriptionDetail', { id: item.subscriptionId })}
     >
-      <View style={[styles.issueDot, { backgroundColor: getSeverityColor(item.severity) }]} />
+      <View style={[styles.issueDot, { backgroundColor: getSeverityColor(item.severity, theme.colors.primary) }]} />
       <View style={styles.issueBody}>
-        <Text style={styles.issueTitle} numberOfLines={1}>{item.title}</Text>
-        <Text style={styles.issueDesc} numberOfLines={2}>{item.desc}</Text>
+        <Text style={[styles.issueTitle, { color: theme.colors.text }]} numberOfLines={1}>{item.title}</Text>
+        <Text style={[styles.issueDesc, { color: theme.colors.textMuted }]} numberOfLines={2}>{item.desc}</Text>
       </View>
-      <ChevronRight size={17} color={vibrantTheme.colors.textSubtle} />
+      <ChevronRight size={17} color={theme.colors.textSubtle} />
     </TouchableOpacity>
   );
 
@@ -242,24 +244,24 @@ export const GuardScreen = () => {
   ) => {
     const Icon = icon;
     return (
-      <View style={styles.sectionCard}>
+      <View style={[styles.sectionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
         <View style={styles.sectionHeader}>
           <View style={styles.sectionTitleRow}>
-            <View style={styles.sectionIcon}>
-              <Icon size={18} color={vibrantTheme.colors.primary} />
+            <View style={[styles.sectionIcon, { backgroundColor: `${theme.colors.primary}1F`, borderColor: `${theme.colors.primary}33` }]}>
+              <Icon size={18} color={theme.colors.primary} />
             </View>
             <View>
-              <Text style={styles.sectionTitle}>{title}</Text>
-              <Text style={styles.sectionCaption}>{caption}</Text>
+              <Text style={[styles.sectionTitle, { color: theme.colors.text }]}>{title}</Text>
+              <Text style={[styles.sectionCaption, { color: theme.colors.textMuted }]}>{caption}</Text>
             </View>
           </View>
-          <Text style={styles.sectionCount}>{items.length}</Text>
+          <Text style={[styles.sectionCount, { color: theme.colors.primary }]}>{items.length}</Text>
         </View>
 
         {items.length > 0 ? (
           <View style={styles.issueList}>{items.slice(0, 4).map(renderIssue)}</View>
         ) : (
-          <Text style={styles.emptySectionText}>{emptyText}</Text>
+          <Text style={[styles.emptySectionText, { color: theme.colors.textMuted }]}>{emptyText}</Text>
         )}
       </View>
     );
@@ -267,27 +269,27 @@ export const GuardScreen = () => {
 
   if (isLoading) {
     return (
-      <SafeAreaView style={styles.safeArea}>
+      <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
         <View style={styles.centerState}>
-          <ActivityIndicator color={vibrantTheme.colors.primary} />
-          <Text style={styles.centerText}>Uruchamiam Sub-Sentry Guard...</Text>
+          <ActivityIndicator color={theme.colors.primary} />
+          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>Uruchamiam Sub-Sentry Guard...</Text>
         </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.glowTop} />
-      <View style={styles.glowBottom} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.glowTop, { backgroundColor: `${theme.colors.primary}26` }]} />
+      <View style={[styles.glowBottom, { backgroundColor: `${theme.colors.cyan}20` }]} />
 
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={vibrantTheme.colors.text} />
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>
-          <Text style={styles.title}>Sub-Sentry Guard</Text>
-          <Text style={styles.subtitle}>Pilot bezpieczeństwa triali i płatności</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Sub-Sentry Guard</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Pilot bezpieczeństwa triali i płatności</Text>
         </View>
       </View>
 
@@ -295,19 +297,19 @@ export const GuardScreen = () => {
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={vibrantTheme.colors.primary} />
+          <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.colors.primary} />
         }
       >
         {isError && (
           <View style={styles.errorBanner}>
             <AlertCircle size={17} color={vibrantTheme.colors.warning} />
-            <Text style={styles.errorBannerText}>
+            <Text style={[styles.errorBannerText, { color: theme.colors.textMuted }]}>
               Nie udało się odświeżyć danych. Pokazuję ostatni znany stan. {error?.message || ''}
             </Text>
           </View>
         )}
 
-        <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.heroCard}>
+        <LinearGradient colors={theme.gradients.hero} style={[styles.heroCard, { shadowColor: theme.colors.primary }]}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>
               <ShieldCheck size={25} color="#FFFFFF" />
@@ -340,13 +342,13 @@ export const GuardScreen = () => {
           </View>
         </LinearGradient>
 
-        <View style={styles.paywallPreview}>
-          <View style={styles.paywallIcon}>
-            <Sparkles size={18} color={vibrantTheme.colors.primary} />
+        <View style={[styles.paywallPreview, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={[styles.paywallIcon, { backgroundColor: `${theme.colors.primary}1F` }]}>
+            <Sparkles size={18} color={theme.colors.primary} />
           </View>
           <View style={styles.paywallBody}>
-            <Text style={styles.paywallTitle}>Guard jako pakiet za 5 zł / mies.</Text>
-            <Text style={styles.paywallDesc}>Triale, radar płatności, price watch i cancel readiness w jednym miejscu.</Text>
+            <Text style={[styles.paywallTitle, { color: theme.colors.text }]}>Guard jako pakiet za 5 zł / mies.</Text>
+            <Text style={[styles.paywallDesc, { color: theme.colors.textMuted }]}>Triale, radar płatności, price watch i cancel readiness w jednym miejscu.</Text>
           </View>
         </View>
 
@@ -383,12 +385,12 @@ export const GuardScreen = () => {
         )}
 
         <TouchableOpacity
-          style={styles.primaryCta}
+          style={[styles.primaryCta, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}
           activeOpacity={0.86}
           onPress={() => navigation.navigate('PaymentCalendar')}
         >
-          <Bell size={19} color={vibrantTheme.colors.darkText} />
-          <Text style={styles.primaryCtaText}>Otwórz kalendarz płatności</Text>
+          <Bell size={19} color={theme.colors.darkText} />
+          <Text style={[styles.primaryCtaText, { color: theme.colors.darkText }]}>Otwórz kalendarz płatności</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -533,7 +535,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
   sectionCaption: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 2, maxWidth: 250 },
-  sectionCount: { color: vibrantTheme.colors.primary, fontSize: 18, fontWeight: '900' },
+  sectionCount: { color: '#CBD5E1', fontSize: 18, fontWeight: '900' },
   issueList: { gap: 10 },
   issueRow: {
     flexDirection: 'row',
@@ -557,7 +559,7 @@ const styles = StyleSheet.create({
   primaryCta: {
     height: 54,
     borderRadius: 20,
-    backgroundColor: vibrantTheme.colors.primary,
+    backgroundColor: '#CBD5E1',
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',

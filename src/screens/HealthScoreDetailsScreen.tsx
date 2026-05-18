@@ -18,6 +18,7 @@ import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useHealthScore } from '../hooks/useHealthScore';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate } from '../utils/date';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'HealthScoreDetails'>;
@@ -87,6 +88,7 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
 
 export function HealthScoreDetailsScreen() {
   const navigation = useNavigation<Nav>();
+  const { theme } = useTheme();
   const summaryQuery = useDashboardSummary();
   const subscriptionsQuery = useSubscriptions();
   const healthQuery = useHealthScore(true);
@@ -101,9 +103,9 @@ export function HealthScoreDetailsScreen() {
   const isRefreshing = summaryQuery.isRefetching || subscriptionsQuery.isRefetching || healthQuery.isRefetching;
 
   const scoreColor = health.score >= 85
-    ? vibrantTheme.colors.success
+    ? theme.colors.primary
     : health.score >= 70
-      ? vibrantTheme.colors.primary
+      ? theme.colors.primary
       : health.score >= 55
         ? vibrantTheme.colors.warning
         : vibrantTheme.colors.danger;
@@ -124,25 +126,25 @@ export function HealthScoreDetailsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.glowOne} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}26` }]} />
       <View style={styles.glowTwo} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={vibrantTheme.colors.text} />
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Kondycja subskrypcji</Text>
-          <Text style={styles.subtitle}>Jak stabilny jest Twój portfel usług</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Kondycja subskrypcji</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Jak stabilny jest Twój portfel usług</Text>
         </View>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={vibrantTheme.colors.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
-        <LinearGradient colors={vibrantTheme.gradients.hero} style={styles.hero}>
+        <LinearGradient colors={theme.gradients.hero} style={[styles.hero, { shadowColor: theme.colors.primary }]}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>
               <ShieldCheck size={26} color="#FFFFFF" />
@@ -160,12 +162,12 @@ export function HealthScoreDetailsScreen() {
           <Text style={styles.heroSummary}>{health.label} · {health.summary}</Text>
         </LinearGradient>
 
-        <View style={styles.explainCard}>
+        <View style={[styles.explainCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeader}>
-            <Info size={19} color={vibrantTheme.colors.primary} />
-            <Text style={styles.cardTitle}>Co to jest?</Text>
+            <Info size={19} color={theme.colors.primary} />
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Co to jest?</Text>
           </View>
-          <Text style={styles.bodyText}>
+          <Text style={[styles.bodyText, { color: theme.colors.textMuted }]}>
             Health Score to szybki wskaźnik ryzyka subskrypcji. Im mniej zaległości, kończących się triali,
             nadchodzących płatności i usług bez ścieżki anulowania, tym wyższy wynik.
           </Text>
@@ -173,28 +175,28 @@ export function HealthScoreDetailsScreen() {
 
         <View style={styles.grid}>
           {metricCards.map(([label, value]) => (
-            <View key={String(label)} style={styles.metricCard}>
-              <Text style={styles.metricValue}>{value}</Text>
-              <Text style={styles.metricLabel}>{label}</Text>
+            <View key={String(label)} style={[styles.metricCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+              <Text style={[styles.metricValue, { color: theme.colors.text }]}>{value}</Text>
+              <Text style={[styles.metricLabel, { color: theme.colors.textMuted }]}>{label}</Text>
             </View>
           ))}
         </View>
 
-        <View style={styles.explainCard}>
+        <View style={[styles.explainCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeader}>
-            <Sparkles size={19} color={vibrantTheme.colors.primary} />
-            <Text style={styles.cardTitle}>Jak jest liczone?</Text>
+            <Sparkles size={19} color={theme.colors.primary} />
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Jak jest liczone?</Text>
           </View>
           <View style={styles.formulaRow}>
-            <Text style={styles.formulaStrong}>100</Text>
-            <Text style={styles.formulaText}>minus punkty ryzyka za zaległości, triale do 7 dni, płatności do 7 dni i brak przygotowanej ścieżki anulowania.</Text>
+            <Text style={[styles.formulaStrong, { color: theme.colors.primary }]}>100</Text>
+            <Text style={[styles.formulaText, { color: theme.colors.textMuted }]}>minus punkty ryzyka za zaległości, triale do 7 dni, płatności do 7 dni i brak przygotowanej ścieżki anulowania.</Text>
           </View>
           <View style={[styles.scoreBarTrack, { borderColor: scoreColor }]}>
             <View style={[styles.scoreBarFill, { width: `${health.score}%`, backgroundColor: scoreColor }]} />
           </View>
         </View>
 
-        <View style={styles.explainCard}>
+        <View style={[styles.explainCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeader}>
             <TriangleAlert size={19} color={vibrantTheme.colors.warning} />
             <Text style={styles.cardTitle}>Czynniki wpływu</Text>
@@ -202,15 +204,15 @@ export function HealthScoreDetailsScreen() {
           {health.factors.map((factor, index) => (
             <View key={`${factor.title}-${index}`} style={styles.factorRow}>
               {factor.type === 'positive' ? (
-                <CheckCircle2 size={18} color={vibrantTheme.colors.success} />
+                <CheckCircle2 size={18} color={theme.colors.primary} />
               ) : (
                 <TriangleAlert size={18} color={factor.type === 'negative' ? vibrantTheme.colors.danger : vibrantTheme.colors.warning} />
               )}
               <View style={styles.factorCopy}>
-                <Text style={styles.factorTitle}>{factor.title}</Text>
-                <Text style={styles.factorDesc}>{factor.description}</Text>
+                <Text style={[styles.factorTitle, { color: theme.colors.text }]}>{factor.title}</Text>
+                <Text style={[styles.factorDesc, { color: theme.colors.textMuted }]}>{factor.description}</Text>
               </View>
-              <Text style={[styles.factorImpact, { color: factor.impact < 0 ? vibrantTheme.colors.danger : vibrantTheme.colors.success }]}>
+              <Text style={[styles.factorImpact, { color: factor.impact < 0 ? vibrantTheme.colors.danger : theme.colors.primary }]}>
                 {factor.impact > 0 ? '+' : ''}{factor.impact}
               </Text>
             </View>
@@ -250,7 +252,7 @@ const styles = StyleSheet.create({
   metricValue: { color: vibrantTheme.colors.text, fontSize: 22, fontWeight: '900' },
   metricLabel: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '800' },
   formulaRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 14 },
-  formulaStrong: { color: vibrantTheme.colors.primary, fontSize: 28, fontWeight: '900' },
+  formulaStrong: { color: '#CBD5E1', fontSize: 28, fontWeight: '900' },
   formulaText: { flex: 1, color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, fontWeight: '600' },
   scoreBarTrack: { height: 12, borderRadius: 999, borderWidth: 1, backgroundColor: 'rgba(255,255,255,0.06)', overflow: 'hidden' },
   scoreBarFill: { height: '100%', borderRadius: 999 },

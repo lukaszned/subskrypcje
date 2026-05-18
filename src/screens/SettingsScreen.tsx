@@ -18,6 +18,7 @@ import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings
 import { useEmailScanStatus } from '../hooks/useEmailScan';
 import { useAuth } from '../context/AuthContext';
 import type { AppStackParamList } from '../types/navigation';
+import type { UpdateUserSettingsPayload } from '../api/dashboard';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme, ThemeName } from '../theme/ThemeContext';
 
@@ -52,26 +53,53 @@ export const SettingsScreen = () => {
     }
   }, [settings]);
 
-  const handleSave = () => {
-    const parsedIncome = income ? parseFloat(income.replace(',', '.')) : null;
+  const getErrorMessage = (error: any) => {
+    const validationErrors = error?.body?.errors;
+    if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+      return validationErrors
+        .map((item: any) => `${item.field || 'pole'}: ${item.message || 'nieprawidlowa wartosc'}`)
+        .join('\n');
+    }
 
-    updateMutation.mutate({
+    return error?.body?.message || error?.message || 'Nie udalo sie zapisac ustawien.';
+  };
+
+  const handleSave = () => {
+    const normalizedIncome = income.trim().replace(/\s/g, '').replace(',', '.');
+    const parsedIncome = normalizedIncome ? Number(normalizedIncome) : null;
+
+    if (parsedIncome !== null && (!Number.isFinite(parsedIncome) || parsedIncome < 0)) {
+      Alert.alert('Nieprawidlowa wartosc', 'Miesieczny dochod musi byc dodatnia liczba albo pustym polem.');
+      return;
+    }
+
+    const payload: UpdateUserSettingsPayload = {
       baseCurrency: currency,
       defaultReminderDaysBefore: reminderDays,
       notificationsEnabled: notifsEnabled,
       emailReportsEnabled: emailsEnabled,
       monthlyIncome: parsedIncome,
       incomeCurrency: incomeCurrency,
-    }, {
-      onSuccess: () => {
-        Alert.alert('Sukces', 'Ustawienia zostały zapisane.');
+    };
+
+    updateMutation.mutate(payload, {
+      onSuccess: (updatedSettings) => {
+        if ((updatedSettings as any).__localOnly) {
+          Alert.alert(
+            'Zapisano lokalnie',
+            'Backend odpowiada wolno albo jest chwilowo niedostepny. Ustawienia zostaly zachowane w aplikacji i beda gotowe do ponownej synchronizacji.'
+          );
+          return;
+        }
+
+        Alert.alert('Sukces', 'Ustawienia zostaly zapisane.');
       },
-      onError: () => {
-        Alert.alert('Błąd', 'Nie udało się zapisać ustawień.');
+      onError: (error) => {
+        console.warn('[SettingsScreen] Save settings error:', error);
+        Alert.alert('Blad zapisu', getErrorMessage(error));
       }
     });
   };
-
   const renderProfileHeader = () => (
     <View style={[styles.profileHeader, { backgroundColor: theme.colors.cardStrong, borderColor: theme.colors.border }]}>
       <View style={[styles.avatarContainer, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>

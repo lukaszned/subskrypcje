@@ -23,7 +23,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { 
-  X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, 
+  X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, ChevronDown,
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
   PiggyBank, Truck, Globe, AlertCircle, ArrowRight, ShieldCheck
 } from 'lucide-react-native';
@@ -53,11 +53,11 @@ const CATEGORIES: Array<{
 }> = [
   { id: 'entertainment', label: 'Rozrywka',      color: '#F1F5F9', textColor: '#334155', icon: Film },
   { id: 'utilities',     label: 'Narzędzia',     color: '#DBEAFE', textColor: '#2563EB', icon: Wifi },
-  { id: 'health',        label: 'Zdrowie',        color: '#F1F5F9', textColor: '#16A34A', icon: Heart },
+  { id: 'health',        label: 'Zdrowie',        color: '#F1F5F9', textColor: '#334155', icon: Heart },
   { id: 'education',     label: 'Edukacja',       color: '#FEF9C3', textColor: '#CA8A04', icon: GraduationCap },
   { id: 'productivity',  label: 'Produktywność',  color: '#FCE7F3', textColor: '#BE185D', icon: Briefcase },
   { id: 'shopping',      label: 'Zakupy',         color: '#FEF3C7', textColor: '#D97706', icon: ShoppingBag },
-  { id: 'finance',       label: 'Finanse',        color: '#F8FAFC', textColor: '#059669', icon: PiggyBank },
+  { id: 'finance',       label: 'Finanse',        color: '#F8FAFC', textColor: '#334155', icon: PiggyBank },
   { id: 'transport',     label: 'Transport',      color: '#F0F9FF', textColor: '#0284C7', icon: Truck },
   { id: 'other',         label: 'Inne',           color: '#F1F5F9', textColor: '#64748B', icon: Globe },
 ];
@@ -101,6 +101,7 @@ export const ManualAddScreen = () => {
   const [isShared, setIsShared] = useState(false);
   const [peopleCount, setPeopleCount] = useState(2);
   const [includeInStats, setIncludeInStats] = useState(true);
+  const [isAdditionalOptionsOpen, setIsAdditionalOptionsOpen] = useState(false);
 
   const parsedAmount = parseFloat(amount.replace(',', '.'));
   const finalCalculatedCost = useMemo(() => {
@@ -687,51 +688,70 @@ export const ManualAddScreen = () => {
                 </View>
 
                 <View style={styles.formCard}>
-                  <View style={styles.sectionHeaderBlock}>
-                    <Text style={styles.sectionHeaderTitle}>Opcje dodatkowe</Text>
-                    <Text style={styles.sectionHeaderHint}>Notatki, statystyki i późniejsza optymalizacja</Text>
-                  </View>
-
-                <View style={styles.optionalGroup}>
-                  <View style={[styles.cancelAssistantHint, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
-                    <ShieldCheck size={18} color={theme.colors.primary} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.cancelAssistantHintTitle}>Anulowanie obsłuży Cancel Assistant</Text>
-                      <Text style={styles.cancelAssistantHintText}>
-                        Nie musisz wklejać linku ręcznie. Instrukcje i linki anulowania pokażemy w szczegółach subskrypcji.
-                      </Text>
+                  <TouchableOpacity
+                    style={styles.accordionHeader}
+                    activeOpacity={0.86}
+                    onPress={() => {
+                      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                      setIsAdditionalOptionsOpen((current) => !current);
+                    }}
+                  >
+                    <View style={styles.sectionHeaderBlockCompact}>
+                      <Text style={styles.sectionHeaderTitle}>Opcje dodatkowe</Text>
+                      <Text style={styles.sectionHeaderHint}>Notatki, statystyki i późniejsza optymalizacja</Text>
                     </View>
-                  </View>
-                </View>
+                    <View style={[styles.accordionIcon, { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
+                      <ChevronDown
+                        size={18}
+                        color={theme.colors.primary}
+                        style={{ transform: [{ rotate: isAdditionalOptionsOpen ? '180deg' : '0deg' }] }}
+                      />
+                    </View>
+                  </TouchableOpacity>
 
-                <View style={styles.optionalGroup}>
-                  <Text style={styles.labelOptional}>Notatki</Text>
-                  <TextInput
-                    style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]}
-                    value={notes}
-                    onChangeText={setNotes}
-                    placeholder="Wpisz dodatkowe informacje..."
-                    placeholderTextColor={theme.colors.textSubtle}
-                    multiline
-                  />
-                </View>
+                  {isAdditionalOptionsOpen && (
+                    <>
+                      <View style={styles.optionalGroup}>
+                        <View style={[styles.cancelAssistantHint, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
+                          <ShieldCheck size={18} color={theme.colors.primary} />
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.cancelAssistantHintTitle}>Anulowanie obsłuży Cancel Assistant</Text>
+                            <Text style={styles.cancelAssistantHintText}>
+                              Nie musisz wklejać linku ręcznie. Instrukcje i linki anulowania pokażemy w szczegółach subskrypcji.
+                            </Text>
+                          </View>
+                        </View>
+                      </View>
 
-                <View style={styles.optionalGroup}>
-                  <View style={styles.rowBetween}>
-                    <Text style={styles.labelOptional}>Uwzględnij w statystykach</Text>
-                    <TouchableOpacity 
-                      onPress={() => setIncludeInStats(!includeInStats)}
-                      style={[styles.toggle, includeInStats && { backgroundColor: theme.colors.primary }]}
-                    >
-                      <View style={[styles.toggleDot, includeInStats && styles.toggleDotActive]} />
-                    </TouchableOpacity>
-                  </View>
-                  <Text style={[styles.infoBoxText, { marginTop: 8, color: theme.colors.textMuted }]}>
-                    Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
-                  </Text>
-                </View>
-                </View>
+                      <View style={styles.optionalGroup}>
+                        <Text style={styles.labelOptional}>Notatki</Text>
+                        <TextInput
+                          style={[styles.textInput, { minHeight: 80, textAlignVertical: 'top' }]}
+                          value={notes}
+                          onChangeText={setNotes}
+                          placeholder="Wpisz dodatkowe informacje..."
+                          placeholderTextColor={theme.colors.textSubtle}
+                          multiline
+                        />
+                      </View>
 
+                      <View style={styles.optionalGroup}>
+                        <View style={styles.rowBetween}>
+                          <Text style={styles.labelOptional}>Uwzględnij w statystykach</Text>
+                          <TouchableOpacity
+                            onPress={() => setIncludeInStats(!includeInStats)}
+                            style={[styles.toggle, includeInStats && { backgroundColor: theme.colors.primary }]}
+                          >
+                            <View style={[styles.toggleDot, includeInStats && styles.toggleDotActive]} />
+                          </TouchableOpacity>
+                        </View>
+                        <Text style={[styles.infoBoxText, { marginTop: 8, color: theme.colors.textMuted }]}>
+                          Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
+                        </Text>
+                      </View>
+                    </>
+                  )}
+                </View>
                 <View style={styles.saveSummaryCard}>
                   <View>
                     <Text style={styles.saveSummaryLabel}>Podsumowanie</Text>
@@ -743,8 +763,8 @@ export const ManualAddScreen = () => {
                     </Text>
                   </View>
                   <View style={styles.saveSummaryAmountBlock}>
-                    <Text style={styles.saveSummaryAmount}>{finalCalculatedCost.toFixed(2)}</Text>
-                    <Text style={styles.saveSummaryCurrency}>
+                    <Text style={[styles.saveSummaryAmount, { color: theme.colors.primary }]}>{finalCalculatedCost.toFixed(2)}</Text>
+                    <Text style={[styles.saveSummaryCurrency, { color: theme.colors.textMuted }]}>
                       {currency} · {CYCLES.find((item) => item.id === cycle)?.label || cycle}
                     </Text>
                   </View>
@@ -903,6 +923,24 @@ const styles = StyleSheet.create({
   sectionHeaderBlock: {
     marginBottom: 18,
     paddingHorizontal: 2,
+  },
+  sectionHeaderBlockCompact: {
+    flex: 1,
+    paddingHorizontal: 2,
+  },
+  accordionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  accordionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
   },
   sectionHeaderTitle: {
     fontSize: 18,

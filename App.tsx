@@ -37,6 +37,7 @@ import { EmailScanScreen } from './src/screens/EmailScanScreen';
 import { StatisticsScreen } from './src/screens/StatisticsScreen';
 import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
 import { GuardScreen } from './src/screens/GuardScreen';
+import { SubscriptionReviewQueueScreen } from './src/screens/SubscriptionReviewQueueScreen';
 import { HealthScoreDetailsScreen } from './src/screens/HealthScoreDetailsScreen';
 import { SavingsDetailsScreen } from './src/screens/SavingsDetailsScreen';
 
@@ -112,6 +113,7 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen name="Statistics" component={StatisticsScreen} />
       <AppStack.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
       <AppStack.Screen name="Guard" component={GuardScreen} />
+      <AppStack.Screen name="SubscriptionReviewQueue" component={SubscriptionReviewQueueScreen} />
       <AppStack.Screen name="HealthScoreDetails" component={HealthScoreDetailsScreen} />
       <AppStack.Screen name="SavingsDetails" component={SavingsDetailsScreen} />
     </AppStack.Navigator>

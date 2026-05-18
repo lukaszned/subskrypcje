@@ -17,6 +17,7 @@ import type { AppStackParamList } from '../types/navigation';
 import { useDashboardSavings } from '../hooks/useDashboardSavings';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
 import { formatShortDate } from '../utils/date';
 import type { BillingCycle, SavingsItem, Subscription } from '../types/api';
 
@@ -57,6 +58,7 @@ function buildLocalSavings(subscriptions: Subscription[]): SavingsItem[] {
 
 export function SavingsDetailsScreen() {
   const navigation = useNavigation<Nav>();
+  const { theme } = useTheme();
   const savingsQuery = useDashboardSavings(true);
   const subscriptionsQuery = useSubscriptions();
 
@@ -79,94 +81,94 @@ export function SavingsDetailsScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.glowOne} />
-      <View style={styles.glowTwo} />
+    <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+      <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}26` }]} />
+      <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}20` }]} />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.iconButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={22} color={vibrantTheme.colors.text} />
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+          <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>
-          <Text style={styles.title}>Oszczędności</Text>
-          <Text style={styles.subtitle}>Efekt anulowanych subskrypcji</Text>
+          <Text style={[styles.title, { color: theme.colors.text }]}>Oszczędności</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Efekt anulowanych subskrypcji</Text>
         </View>
       </View>
 
       <ScrollView
         contentContainerStyle={styles.content}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={vibrantTheme.colors.primary} />}
+        refreshControl={<RefreshControl refreshing={isRefreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />}
       >
-        <LinearGradient colors={vibrantTheme.gradients.primary} style={styles.hero}>
+        <LinearGradient colors={theme.gradients.primary} style={[styles.hero, { shadowColor: theme.colors.primary }]}>
           <View style={styles.heroTop}>
             <View style={styles.heroIcon}>
-              <PiggyBank size={27} color="#07111C" />
+              <PiggyBank size={27} color={theme.colors.darkText} />
             </View>
             <View style={styles.sourcePill}>
-              {savingsQuery.isLoading ? <ActivityIndicator size="small" color="#07111C" /> : null}
-              <Text style={styles.sourcePillText}>{isLive ? 'Live savings' : 'Lokalny szacunek'}</Text>
+              {savingsQuery.isLoading ? <ActivityIndicator size="small" color={theme.colors.darkText} /> : null}
+              <Text style={[styles.sourcePillText, { color: theme.colors.darkText }]}>{isLive ? 'Live savings' : 'Lokalny szacunek'}</Text>
             </View>
           </View>
-          <Text style={styles.heroLabel}>Szacowana oszczędność</Text>
+          <Text style={[styles.heroLabel, { color: theme.colors.darkText }]}>Szacowana oszczędność</Text>
           <View style={styles.amountRow}>
-            <Text style={styles.amount}>{monthlySavings.toFixed(2)}</Text>
-            <Text style={styles.currency}>{currency} / mc</Text>
+            <Text style={[styles.amount, { color: theme.colors.darkText }]}>{monthlySavings.toFixed(2)}</Text>
+            <Text style={[styles.currency, { color: theme.colors.darkText }]}>{currency} / mc</Text>
           </View>
-          <Text style={styles.heroDesc}>
+          <Text style={[styles.heroDesc, { color: theme.colors.darkText }]}>
             To miesięczny efekt usług oznaczonych jako anulowane. Rocznie daje to około {yearlySavings.toFixed(2)} {currency}.
           </Text>
         </LinearGradient>
 
         <View style={styles.grid}>
-          <View style={styles.metricCard}>
-            <TrendingDown size={19} color={vibrantTheme.colors.primary} />
-            <Text style={styles.metricValue}>{yearlySavings.toFixed(0)} {currency}</Text>
-            <Text style={styles.metricLabel}>rocznie mniej</Text>
+          <View style={[styles.metricCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <TrendingDown size={19} color={theme.colors.primary} />
+            <Text style={[styles.metricValue, { color: theme.colors.text }]}>{yearlySavings.toFixed(0)} {currency}</Text>
+            <Text style={[styles.metricLabel, { color: theme.colors.textMuted }]}>rocznie mniej</Text>
           </View>
-          <View style={styles.metricCard}>
-            <CalendarCheck2 size={19} color={vibrantTheme.colors.cyan} />
-            <Text style={styles.metricValue}>{canceledCount}</Text>
-            <Text style={styles.metricLabel}>anulowane usługi</Text>
+          <View style={[styles.metricCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+            <CalendarCheck2 size={19} color={theme.colors.cyan} />
+            <Text style={[styles.metricValue, { color: theme.colors.text }]}>{canceledCount}</Text>
+            <Text style={[styles.metricLabel, { color: theme.colors.textMuted }]}>anulowane usługi</Text>
           </View>
         </View>
 
-        <View style={styles.explainCard}>
+        <View style={[styles.explainCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeader}>
-            <Sparkles size={19} color={vibrantTheme.colors.primary} />
-            <Text style={styles.cardTitle}>Jak to liczymy?</Text>
+            <Sparkles size={19} color={theme.colors.primary} />
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Jak to liczymy?</Text>
           </View>
-          <Text style={styles.bodyText}>
+          <Text style={[styles.bodyText, { color: theme.colors.textMuted }]}>
             Bierzemy subskrypcje ze statusem anulowana i przeliczamy ich koszt na miesięczny odpowiednik.
             Plan roczny dzielimy przez 12, tygodniowy mnożymy przez 4.345, a jednorazowe płatności pomijamy.
           </Text>
         </View>
 
-        <View style={styles.explainCard}>
+        <View style={[styles.explainCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.cardHeader}>
-            <ReceiptText size={19} color={vibrantTheme.colors.primary} />
-            <Text style={styles.cardTitle}>Anulowane aplikacje</Text>
+            <ReceiptText size={19} color={theme.colors.primary} />
+            <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Anulowane aplikacje</Text>
           </View>
 
           {items.length === 0 ? (
-            <View style={styles.emptyBox}>
+            <View style={[styles.emptyBox, { borderColor: theme.colors.border }]}>
               <Text style={styles.emptyTitle}>Jeszcze brak zapisanych oszczędności</Text>
               <Text style={styles.emptyText}>Gdy anulujesz subskrypcję, pokażemy tutaj jej wpływ na miesięczny budżet.</Text>
             </View>
           ) : (
             items.map((item) => (
-              <View key={item.id} style={styles.savingRow}>
-                <View style={styles.brandBadge}>
-                  <Text style={styles.brandLetter}>{(item.provider || item.name || '?').charAt(0).toUpperCase()}</Text>
+              <View key={item.id} style={[styles.savingRow, { borderTopColor: theme.colors.border }]}>
+                <View style={[styles.brandBadge, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
+                  <Text style={[styles.brandLetter, { color: theme.colors.primary }]}>{(item.provider || item.name || '?').charAt(0).toUpperCase()}</Text>
                 </View>
                 <View style={styles.savingCopy}>
-                  <Text style={styles.savingName} numberOfLines={1}>{item.name}</Text>
-                  <Text style={styles.savingMeta}>
+                  <Text style={[styles.savingName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
+                  <Text style={[styles.savingMeta, { color: theme.colors.textMuted }]}>
                     Anulowano {formatShortDate(item.canceledAt)} · wcześniej {Number(item.originalAmount || 0).toFixed(2)} {item.originalCurrency}
                   </Text>
                 </View>
                 <View style={styles.savingAmountBox}>
-                  <Text style={styles.savingAmount}>{Number(item.monthlyAmount || 0).toFixed(2)}</Text>
-                  <Text style={styles.savingAmountMeta}>{currency}/mc</Text>
+                  <Text style={[styles.savingAmount, { color: theme.colors.primary }]}>{Number(item.monthlyAmount || 0).toFixed(2)}</Text>
+                  <Text style={[styles.savingAmountMeta, { color: theme.colors.textMuted }]}>{currency}/mc</Text>
                 </View>
               </View>
             ))
@@ -210,12 +212,12 @@ const styles = StyleSheet.create({
   emptyText: { color: vibrantTheme.colors.textMuted, fontSize: 12, lineHeight: 18, fontWeight: '600' },
   savingRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 13, borderTopWidth: 1, borderTopColor: vibrantTheme.colors.border },
   brandBadge: { width: 42, height: 42, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.16)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
-  brandLetter: { color: vibrantTheme.colors.primary, fontSize: 18, fontWeight: '900' },
+  brandLetter: { color: '#CBD5E1', fontSize: 18, fontWeight: '900' },
   savingCopy: { flex: 1 },
   savingName: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900' },
   savingMeta: { color: vibrantTheme.colors.textMuted, fontSize: 11, lineHeight: 16, fontWeight: '600', marginTop: 2 },
   savingAmountBox: { alignItems: 'flex-end' },
-  savingAmount: { color: vibrantTheme.colors.success, fontSize: 15, fontWeight: '900' },
+  savingAmount: { color: '#CBD5E1', fontSize: 15, fontWeight: '900' },
   savingAmountMeta: { color: vibrantTheme.colors.textMuted, fontSize: 10, fontWeight: '800' },
 });
 

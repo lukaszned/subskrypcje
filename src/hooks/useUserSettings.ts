@@ -1,6 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUserSettings, updateUserSettings } from '../api/dashboard';
-import { UserSettings } from '../types/api';
+import { getUserSettings, UpdateUserSettingsPayload, updateUserSettings } from '../api/dashboard';
 
 export const useUserSettings = (enabled: boolean = true) => {
   return useQuery({
@@ -15,7 +14,7 @@ export const useUpdateUserSettings = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (payload: Partial<UserSettings>) => updateUserSettings(payload),
+    mutationFn: (payload: UpdateUserSettingsPayload) => updateUserSettings(payload),
     onSuccess: (updatedSettings) => {
       // Aktualizujemy cache ustawień
       queryClient.setQueryData(['user', 'settings'], updatedSettings);

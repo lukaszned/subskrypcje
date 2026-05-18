@@ -28,6 +28,18 @@ import { daysUntilDate, parseAppDate, startOfLocalDay } from '../utils/date';
 
 const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 const DASHBOARD_SUMMARY_FAST_CACHE_MS = 2 * 60 * 1000;
+const USER_SETTINGS_CACHE_KEY = 'sub-sentry.user-settings.v1';
+const USER_SETTINGS_PENDING_KEY = 'sub-sentry.user-settings.pending.v1';
+
+export type UpdateUserSettingsPayload = Pick<
+  UserSettings,
+  | 'baseCurrency'
+  | 'defaultReminderDaysBefore'
+  | 'notificationsEnabled'
+  | 'emailReportsEnabled'
+  | 'monthlyIncome'
+  | 'incomeCurrency'
+>;
 
 function normalizeItemsResponse<T>(
   raw: any,
@@ -84,6 +96,83 @@ export async function getCachedDashboardSummary(): Promise<(DashboardSummary & {
   } catch (error) {
     console.log('[dashboard] Could not read cached summary.', error);
     return null;
+  }
+}
+
+function isConnectivityError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /timeout|abort|network request failed|failed to fetch|internet|offline|load failed/i.test(message);
+}
+
+function buildFallbackUserSettings(
+  source?: Partial<UserSettings> | null,
+  payload?: Partial<UpdateUserSettingsPayload>
+): UserSettings {
+  const now = new Date().toISOString();
+
+  return {
+    userId: source?.userId || 'local',
+    baseCurrency: payload?.baseCurrency ?? source?.baseCurrency ?? 'PLN',
+    defaultReminderDaysBefore: payload?.defaultReminderDaysBefore ?? source?.defaultReminderDaysBefore ?? 2,
+    notificationsEnabled: payload?.notificationsEnabled ?? source?.notificationsEnabled ?? true,
+    emailReportsEnabled: payload?.emailReportsEnabled ?? source?.emailReportsEnabled ?? false,
+    monthlyIncome: payload?.monthlyIncome !== undefined ? payload.monthlyIncome : source?.monthlyIncome ?? null,
+    incomeCurrency: payload?.incomeCurrency ?? source?.incomeCurrency ?? source?.baseCurrency ?? 'PLN',
+    theme: source?.theme ?? 'system',
+    updatedAt: now,
+  };
+}
+
+async function cacheUserSettings(settings: UserSettings) {
+  try {
+    await AsyncStorage.setItem(USER_SETTINGS_CACHE_KEY, JSON.stringify(settings));
+  } catch (error) {
+    console.log('[settings] Could not cache user settings.', error);
+  }
+}
+
+export async function getCachedUserSettings(): Promise<(UserSettings & { __localOnly?: boolean }) | null> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_SETTINGS_CACHE_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return buildFallbackUserSettings(parsed) as UserSettings & { __localOnly?: boolean };
+  } catch (error) {
+    console.log('[settings] Could not read cached user settings.', error);
+    return null;
+  }
+}
+
+async function savePendingUserSettings(payload: UpdateUserSettingsPayload) {
+  try {
+    await AsyncStorage.setItem(USER_SETTINGS_PENDING_KEY, JSON.stringify({
+      payload,
+      savedAt: new Date().toISOString(),
+    }));
+  } catch (error) {
+    console.log('[settings] Could not save pending user settings.', error);
+  }
+}
+
+async function getPendingUserSettingsPayload(): Promise<UpdateUserSettingsPayload | null> {
+  try {
+    const raw = await AsyncStorage.getItem(USER_SETTINGS_PENDING_KEY);
+    if (!raw) return null;
+
+    const parsed = JSON.parse(raw);
+    return parsed?.payload || null;
+  } catch (error) {
+    console.log('[settings] Could not read pending user settings.', error);
+    return null;
+  }
+}
+
+async function clearPendingUserSettings() {
+  try {
+    await AsyncStorage.removeItem(USER_SETTINGS_PENDING_KEY);
+  } catch {
+    // No-op. A stale pending marker should never block normal app usage.
   }
 }
 
@@ -358,14 +447,63 @@ export async function getDashboardTrends(
  * GET /users/settings
  */
 export async function getUserSettings(): Promise<UserSettings> {
-  return apiGet<UserSettings>('/users/settings');
+  try {
+    const settings = await apiGet<UserSettings>('/users/settings');
+    const pendingPayload = await getPendingUserSettingsPayload();
+
+    if (pendingPayload) {
+      try {
+        const syncedSettings = await apiPatch<UserSettings>('/users/settings', pendingPayload);
+        await cacheUserSettings(syncedSettings);
+        await clearPendingUserSettings();
+        return syncedSettings;
+      } catch (syncError) {
+        if (!isConnectivityError(syncError)) {
+          await clearPendingUserSettings();
+        }
+      }
+    }
+
+    await cacheUserSettings(settings);
+    return settings;
+  } catch (error) {
+    const cached = await getCachedUserSettings();
+    if (cached && isConnectivityError(error)) {
+      return {
+        ...cached,
+        __localOnly: true,
+      } as UserSettings & { __localOnly?: boolean };
+    }
+
+    throw error;
+  }
 }
 
 /**
  * PATCH /users/settings
  */
-export async function updateUserSettings(payload: Partial<UserSettings>): Promise<UserSettings> {
-  return apiPatch<UserSettings>('/users/settings', payload);
+export async function updateUserSettings(
+  payload: UpdateUserSettingsPayload
+): Promise<UserSettings & { __localOnly?: boolean }> {
+  try {
+    const settings = await apiPatch<UserSettings>('/users/settings', payload);
+    await cacheUserSettings(settings);
+    await clearPendingUserSettings();
+    return settings;
+  } catch (error) {
+    if (!isConnectivityError(error)) {
+      throw error;
+    }
+
+    const cached = await getCachedUserSettings();
+    const localSettings = buildFallbackUserSettings(cached, payload) as UserSettings & { __localOnly?: boolean };
+    localSettings.__localOnly = true;
+
+    await cacheUserSettings(localSettings);
+    await savePendingUserSettings(payload);
+
+    return localSettings;
+  }
 }
 
 /**
