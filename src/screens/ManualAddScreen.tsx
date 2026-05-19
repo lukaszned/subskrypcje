@@ -298,23 +298,24 @@ export const ManualAddScreen = () => {
   };
 
   const handleApiError = (error: any) => {
-    console.error('Błąd zapisu:', error);
-    
+    if (__DEV__) {
+      console.error('[ManualAddScreen] Save error:', error);
+    }
+
     if (error instanceof ApiError) {
       if (error.status === 409) {
-        Alert.alert('Duplikat', 'Subskrypcja o tej nazwie już istnieje.');
+        Alert.alert('Duplikat', 'Subskrypcja o tej nazwie juz istnieje. Otworz ja z listy albo zmien nazwe planu.');
       } else if (error.status === 400 && error.body) {
         const body = error.body as any;
         const details = body.errors?.map((e: any) => `- ${e.message}`).join('\n') || error.message;
-        Alert.alert('Błąd walidacji', details);
+        Alert.alert('Sprawdz dane', details);
       } else {
-        Alert.alert('Błąd', error.message || 'Nie udało się zapisać subskrypcji.');
+        Alert.alert('Nie udalo sie zapisac', error.message || 'Sprobuj ponownie za chwile.');
       }
     } else {
-      Alert.alert('Błąd połączenia', 'Upewnij się, że serwer działa i telefon jest w tej samej sieci Wi-Fi.');
+      Alert.alert('Brak polaczenia', 'Nie udalo sie polaczyc. Sprawdz siec telefonu i sprobuj ponownie.');
     }
   };
-
   const isLoading = createMutation.isPending || updateMutation.isPending;
 
     const scrollViewRef = useRef<ScrollView>(null);

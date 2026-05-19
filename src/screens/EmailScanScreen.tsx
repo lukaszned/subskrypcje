@@ -608,7 +608,7 @@ export const EmailScanScreen = () => {
               </TouchableOpacity>
               <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.colors.primary }]} onPress={() => setSelectedDetection(item)}>
                 <CheckCircle size={18} color="#FFFFFF" />
-                <Text style={styles.primaryBtnText}>Review</Text>
+                <Text style={styles.primaryBtnText}>Sprawdź</Text>
               </TouchableOpacity>
             </>
           )}
@@ -841,7 +841,7 @@ export const EmailScanScreen = () => {
       },
       {
         bucket: 'review' as ProductBucket,
-        label: 'Review',
+        label: 'Do sprawdzenia',
         title: 'Potwierdź, czy nadal aktywne',
         caption: 'Mocne historyczne dowody, ale za stare, żeby udawać pewność.',
         icon: History,
@@ -965,7 +965,7 @@ export const EmailScanScreen = () => {
           <View style={styles.reviewProgressCard}>
             <View style={styles.reviewProgressTop}>
               <View>
-                <Text style={styles.reviewProgressTitle}>Postęp review</Text>
+                <Text style={styles.reviewProgressTitle}>Postęp decyzji</Text>
                 <Text style={styles.reviewProgressText}>
                   {reviewedCount}/{reviewItems.length} decyzji lokalnie oznaczonych
                 </Text>
@@ -976,7 +976,7 @@ export const EmailScanScreen = () => {
               <View style={[styles.reviewProgressFill, { width: `${progressPercent}%`, backgroundColor: theme.colors.primary }]} />
             </View>
             <Text style={styles.reviewProgressHint}>
-              Decyzje są na razie lokalne. Front przygotowuje UX i przyszły payload review bez zmian w backendzie.
+              Decyzje są na razie lokalne. Front przygotowuje UX i przyszły zapis decyzji bez zmian w backendzie.
             </Text>
           </View>
         )}
@@ -1026,7 +1026,7 @@ export const EmailScanScreen = () => {
             <View style={styles.productModalHeader}>
               <View style={styles.productModalTitleBlock}>
                 <Text style={styles.productModalEyebrow}>
-                  {bucket === 'price' ? 'Zmiana ceny' : bucket === 'bill' ? 'Rachunek / utility' : 'Review item'}
+                  {bucket === 'price' ? 'Zmiana ceny' : bucket === 'bill' ? 'Rachunek / utility' : 'Pozycja do sprawdzenia'}
                 </Text>
                 <Text style={styles.productModalTitle}>{title}</Text>
               </View>
@@ -1324,7 +1324,7 @@ export const EmailScanScreen = () => {
               <View style={styles.statGrid}>
                 <View style={styles.statItem}>
                   <Text style={styles.statValue}>{status?.pendingDetectionsCount ?? 0}</Text>
-                  <Text style={styles.statLabel}>Do review</Text>
+                  <Text style={styles.statLabel}>Do sprawdzenia</Text>
                 </View>
                 <View style={styles.statItem}>
                   <Text style={styles.statValue}>{status?.acceptedDetectionsCount ?? 0}</Text>

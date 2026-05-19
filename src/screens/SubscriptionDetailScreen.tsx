@@ -27,6 +27,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../types/navigation';
 import { CancelAssistantModal } from '../components/CancelAssistantModal';
+import { Skeleton, SkeletonList } from '../components/LoadingState';
 
 // Hooks
 import { useSubscription } from '../hooks/useSubscription';
@@ -71,11 +72,11 @@ export const SubscriptionDetailScreen = () => {
         </View>
         <View style={{ padding: 20 }}>
           <View style={{ alignItems: 'center', marginBottom: 30 }}>
-            <View style={[styles.logoContainer, { backgroundColor: '#E2E8F0' }]} />
-            <View style={{ width: 150, height: 24, backgroundColor: '#E2E8F0', borderRadius: 4, marginBottom: 8 }} />
-            <View style={{ width: 100, height: 16, backgroundColor: '#E2E8F0', borderRadius: 4 }} />
+            <Skeleton width={82} height={82} borderRadius={26} isDark />
+            <Skeleton width={170} height={24} borderRadius={8} style={{ marginTop: 18, marginBottom: 8 }} isDark />
+            <Skeleton width={112} height={16} borderRadius={8} isDark />
           </View>
-          <View style={{ height: 200, backgroundColor: theme.colors.card, borderRadius: 24, padding: 20 }} />
+          <SkeletonList rows={4} isDark />
         </View>
       </SafeAreaView>
     );

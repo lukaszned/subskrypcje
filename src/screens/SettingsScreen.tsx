@@ -87,7 +87,7 @@ export const SettingsScreen = () => {
         if ((updatedSettings as any).__localOnly) {
           Alert.alert(
             'Zapisano lokalnie',
-            'Backend odpowiada wolno albo jest chwilowo niedostepny. Ustawienia zostaly zachowane w aplikacji i beda gotowe do ponownej synchronizacji.'
+            'Odświeżanie trwa dłużej niż zwykle. Ustawienia zostały zachowane w aplikacji i będą gotowe do ponownej synchronizacji.'
           );
           return;
         }
@@ -225,8 +225,8 @@ export const SettingsScreen = () => {
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#F0F9FF' }]}>
-                <Wallet size={20} color="#0EA5E9" />
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.cyan}18` }]}>
+                <Wallet size={20} color={theme.colors.cyan} />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Miesięczny dochód</Text>
@@ -240,7 +240,7 @@ export const SettingsScreen = () => {
                 onChangeText={setIncome}
                 placeholder="0.00"
                 keyboardType="numeric"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.colors.textSubtle}
               />
               <View style={styles.incomeCurrencyRow}>
                 {USER_SETTING_CURRENCIES.map(c => (
@@ -279,8 +279,8 @@ export const SettingsScreen = () => {
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#EFF6FF' }]}>
-                <Mail size={20} color="#3B82F6" />
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.cyan}18` }]}>
+                <Mail size={20} color={theme.colors.cyan} />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Raporty Email</Text>
@@ -290,14 +290,14 @@ export const SettingsScreen = () => {
             <Switch
               value={emailsEnabled}
               onValueChange={setEmailsEnabled}
-              trackColor={{ false: '#E2E8F0', true: '#3B82F6' }}
+              trackColor={{ false: theme.colors.borderStrong, true: theme.colors.cyan }}
             />
           </View>
 
           <View style={styles.settingItem}>
             <View style={styles.settingInfo}>
-              <View style={[styles.iconContainer, { backgroundColor: '#FFF7ED' }]}>
-                <Shield size={20} color="#F59E0B" />
+              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.warning}18` }]}>
+                <Shield size={20} color={theme.colors.warning} />
               </View>
               <View>
                 <Text style={styles.settingTitle}>Wyprzedzenie przypomnień</Text>
@@ -340,10 +340,10 @@ export const SettingsScreen = () => {
                   ) : null}
                 </View>
                 <Text style={styles.settingDesc}>
-                  Review pozycji znalezionych w mailach: bez automatycznego dodawania
+                  Przegląd pozycji znalezionych w mailach, bez automatycznego dodawania
                 </Text>
               </View>
-              <ChevronRight size={20} color="#CBD5E1" />
+              <ChevronRight size={20} color={theme.colors.textSubtle} />
             </View>
           </TouchableOpacity>
         </View>
@@ -353,7 +353,7 @@ export const SettingsScreen = () => {
           <Text style={styles.footerInfo}>Twoje dane są bezpieczne i szyfrowane.</Text>
 
           <TouchableOpacity
-            style={styles.logoutBtn}
+            style={[styles.logoutBtn, { backgroundColor: `${theme.colors.danger}14`, borderColor: `${theme.colors.danger}33` }]}
             onPress={() => {
               Alert.alert(
                 'Wyloguj się',
@@ -365,8 +365,8 @@ export const SettingsScreen = () => {
               );
             }}
           >
-            <LogOut size={20} color="#EF4444" />
-            <Text style={styles.logoutBtnText}>Wyloguj się</Text>
+            <LogOut size={20} color={theme.colors.danger} />
+            <Text style={[styles.logoutBtnText, { color: theme.colors.danger }]}>Wyloguj się</Text>
           </TouchableOpacity>
         </View>
       </ScrollView>
@@ -605,6 +605,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 16,
+    borderWidth: 1,
     backgroundColor: '#FFF1F2',
   },
   logoutBtnText: {

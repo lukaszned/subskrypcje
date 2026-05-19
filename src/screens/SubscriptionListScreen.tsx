@@ -42,6 +42,7 @@ import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
 import { PressableScale } from '../components/PressableScale';
+import { GlassCard, MetricTile, SectionHeader } from '../components/ui/PremiumPrimitives';
 
 const toMonthlyAmount = (subscription: Subscription) => {
   const amount = Number(subscription.amount || 0);
@@ -226,7 +227,7 @@ export const SubscriptionListScreen = () => {
   };
 
   const renderPortfolioPulse = () => (
-    <View style={styles.pulseCard}>
+    <GlassCard style={styles.pulseCard}>
       <View style={styles.pulseHeader}>
         <View>
           <Text style={styles.pulseEyebrow}>Portfolio</Text>
@@ -235,28 +236,21 @@ export const SubscriptionListScreen = () => {
         {isFetching && !isLoading && (
           <View style={styles.syncPill}>
             <ActivityIndicator size="small" color={theme.colors.primary} />
-            <Text style={styles.syncPillText}>Sync</Text>
+            <Text style={styles.syncPillText}>Odświeżam</Text>
           </View>
         )}
       </View>
       <View style={styles.metricRow}>
-        <View style={styles.metricTile}>
-          <Wallet size={17} color={theme.colors.primary} />
-          <Text style={styles.metricValue}>{portfolioStats.active}</Text>
-          <Text style={styles.metricLabel}>aktywne</Text>
-        </View>
-        <View style={styles.metricTile}>
-          <CalendarClock size={17} color={theme.colors.cyan} />
-          <Text style={styles.metricValue}>{portfolioStats.dueSoon}</Text>
-          <Text style={styles.metricLabel}>do 7 dni</Text>
-        </View>
-        <View style={styles.metricTile}>
-          <ShieldAlert size={17} color={portfolioStats.attention > 0 ? theme.colors.warning : theme.colors.primary} />
-          <Text style={styles.metricValue}>{portfolioStats.attention}</Text>
-          <Text style={styles.metricLabel}>uwaga</Text>
-        </View>
+        <MetricTile label="aktywne" value={portfolioStats.active} icon={Wallet} />
+        <MetricTile label="do 7 dni" value={portfolioStats.dueSoon} icon={CalendarClock} />
+        <MetricTile
+          label="uwaga"
+          value={portfolioStats.attention}
+          icon={ShieldAlert}
+          tone={portfolioStats.attention > 0 ? 'warning' : 'primary'}
+        />
       </View>
-    </View>
+    </GlassCard>
   );
 
   return (
@@ -283,6 +277,9 @@ export const SubscriptionListScreen = () => {
         </View>
 
         <View style={styles.filterSection}>
+          <View style={styles.filterHeader}>
+            <SectionHeader title="Subskrypcje" subtitle="Filtruj, sortuj i szybko przechodź do szczegółów." />
+          </View>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -349,13 +346,7 @@ const styles = StyleSheet.create({
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
   listEmptyContent: { flex: 1, justifyContent: 'center' },
   pulseCard: {
-    backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 26,
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
-    padding: 18,
     marginBottom: 18,
-    ...vibrantTheme.shadows.card,
   },
   pulseHeader: {
     flexDirection: 'row',
@@ -397,27 +388,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 10,
   },
-  metricTile: {
-    flex: 1,
-    minHeight: 88,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
-    backgroundColor: 'rgba(255,255,255,0.055)',
-    padding: 12,
-    justifyContent: 'space-between',
-  },
-  metricValue: {
-    color: vibrantTheme.colors.text,
-    fontSize: 20,
-    fontWeight: '900',
-    letterSpacing: 0,
-  },
-  metricLabel: {
-    color: vibrantTheme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '800',
-  },
+  filterHeader: { paddingHorizontal: 20 },
   emptyStateContainer: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
   emptyIconCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: vibrantTheme.colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: vibrantTheme.colors.text, marginBottom: 12 },

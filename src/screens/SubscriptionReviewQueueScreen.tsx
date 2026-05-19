@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   LayoutAnimation,
   Platform,
   ScrollView,
@@ -27,6 +26,10 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 import { PressableScale } from '../components/PressableScale';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorState } from '../components/ErrorState';
+import { SkeletonList } from '../components/LoadingState';
+import { MetricTile } from '../components/ui/PremiumPrimitives';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { useTheme } from '../theme/ThemeContext';
 import type { Subscription } from '../types/api';
@@ -71,8 +74,8 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         id: `overdue-${subscription.id}`,
         type: 'overdue',
         subscription,
-        title: 'Platnosc po terminie',
-        description: `${displayName} wymaga szybkiego sprawdzenia statusu platnosci.`,
+        title: 'Płatność po terminie',
+        description: `${displayName} wymaga szybkiego sprawdzenia statusu płatności.`,
         meta: subscription.nextPaymentDate ? formatRelativeDay(subscription.nextPaymentDate) : 'Brak daty',
         tone: 'critical',
       });
@@ -83,7 +86,7 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         id: `trial-${subscription.id}`,
         type: 'trial',
         subscription,
-        title: 'Trial blisko konca',
+        title: 'Trial blisko końca',
         description: `${displayName} moze zaraz przejsc w platny plan.`,
         meta: subscription.trialEndDate ? `Koniec ${formatShortDate(subscription.trialEndDate)}` : 'Trial aktywny',
         tone: 'warning',
@@ -95,7 +98,7 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         id: `due-${subscription.id}`,
         type: 'due',
         subscription,
-        title: 'Nadchodzi platnosc',
+        title: 'Nadchodzi płatność',
         description: `${displayName} pojawi sie w kosztach w najblizszych dniach.`,
         meta: formatRelativeDay(subscription.nextPaymentDate),
         tone: 'primary',
@@ -107,9 +110,9 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         id: `missing-cancel-${subscription.id}`,
         type: 'missingCancel',
         subscription,
-        title: 'Brak szybkiej sciezki anulowania',
+        title: 'Brak szybkiej ścieżki anulowania',
         description: `${displayName} nie ma jeszcze zapisanego linku lub instrukcji anulowania.`,
-        meta: 'Warto uzupelnic pozniej',
+        meta: 'Warto uzupełnić później',
         tone: 'primary',
       });
     }
@@ -120,7 +123,7 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         type: 'expensive',
         subscription,
         title: 'Wysoki miesieczny koszt',
-        description: `${displayName} jest dobrym kandydatem do przegladu planu lub wspoldzielenia.`,
+        description: `${displayName} jest dobrym kandydatem do przegladu planu lub współdzielenia.`,
         meta: `${subscription.amount.toFixed(2)} ${subscription.currency}`,
         tone: 'warning',
       });
@@ -172,38 +175,33 @@ export function SubscriptionReviewQueueScreen() {
     if (isLoading && !subscriptions.length) {
       return (
         <View style={styles.centerState}>
-          <ActivityIndicator color={theme.colors.primary} />
-          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>
-            Buduje kolejke decyzji...
+          <Text style={[styles.centerText, { color: theme.colors.text }]}>
+            Buduję kolejkę decyzji
           </Text>
+          <Text style={[styles.emptyDesc, { color: theme.colors.textMuted }]}>
+            Szukam triali, płatności i kosztów wymagających uwagi.
+          </Text>
+          <SkeletonList rows={4} isDark />
         </View>
       );
     }
 
     if (isError && !subscriptions.length) {
       return (
-        <PressableScale
-          style={[styles.emptyCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-          onPress={() => refetch()}
-        >
-          <AlertTriangle size={24} color={theme.colors.warning} />
-          <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Nie udalo sie pobrac danych</Text>
-          <Text style={[styles.emptyDesc, { color: theme.colors.textMuted }]}>
-            Dotknij, aby sprobowac ponownie. Widok korzysta tylko z istniejacej listy subskrypcji.
-          </Text>
-        </PressableScale>
+        <ErrorState
+          message="Nie udało się odświeżyć kolejki. Widok korzysta z istniejącej listy subskrypcji, gdy jest dostępna."
+          onRetry={() => refetch()}
+        />
       );
     }
 
     if (!reviewItems.length) {
       return (
-        <View style={[styles.emptyCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <CheckCircle2 size={28} color={theme.colors.primary} />
-          <Text style={[styles.emptyTitle, { color: theme.colors.text }]}>Nie ma pilnych decyzji</Text>
-          <Text style={[styles.emptyDesc, { color: theme.colors.textMuted }]}>
-            Na ten moment nie widze triali, zaleglych platnosci ani drogich planow wymagajacych szybkiego review.
-          </Text>
-        </View>
+        <EmptyState
+          type="calm"
+          title="Nie ma pilnych decyzji"
+          message="Nie widzę teraz triali, zaległych płatności ani drogich planów wymagających szybkiego przeglądu."
+        />
       );
     }
 
@@ -256,7 +254,7 @@ export function SubscriptionReviewQueueScreen() {
                 <View style={[styles.decisionDone, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}44` }]}>
                   <CheckCircle2 size={16} color={theme.colors.primary} />
                   <Text style={[styles.decisionDoneText, { color: theme.colors.primary }]}>
-                    {decision === 'keep' ? 'Oznaczono: zostawiam' : decision === 'cancel' ? 'Oznaczono: do anulowania' : 'Oznaczono: sprawdze pozniej'}
+                    {decision === 'keep' ? 'Oznaczono: zostawiam' : decision === 'cancel' ? 'Oznaczono: do anulowania' : 'Oznaczono: sprawdzę później'}
                   </Text>
                 </View>
               ) : (
@@ -279,7 +277,7 @@ export function SubscriptionReviewQueueScreen() {
                     }}
                   >
                     <XCircle size={15} color={theme.colors.danger} />
-                    <Text style={[styles.actionText, { color: theme.colors.danger }]}>Anulowac</Text>
+                    <Text style={[styles.actionText, { color: theme.colors.danger }]}>Anulować</Text>
                   </PressableScale>
                   <PressableScale
                     style={[styles.actionButton, { backgroundColor: theme.colors.cardSoft, borderColor: theme.colors.border }]}
@@ -289,7 +287,7 @@ export function SubscriptionReviewQueueScreen() {
                     }}
                   >
                     <Clock3 size={15} color={theme.colors.textMuted} />
-                    <Text style={[styles.actionText, { color: theme.colors.textMuted }]}>Pozniej</Text>
+                    <Text style={[styles.actionText, { color: theme.colors.textMuted }]}>Później</Text>
                   </PressableScale>
                 </View>
               )}
@@ -311,7 +309,7 @@ export function SubscriptionReviewQueueScreen() {
             <ArrowLeft size={22} color={theme.colors.text} />
           </PressableScale>
           <View style={styles.headerCopy}>
-            <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>Review queue</Text>
+            <Text style={[styles.eyebrow, { color: theme.colors.primary }]}>Centrum decyzji</Text>
             <Text style={[styles.title, { color: theme.colors.text }]}>Kolejka decyzji</Text>
           </View>
         </View>
@@ -341,20 +339,14 @@ export function SubscriptionReviewQueueScreen() {
           </LinearGradient>
 
           <View style={styles.summaryGrid}>
-            <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Text style={[styles.summaryValue, { color: theme.colors.text }]}>{reviewItems.length}</Text>
-              <Text style={[styles.summaryLabel, { color: theme.colors.textMuted }]}>sygnalow</Text>
-            </View>
-            <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Text style={[styles.summaryValue, { color: theme.colors.primary }]}>{doneCount}</Text>
-              <Text style={[styles.summaryLabel, { color: theme.colors.textMuted }]}>decyzji</Text>
-            </View>
-            <View style={[styles.summaryCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-              <Text style={[styles.summaryValue, { color: theme.colors.warning }]}>
-                {reviewItems.filter((item) => item.tone !== 'primary').length}
-              </Text>
-              <Text style={[styles.summaryLabel, { color: theme.colors.textMuted }]}>pilnych</Text>
-            </View>
+            <MetricTile label="sygnałów" value={reviewItems.length} icon={Sparkles} tone="muted" />
+            <MetricTile label="decyzji" value={doneCount} icon={CheckCircle2} />
+            <MetricTile
+              label="pilnych"
+              value={reviewItems.filter((item) => item.tone !== 'primary').length}
+              icon={AlertTriangle}
+              tone="warning"
+            />
           </View>
 
           {renderContent()}

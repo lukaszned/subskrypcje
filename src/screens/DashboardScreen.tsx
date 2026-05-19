@@ -88,7 +88,7 @@ const getBrandToken = (name?: string | null, provider?: string | null): BrandTok
   if (source.includes('netflix')) return { bg: '#050505', fg: '#E50914', label: 'N', weight: '900' };
   if (source.includes('spotify')) return { bg: '#1DB954', fg: '#FFFFFF', label: 'S', weight: '900' };
   if (source.includes('hbo') || source.includes('max')) return { bg: '#1B0B3B', fg: '#FFFFFF', label: 'max', weight: '900' };
-  if (source.includes('youtube')) return { bg: '#FF0000', fg: '#FFFFFF', label: '▶', weight: '900' };
+  if (source.includes('youtube')) return { bg: '#FF0000', fg: '#FFFFFF', label: 'YT', weight: '900' };
   if (source.includes('disney')) return { bg: '#123C69', fg: '#FFFFFF', label: 'D+', weight: '900' };
   if (source.includes('amazon') || source.includes('prime')) return { bg: '#0F172A', fg: '#FF9900', label: 'a', weight: '900' };
   if (source.includes('apple') || source.includes('icloud')) return { bg: '#111827', fg: '#FFFFFF', label: 'A', weight: '900' };
@@ -208,9 +208,10 @@ export const DashboardScreen = () => {
   const isError = isSummaryError;
   const hasData = !!summaryData;
 
-  // DIAGNOSTIC LOGGING
-  console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
-  if (isSummaryError) console.warn('[DashboardScreen] Summary Error:', summaryError);
+  if (__DEV__) {
+    console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
+    if (isSummaryError) console.warn('[DashboardScreen] Summary Error:', summaryError);
+  }
 
   const monthlyTotal = summaryData?.monthlyTotal ?? 0;
   const yearlyTotal = summaryData?.yearlyTotal ?? 0;
@@ -1928,7 +1929,7 @@ export const DashboardScreen = () => {
         id: 'scan',
         icon: Sparkles,
         title: 'Audit skrzynki',
-        desc: 'Wykryj historyczne subskrypcje, zmiany cen i rachunki do review.',
+        desc: 'Wykryj historyczne subskrypcje, zmiany cen i rachunki do sprawdzenia.',
         cta: 'Otwórz Email Scan',
         onPress: () => navigation.navigate('EmailScan'),
       },
@@ -1937,7 +1938,7 @@ export const DashboardScreen = () => {
         icon: ShieldCheck,
         title: 'Kolejka decyzji',
         desc: 'Szybko oznacz: zostawiam, anulowac albo sprawdze pozniej.',
-        cta: 'Otworz review',
+        cta: 'Otwórz kolejkę',
         onPress: () => navigation.navigate('SubscriptionReviewQueue'),
       },
     ];
