@@ -7,6 +7,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
+import { useTheme } from '../theme/ThemeContext';
 
 interface SkeletonProps {
   width: ViewStyle['width'];
@@ -23,26 +24,49 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   style,
   isDark = false,
 }) => {
+  const { theme } = useTheme();
   const opacity = useRef(new Animated.Value(0.3)).current;
+  const translateX = useRef(new Animated.Value(-1)).current;
 
   useEffect(() => {
     Animated.loop(
-      Animated.sequence([
-        Animated.timing(opacity, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(opacity, { toValue: 0.3, duration: 800, useNativeDriver: true }),
+      Animated.parallel([
+        Animated.sequence([
+          Animated.timing(opacity, { toValue: 0.68, duration: 850, useNativeDriver: true }),
+          Animated.timing(opacity, { toValue: 0.32, duration: 850, useNativeDriver: true }),
+        ]),
+        Animated.sequence([
+          Animated.timing(translateX, { toValue: 1, duration: 1700, useNativeDriver: true }),
+          Animated.timing(translateX, { toValue: -1, duration: 0, useNativeDriver: true }),
+        ]),
       ])
     ).start();
-  }, [opacity]);
+  }, [opacity, translateX]);
 
-  const backgroundColor = isDark ? '#334155' : '#E2E8F0';
+  const backgroundColor = isDark ? theme.colors.cardStrong : `${theme.colors.primary}16`;
+  const shimmerColor = isDark ? 'rgba(255,255,255,0.14)' : `${theme.colors.primary}22`;
+  const shimmerTranslate = translateX.interpolate({
+    inputRange: [-1, 1],
+    outputRange: [-80, 120],
+  });
 
   return (
     <Animated.View
       style={[
-        { width, height, backgroundColor, borderRadius, opacity },
+        { width, height, backgroundColor, borderRadius, opacity, overflow: 'hidden' },
         style,
       ]}
-    />
+    >
+      <Animated.View
+        style={[
+          styles.shimmer,
+          {
+            backgroundColor: shimmerColor,
+            transform: [{ translateX: shimmerTranslate }, { rotate: '12deg' }],
+          },
+        ]}
+      />
+    </Animated.View>
   );
 };
 
@@ -88,4 +112,10 @@ const styles = StyleSheet.create({
   mb8: { marginBottom: 8 },
   cardsRow: { flexDirection: 'row', paddingHorizontal: 4 },
   card: { marginRight: 16 },
+  shimmer: {
+    position: 'absolute',
+    top: -20,
+    bottom: -20,
+    width: 42,
+  },
 });

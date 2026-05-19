@@ -1,6 +1,5 @@
 import React, { useMemo, useState } from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -13,13 +12,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
-  AlertCircle,
   ArrowLeft,
   CalendarDays,
   ChevronRight,
   Clock,
   CreditCard,
-  Sparkles,
 } from 'lucide-react-native';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import type { AppStackParamList } from '../types/navigation';
@@ -27,6 +24,9 @@ import type { Subscription } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
+import { ErrorState } from '../components/ErrorState';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonList } from '../components/LoadingState';
 
 type CalendarItem = Subscription & {
   paymentDate: Date;
@@ -140,39 +140,34 @@ export const PaymentCalendarScreen = () => {
   const renderContent = () => {
     if (isLoading) {
       return (
-        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <ActivityIndicator color={theme.colors.primary} />
-          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>Buduję kalendarz płatności...</Text>
+        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, alignItems: 'stretch' }]}>
+          <Text style={[styles.centerTitle, { color: theme.colors.text, textAlign: 'left' }]}>Buduje kalendarz platnosci</Text>
+          <Text style={[styles.centerText, { color: theme.colors.textMuted, textAlign: 'left' }]}>Ukladamy najblizsze terminy. Gdy API zwolni, pokazemy ostatni zapisany stan.</Text>
+          <SkeletonList rows={4} isDark />
         </View>
       );
     }
 
     if (isError) {
       return (
-        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <AlertCircle size={32} color={vibrantTheme.colors.danger} />
-          <Text style={[styles.centerTitle, { color: theme.colors.text }]}>Nie udało się pobrać płatności</Text>
-          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>{error?.message || 'Sprawdź połączenie i spróbuj ponownie.'}</Text>
-          <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => refetch()}>
-            <Text style={[styles.retryButtonText, { color: theme.colors.darkText }]}>Spróbuj ponownie</Text>
-          </TouchableOpacity>
-        </View>
+        <ErrorState
+          message={error?.message || 'Nie udalo sie odswiezyc kalendarza. Sprawdz polaczenie albo sprobuj ponownie.'}
+          onRetry={() => refetch()}
+        />
       );
     }
 
     if (groupedItems.length === 0) {
       return (
-        <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-          <Sparkles size={34} color={theme.colors.primary} />
-          <Text style={[styles.centerTitle, { color: theme.colors.text }]}>Spokojny horyzont</Text>
-          <Text style={[styles.centerText, { color: theme.colors.textMuted }]}>Nie widzę zaplanowanych płatności w wybranym okresie.</Text>
-          <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary }]} onPress={() => navigation.navigate('AddSubscription')}>
-            <Text style={[styles.retryButtonText, { color: theme.colors.darkText }]}>Dodaj subskrypcję</Text>
-          </TouchableOpacity>
-        </View>
+        <EmptyState
+          type="calm"
+          title="Spokojny horyzont"
+          message="Nie widze zaplanowanych platnosci w wybranym okresie. Mozesz rozszerzyc zakres albo dodac brakujaca subskrypcje."
+          actionLabel="Dodaj subskrypcje"
+          onAction={() => navigation.navigate('AddSubscription')}
+        />
       );
     }
-
     return (
       <View style={styles.timeline}>
         {groupedItems.map((group) => (

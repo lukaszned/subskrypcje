@@ -11,7 +11,6 @@ import {
   StyleSheet,
   FlatList,
   TextInput,
-  TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   Alert,
@@ -20,7 +19,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, ArrowUpDown, Frown, ArrowLeft, CalendarClock, ShieldAlert, Wallet } from 'lucide-react-native';
+import { Search, ArrowUpDown, ArrowLeft, CalendarClock, ShieldAlert, Wallet } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../types/navigation';
@@ -39,6 +38,10 @@ import SubscriptionListItem from './SubscriptionListItem';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, parseAppDate } from '../utils/date';
+import { ErrorState } from '../components/ErrorState';
+import { EmptyState } from '../components/EmptyState';
+import { SkeletonList } from '../components/LoadingState';
+import { PressableScale } from '../components/PressableScale';
 
 const toMonthlyAmount = (subscription: Subscription) => {
   const amount = Number(subscription.amount || 0);
@@ -170,49 +173,33 @@ export const SubscriptionListScreen = () => {
   const renderEmptyState = () => {
     if (isError) {
       return (
-        <View style={styles.emptyStateContainer}>
-          <Frown size={48} color="#94A3B8" />
-          <Text style={styles.emptyTitle}>Błąd ładowania</Text>
-          <Text style={styles.emptyMessage} numberOfLines={3}>
-            {error?.message || 'Nie udało się pobrać listy subskrypcji.'}
-          </Text>
-          <TouchableOpacity style={styles.addButton} onPress={() => refetch()}>
-            <Text style={styles.addButtonText}>Ponów</Text>
-          </TouchableOpacity>
-        </View>
+        <ErrorState
+          message={error?.message || 'Nie udalo sie odswiezyc listy. Jesli mamy cache, pokazemy ostatni zapisany stan.'}
+          onRetry={() => refetch()}
+        />
       );
     }
 
     return (
-      <View style={styles.emptyStateContainer}>
-        <View style={styles.emptyIconCircle}>
-          <Frown size={48} color="#94A3B8" />
-        </View>
-        <Text style={styles.emptyTitle}>
-          {searchQuery ? 'Nic nie znaleziono' : 'Brak subskrypcji'}
-        </Text>
-        {!searchQuery && activeStatus === 'all' && (
-          <TouchableOpacity
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddSubscription')}
-          >
-            <Text style={styles.addButtonText}>Dodaj nową</Text>
-          </TouchableOpacity>
-        )}
-      </View>
+      <EmptyState
+        type={searchQuery ? 'search' : 'add'}
+        title={searchQuery ? 'Nie ma takiej subskrypcji' : 'Dodaj pierwsza subskrypcje'}
+        message={searchQuery
+          ? 'Zmien filtr albo wyszukaj po nazwie uslugi, planu lub kategorii.'
+          : 'Zbuduj swoje centrum kosztow: platnosci, triale, decyzje i oszczednosci beda widoczne w jednym miejscu.'}
+        actionLabel={!searchQuery && activeStatus === 'all' ? 'Dodaj subskrypcje' : undefined}
+        onAction={!searchQuery && activeStatus === 'all' ? () => navigation.navigate('AddSubscription') : undefined}
+      />
     );
   };
 
   const renderLoadingState = () => (
-    <View style={styles.emptyStateContainer}>
-      <View style={styles.emptyIconCircle}>
-        <ActivityIndicator color={theme.colors.primary} />
-      </View>
-      <Text style={styles.emptyTitle}>Wczytuję subskrypcje</Text>
-      <Text style={styles.emptyMessage}>Jeśli backend odpowiada wolno, pokażemy ostatni zapisany stan.</Text>
+    <View style={styles.loadingShell}>
+      <Text style={[styles.loadingTitle, { color: theme.colors.text }]}>Przygotowuje liste</Text>
+      <Text style={[styles.loadingSubtitle, { color: theme.colors.textMuted }]}>Jesli odswiezanie potrwa dluzej, aplikacja skorzysta z ostatniego zapisanego stanu.</Text>
+      <SkeletonList rows={5} isDark />
     </View>
   );
-
   const renderItem = ({ item }: { item: Subscription }) => {
     return (
       <SubscriptionListItem
@@ -276,7 +263,7 @@ export const SubscriptionListScreen = () => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={theme.colors.text} /></TouchableOpacity>
+          <PressableScale onPress={() => navigation.goBack()}><ArrowLeft size={24} color={theme.colors.text} /></PressableScale>
           <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Search size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
             <TextInput
@@ -286,13 +273,13 @@ export const SubscriptionListScreen = () => {
               onChangeText={setSearchQuery}
             />
           </View>
-          <TouchableOpacity
+          <PressableScale
             style={[styles.sortButton, { flexDirection: 'row', width: 'auto', paddingHorizontal: 12 }]}
             onPress={toggleSort}
           >
             <ArrowUpDown size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
             <Text style={{ color: theme.colors.primary, fontWeight: '800', fontSize: 12 }}>{getSortLabel()}</Text>
-          </TouchableOpacity>
+          </PressableScale>
         </View>
 
         <View style={styles.filterSection}>
@@ -310,7 +297,7 @@ export const SubscriptionListScreen = () => {
               { id: 'overdue', label: 'Zaległe' },
               { id: 'canceled', label: 'Anulowane' },
             ].map(tab => (
-              <TouchableOpacity
+              <PressableScale
                 key={tab.id}
                 style={[styles.statusTab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeStatus === tab.id && { backgroundColor: `${theme.colors.primary}2E`, borderColor: theme.colors.primary }]}
                 onPress={() => setActiveStatus(tab.id as any)}
@@ -318,7 +305,7 @@ export const SubscriptionListScreen = () => {
                 <Text style={[styles.statusTabText, { color: theme.colors.textMuted }, activeStatus === tab.id && { color: theme.colors.primary }]}>
                   {tab.label}
                 </Text>
-              </TouchableOpacity>
+              </PressableScale>
             ))}
           </ScrollView>
         </View>
@@ -437,6 +424,22 @@ const styles = StyleSheet.create({
   emptyMessage: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 4 },
   addButton: { backgroundColor: vibrantTheme.colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 24, marginTop: 12, ...vibrantTheme.shadows.glow },
   addButtonText: { color: vibrantTheme.colors.darkText, fontWeight: '900' },
+  loadingShell: {
+    width: '100%',
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+  },
+  loadingTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    marginBottom: 6,
+  },
+  loadingSubtitle: {
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: '700',
+    marginBottom: 16,
+  },
 });
 
 export default SubscriptionListScreen;

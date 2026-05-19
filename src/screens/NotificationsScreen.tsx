@@ -1,6 +1,5 @@
 import React, { useMemo } from 'react';
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -9,7 +8,7 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, CalendarClock, CheckCircle2 } from 'lucide-react-native';
+import { ArrowLeft, Bell, CalendarClock } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
@@ -17,6 +16,9 @@ import { useNotificationPreview } from '../hooks/useNotificationPreview';
 import type { AppStackParamList } from '../types/navigation';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
+import { EmptyState } from '../components/EmptyState';
+import { ErrorState } from '../components/ErrorState';
+import { SkeletonList } from '../components/LoadingState';
 
 type Navigation = NativeStackNavigationProp<AppStackParamList, 'Notifications'>;
 
@@ -59,16 +61,14 @@ export const NotificationsScreen = React.memo(() => {
         </View>
 
         {isLoading ? (
-          <View style={styles.centerState}>
-            <ActivityIndicator size="large" color={theme.colors.primary} />
+          <View style={[styles.centerState, { alignItems: 'stretch' }]}>
+            <SkeletonList rows={3} isDark />
           </View>
         ) : isError ? (
-          <View style={styles.centerState}>
-            <Text style={styles.emptyTitle}>Nie udało się pobrać przypomnień</Text>
-            <TouchableOpacity style={[styles.retryButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]} onPress={() => refetch()}>
-              <Text style={styles.retryText}>Ponów</Text>
-            </TouchableOpacity>
-          </View>
+          <ErrorState
+            message="Nie udalo sie odswiezyc przypomnien. Pokazemy je ponownie, gdy API odpowie."
+            onRetry={() => refetch()}
+          />
         ) : (
           <>
             {nextReminder && (
@@ -89,10 +89,11 @@ export const NotificationsScreen = React.memo(() => {
 
             <Text style={styles.sectionLabel}>Kolejka</Text>
             {items.length === 0 ? (
-              <View style={styles.emptyCard}>
-                <CheckCircle2 size={28} color={theme.colors.primary} />
-                <Text style={styles.emptyTitle}>Brak zaplanowanych alertów</Text>
-              </View>
+              <EmptyState
+                type="calm"
+                title="Brak zaplanowanych alertow"
+                message="Gdy pojawia sie platnosci albo triale do przypomnienia, zobaczysz je tutaj."
+              />
             ) : (
               items.map((item) => (
                 <View key={item.id} style={[styles.itemCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>

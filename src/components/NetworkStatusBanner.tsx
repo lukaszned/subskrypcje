@@ -29,11 +29,11 @@ export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
   }
 
   const isOffline = network.status === 'offline';
-  const title = isOffline ? 'Brak połączenia z API' : 'API odpowiada wolno';
+  const title = isOffline ? 'Pracujemy na ostatnich danych' : 'Odswiezanie trwa dluzej niz zwykle';
   const description = network.message || (
     isOffline
-      ? 'Sprawdź sieć telefonu albo uruchom backend.'
-      : 'Pokazujemy ekran i czekamy na odpowiedź backendu.'
+      ? 'Sprawdz polaczenie telefonu. Jesli mamy cache, aplikacja nadal pokaze zapisany stan.'
+      : 'Nie blokujemy ekranu. Dane dosynchronizuja sie, gdy API odpowie.'
   );
 
   return (

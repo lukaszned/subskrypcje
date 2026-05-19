@@ -1,7 +1,9 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
-import { AlertCircle, RefreshCw } from 'lucide-react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
+import { AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react-native';
 import { vibrantTheme } from '../theme/vibrantTheme';
+import { useTheme } from '../theme/ThemeContext';
+import { PressableScale } from './PressableScale';
 
 interface ErrorStateProps {
   message?: string;
@@ -11,46 +13,63 @@ interface ErrorStateProps {
   isDark?: boolean;
 }
 
-export const ErrorState = ({ message = 'Wystąpił nieoczekiwany błąd', details, onRetry, onSignOut, isDark }: ErrorStateProps) => {
+export const ErrorState = ({
+  message = 'Nie udalo sie odswiezyc danych. Pokazujemy bezpieczny stan aplikacji.',
+  details,
+  onRetry,
+  onSignOut,
+  isDark,
+}: ErrorStateProps) => {
+  const { theme: appTheme } = useTheme();
   const resolvedDark = isDark ?? true;
-  const theme = {
-    bg: resolvedDark ? vibrantTheme.colors.bg : '#F8FAFC',
-    text: resolvedDark ? vibrantTheme.colors.text : '#0F172A',
-    textDim: resolvedDark ? vibrantTheme.colors.textMuted : '#64748B',
-    card: resolvedDark ? vibrantTheme.colors.card : '#FFFFFF',
+  const localTheme = {
+    bg: resolvedDark ? appTheme.colors.bg : '#F8FAFC',
+    text: resolvedDark ? appTheme.colors.text : '#0F172A',
+    textDim: resolvedDark ? appTheme.colors.textMuted : '#64748B',
+    card: resolvedDark ? appTheme.colors.card : '#FFFFFF',
+    border: resolvedDark ? appTheme.colors.border : '#E2E8F0',
   };
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.card, { backgroundColor: theme.card }]}>
-        <View style={styles.iconContainer}>
-          <AlertCircle size={48} color="#EF4444" />
+    <View style={[styles.container, { backgroundColor: localTheme.bg }]}>
+      <View style={[styles.card, { backgroundColor: localTheme.card, borderColor: localTheme.border }]}>
+        <View style={[styles.iconContainer, { backgroundColor: `${appTheme.colors.warning}1F` }]}>
+          <AlertCircle size={34} color={appTheme.colors.warning} />
         </View>
-        <Text style={[styles.title, { color: theme.text }]}>Ojej, coś poszło nie tak</Text>
-        <Text style={[styles.message, { color: theme.textDim }]}>{message}</Text>
-        
+        <Text style={[styles.title, { color: localTheme.text }]}>Nie udalo sie odswiezyc danych</Text>
+        <Text style={[styles.message, { color: localTheme.textDim }]}>{message}</Text>
+
+        <View style={[styles.cacheHint, { borderColor: localTheme.border }]}>
+          <ShieldCheck size={16} color={appTheme.colors.primary} />
+          <Text style={[styles.cacheHintText, { color: localTheme.textDim }]}>
+            Jesli mamy zapisany stan, aplikacja pokaze ostatnie dostepne dane.
+          </Text>
+        </View>
+
         {details && (
           <View style={[styles.detailsContainer, { backgroundColor: resolvedDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9' }]}>
-            <Text style={[styles.detailsText, { color: theme.textDim }]}>{details}</Text>
+            <Text style={[styles.detailsText, { color: localTheme.textDim }]}>{details}</Text>
           </View>
         )}
-        
+
         <View style={styles.retryContainer}>
           {onRetry && (
-            <TouchableOpacity style={styles.button} onPress={onRetry} activeOpacity={0.8}>
-              <RefreshCw size={20} color={vibrantTheme.colors.darkText} style={{ marginRight: 8 }} />
-              <Text style={styles.buttonText}>Spróbuj ponownie</Text>
-            </TouchableOpacity>
+            <PressableScale
+              style={[styles.button, { backgroundColor: appTheme.colors.primary, shadowColor: appTheme.colors.primary }]}
+              onPress={onRetry}
+            >
+              <RefreshCw size={20} color={appTheme.colors.darkText} style={{ marginRight: 8 }} />
+              <Text style={[styles.buttonText, { color: appTheme.colors.darkText }]}>Sprobuj ponownie</Text>
+            </PressableScale>
           )}
 
           {onSignOut && (
-            <TouchableOpacity 
-              style={[styles.button, styles.buttonSecondary]} 
-              onPress={onSignOut} 
-              activeOpacity={0.8}
+            <PressableScale
+              style={[styles.button, styles.buttonSecondary, { borderColor: localTheme.border }]}
+              onPress={onSignOut}
             >
-              <Text style={[styles.buttonText, { color: theme.textDim }]}>Wyloguj się</Text>
-            </TouchableOpacity>
+              <Text style={[styles.buttonText, { color: localTheme.textDim }]}>Wyloguj sie</Text>
+            </PressableScale>
           )}
         </View>
       </View>
@@ -66,31 +85,31 @@ const styles = StyleSheet.create({
   },
   card: {
     width: '100%',
-    padding: 32,
-    borderRadius: 24,
+    padding: 28,
+    borderRadius: 26,
     alignItems: 'center',
     shadowColor: '#000000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.14,
+    shadowRadius: 22,
+    elevation: 5,
+    borderWidth: 1,
   },
   retryContainer: {
     width: '100%',
     gap: 12,
   },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: 'rgba(255,77,109,0.14)',
+    width: 72,
+    height: 72,
+    borderRadius: 26,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
   },
   title: {
     fontSize: 20,
-    fontWeight: '800',
+    fontWeight: '900',
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -98,7 +117,24 @@ const styles = StyleSheet.create({
     fontSize: 15,
     textAlign: 'center',
     lineHeight: 22,
-    marginBottom: 24,
+    marginBottom: 18,
+  },
+  cacheHint: {
+    width: '100%',
+    borderWidth: 1,
+    borderRadius: 16,
+    padding: 12,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'flex-start',
+    marginBottom: 18,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  cacheHintText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
   },
   button: {
     flexDirection: 'row',
@@ -107,17 +143,22 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     borderRadius: 16,
     alignItems: 'center',
+    justifyContent: 'center',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.24,
+    shadowRadius: 18,
+    elevation: 7,
   },
   buttonSecondary: {
     justifyContent: 'center',
     backgroundColor: 'transparent',
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   buttonText: {
-    color: vibrantTheme.colors.darkText,
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '900',
   },
   detailsContainer: {
     width: '100%',

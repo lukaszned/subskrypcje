@@ -332,7 +332,7 @@ export const SettingsScreen = () => {
               </View>
               <View style={styles.settingTextBlock}>
                 <View style={styles.settingTitleRow}>
-                  <Text style={styles.settingTitle}>Wykrywanie z Gmaila</Text>
+                  <Text style={styles.settingTitle}>Znalezione z Gmaila</Text>
                   {emailScanStatus?.pendingDetectionsCount ? (
                     <View style={[styles.pendingBadge, { backgroundColor: theme.colors.primary }]}>
                       <Text style={[styles.pendingBadgeText, { color: theme.colors.darkText }]}>{emailScanStatus.pendingDetectionsCount}</Text>
@@ -340,7 +340,7 @@ export const SettingsScreen = () => {
                   ) : null}
                 </View>
                 <Text style={styles.settingDesc}>
-                  Privacy-first review kandydatur z rachunków i triali
+                  Review pozycji znalezionych w mailach: bez automatycznego dodawania
                 </Text>
               </View>
               <ChevronRight size={20} color="#CBD5E1" />

@@ -2109,7 +2109,7 @@ export const DashboardScreen = () => {
         >
           <AlertCircle size={18} color={theme.error} />
           <Text style={dynamicStyles.dashboardNoticeText}>
-            Nie udało się odświeżyć części danych. Dotknij, aby spróbować ponownie.
+            Nie udalo sie odswiezyc czesci danych. Pokazujemy ostatni znany stan. Dotknij, aby sprobowac ponownie.
           </Text>
         </TouchableOpacity>
       );
@@ -2119,7 +2119,7 @@ export const DashboardScreen = () => {
       return (
         <View style={dynamicStyles.dashboardNotice}>
           <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={dynamicStyles.dashboardNoticeText}>Ładuję dane dashboardu...</Text>
+          <Text style={dynamicStyles.dashboardNoticeText}>Przygotowuje Twoje centrum decyzji...</Text>
         </View>
       );
     }

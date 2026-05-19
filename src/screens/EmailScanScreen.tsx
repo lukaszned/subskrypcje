@@ -134,7 +134,7 @@ function safeDate(value: string | null | undefined) {
 }
 
 function getProductItemTitle(item: EmailScanProductItem) {
-  return item.name || item.provider || item.billingChannel || 'Wykryty sygnał';
+  return item.name || item.provider || item.billingChannel || 'Znalezione do sprawdzenia';
 }
 
 function getProductItemAction(item: EmailScanProductItem) {
@@ -380,7 +380,7 @@ export const EmailScanScreen = () => {
         }
       },
       onError: (error: any) => {
-        Alert.alert('Błąd skanowania', error?.message || 'Nie udało się przeskanować Gmaila.');
+        Alert.alert('Nie udalo sie przeskanowac skrzynki', error?.message || 'Nie udało się przeskanować Gmaila.');
       },
     });
   };
@@ -412,7 +412,7 @@ export const EmailScanScreen = () => {
           onPress: () => {
             ignoreMutation.mutate(detection.id, {
               onError: (error: any) => {
-                Alert.alert('Błąd', error?.message || 'Nie udało się zignorować kandydatury.');
+                Alert.alert('Błąd', error?.message || 'Nie udalo sie odlozyc tej pozycji.');
               },
             });
           },
@@ -460,7 +460,7 @@ export const EmailScanScreen = () => {
           }
         }
 
-        Alert.alert('Błąd', error?.message || 'Nie udało się zaakceptować kandydatury.');
+        Alert.alert('Błąd', error?.message || 'Nie udalo sie dodac tej pozycji do subskrypcji.');
       },
     });
   };
@@ -1299,7 +1299,7 @@ export const EmailScanScreen = () => {
           <View style={[styles.heroIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
             <Mail size={26} color="#FFFFFF" />
           </View>
-          <Text style={styles.heroTitle}>Wykrywanie z Gmaila</Text>
+          <Text style={styles.heroTitle}>Znalezione z Gmaila</Text>
           <Text style={styles.heroText}>
             Znajdź kandydatury subskrypcji w potwierdzeniach płatności, trialach i odnowieniach.
           </Text>

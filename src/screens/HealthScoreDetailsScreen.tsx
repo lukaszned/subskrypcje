@@ -151,7 +151,7 @@ export function HealthScoreDetailsScreen() {
             </View>
             <View style={styles.sourcePill}>
               {healthQuery.isLoading ? <ActivityIndicator size="small" color="#FFFFFF" /> : null}
-              <Text style={styles.sourcePillText}>{isBackendScore ? 'Live score' : 'Lokalny szacunek'}</Text>
+              <Text style={styles.sourcePillText}>{isBackendScore ? 'Wynik z danych' : 'Lokalny szacunek'}</Text>
             </View>
           </View>
           <Text style={styles.heroLabel}>Obecny wynik</Text>
@@ -168,8 +168,7 @@ export function HealthScoreDetailsScreen() {
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Co to jest?</Text>
           </View>
           <Text style={[styles.bodyText, { color: theme.colors.textMuted }]}>
-            Health Score to szybki wskaźnik ryzyka subskrypcji. Im mniej zaległości, kończących się triali,
-            nadchodzących płatności i usług bez ścieżki anulowania, tym wyższy wynik.
+            Kondycja subskrypcji pokazuje, czy Twoje uslugi sa pod kontrola. Im mniej zaleglosci, konczacych sie triali, bliskich platnosci i uslug bez sciezki anulowania, tym wyzszy wynik.
           </Text>
         </View>
 
