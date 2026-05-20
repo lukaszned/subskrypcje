@@ -78,6 +78,8 @@ function resolveApiBaseUrls(): string[] {
 }
 
 const API_BASE_URLS = resolveApiBaseUrls();
+const READ_TIMEOUT_MS = 12000;
+const WRITE_TIMEOUT_MS = 45000;
 
 if (API_BASE_URLS.length === 0) {
   throw new Error(
@@ -91,6 +93,11 @@ console.log(`[apiClient] API base URLs: ${API_BASE_URLS.join(', ')}`);
 function isRetriableConnectionError(error: unknown): boolean {
   const message = error instanceof Error ? error.message : String(error || '');
   return /timeout|abort|network request failed|failed to fetch|internet|offline|load failed/i.test(message);
+}
+
+function isTimeoutError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error || '');
+  return /timeout|abort/i.test(message);
 }
 
 export class ApiError extends Error {
@@ -187,7 +194,8 @@ async function request<T>(
 
       const canTryNextHost =
         attempt < API_BASE_URLS.length - 1 &&
-        isRetriableConnectionError(normalizedError);
+        isRetriableConnectionError(normalizedError) &&
+        (method === 'GET' || !isTimeoutError(normalizedError));
 
       if (canTryNextHost) {
         console.warn(`[API Request] ${method} ${url} failed, trying next API host.`, normalizedError);
@@ -205,11 +213,15 @@ async function request<T>(
   throw lastError;
 }
 
-export const apiGet = <T>(path: string): Promise<T> => request<T>('GET', path, undefined, 12000);
+export const apiGet = <T>(path: string): Promise<T> => request<T>('GET', path, undefined, READ_TIMEOUT_MS);
 export const apiGetWithTimeout = <T>(path: string, timeoutMs: number): Promise<T> =>
   request<T>('GET', path, undefined, timeoutMs);
-export const apiPost = <T>(path: string, body: unknown): Promise<T> => request<T>('POST', path, body);
+export const apiPost = <T>(path: string, body: unknown): Promise<T> => request<T>('POST', path, body, WRITE_TIMEOUT_MS);
 export const apiPostWithTimeout = <T>(path: string, body: unknown, timeoutMs: number): Promise<T> =>
   request<T>('POST', path, body, timeoutMs);
-export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => request<T>('PATCH', path, body);
-export const apiDelete = <T = void>(path: string): Promise<T> => request<T>('DELETE', path);
+export const apiPatch = <T>(path: string, body?: unknown): Promise<T> => request<T>('PATCH', path, body, WRITE_TIMEOUT_MS);
+export const apiPatchWithTimeout = <T>(path: string, body: unknown | undefined, timeoutMs: number): Promise<T> =>
+  request<T>('PATCH', path, body, timeoutMs);
+export const apiDelete = <T = void>(path: string): Promise<T> => request<T>('DELETE', path, undefined, WRITE_TIMEOUT_MS);
+export const apiDeleteWithTimeout = <T = void>(path: string, timeoutMs: number): Promise<T> =>
+  request<T>('DELETE', path, undefined, timeoutMs);

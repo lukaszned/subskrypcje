@@ -42,6 +42,7 @@ import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
+import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
@@ -61,6 +62,10 @@ export const SubscriptionDetailScreen = () => {
   const { data: cancelGuideLookup } = useSubscriptionCancelGuide(id);
 
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
+
+  const showDetailActionError = (error: unknown, fallback: string) => {
+    Alert.alert('Nie udało się wykonać akcji', getSafeMutationErrorMessage(error, fallback));
+  };
 
   const isLoading = isSubLoading;
 
@@ -96,7 +101,10 @@ export const SubscriptionDetailScreen = () => {
       {
         text: 'Usuń',
         style: 'destructive',
-        onPress: () => deleteMutation.mutate(id, { onSuccess: () => navigation.goBack() })
+        onPress: () => deleteMutation.mutate(id, {
+          onSuccess: () => navigation.goBack(),
+          onError: (error) => showDetailActionError(error, 'Nie udało się usunąć subskrypcji.'),
+        })
       },
     ]);
   };
@@ -104,6 +112,7 @@ export const SubscriptionDetailScreen = () => {
   const handlePay = () => {
     payMutation.mutate(id, {
       onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została oznaczona jako opłacona.'),
+      onError: (error) => showDetailActionError(error, 'Nie udało się oznaczyć płatności.'),
     });
   };
 
@@ -125,7 +134,7 @@ export const SubscriptionDetailScreen = () => {
         } else if (err?.status === 404) {
           Alert.alert('Nie znaleziono subskrypcji', 'Nie udało się znaleźć tej subskrypcji dla aktualnego konta.');
         } else {
-          Alert.alert('Błąd', 'Nie udało się wysłać zgłoszenia.');
+          showDetailActionError(err, 'Nie udało się wysłać zgłoszenia.');
         }
       }
     });
@@ -465,7 +474,10 @@ export const SubscriptionDetailScreen = () => {
         onClose={() => setIsCancelModalVisible(false)}
         subscriptionId={id}
         subscriptionName={sub.name}
-        onConfirmCancel={() => cancelMutation.mutate(id)}
+        onConfirmCancel={() => cancelMutation.mutate(id, {
+          onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została anulowana.'),
+          onError: (error) => showDetailActionError(error, 'Nie udało się anulować subskrypcji.'),
+        })}
         onRequestGuide={handleRequestGuide}
         isRequestingGuide={requestGuideMutation.isPending}
       />

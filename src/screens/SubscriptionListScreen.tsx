@@ -43,6 +43,7 @@ import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
 import { PressableScale } from '../components/PressableScale';
 import { GlassCard, MetricTile, SectionHeader } from '../components/ui/PremiumPrimitives';
+import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 
 const toMonthlyAmount = (subscription: Subscription) => {
   const amount = Number(subscription.amount || 0);
@@ -57,6 +58,10 @@ const toMonthlyAmount = (subscription: Subscription) => {
     default:
       return amount;
   }
+};
+
+const showActionError = (error: unknown, fallback: string) => {
+  Alert.alert('Nie udało się wykonać akcji', getSafeMutationErrorMessage(error, fallback));
 };
 
 export const SubscriptionListScreen = () => {
@@ -127,7 +132,7 @@ export const SubscriptionListScreen = () => {
           onPress: () => {
             cancelMutation.mutate(id, {
               onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została anulowana.'),
-              onError: (error) => Alert.alert('Błąd', error.message),
+              onError: (error) => showActionError(error, 'Nie udało się anulować subskrypcji.'),
             });
           },
         },
@@ -146,7 +151,7 @@ export const SubscriptionListScreen = () => {
           onPress: () => {
             payMutation.mutate(id, {
               onSuccess: () => Alert.alert('Sukces', 'Płatność została odnotowana.'),
-              onError: (error) => Alert.alert('Błąd', error.message),
+              onError: (error) => showActionError(error, 'Nie udało się oznaczyć płatności.'),
             });
           },
         },

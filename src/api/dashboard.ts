@@ -6,7 +6,7 @@
 // Wywoływane przez hooki w src/hooks/.
 // =============================================================
 
-import { apiGet, apiGetWithTimeout, apiPatch } from '../lib/apiClient';
+import { apiGet, apiGetWithTimeout, apiPatchWithTimeout } from '../lib/apiClient';
 import {
   DashboardSummary,
   UpcomingPaymentsResponse,
@@ -30,6 +30,7 @@ const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 const DASHBOARD_SUMMARY_FAST_CACHE_MS = 2 * 60 * 1000;
 const USER_SETTINGS_CACHE_KEY = 'sub-sentry.user-settings.v1';
 const USER_SETTINGS_PENDING_KEY = 'sub-sentry.user-settings.pending.v1';
+const USER_SETTINGS_SYNC_TIMEOUT_MS = 15000;
 
 export type UpdateUserSettingsPayload = Pick<
   UserSettings,
@@ -453,7 +454,11 @@ export async function getUserSettings(): Promise<UserSettings> {
 
     if (pendingPayload) {
       try {
-        const syncedSettings = await apiPatch<UserSettings>('/users/settings', pendingPayload);
+        const syncedSettings = await apiPatchWithTimeout<UserSettings>(
+          '/users/settings',
+          pendingPayload,
+          USER_SETTINGS_SYNC_TIMEOUT_MS
+        );
         await cacheUserSettings(syncedSettings);
         await clearPendingUserSettings();
         return syncedSettings;
@@ -486,7 +491,11 @@ export async function updateUserSettings(
   payload: UpdateUserSettingsPayload
 ): Promise<UserSettings & { __localOnly?: boolean }> {
   try {
-    const settings = await apiPatch<UserSettings>('/users/settings', payload);
+    const settings = await apiPatchWithTimeout<UserSettings>(
+      '/users/settings',
+      payload,
+      USER_SETTINGS_SYNC_TIMEOUT_MS
+    );
     await cacheUserSettings(settings);
     await clearPendingUserSettings();
     return settings;

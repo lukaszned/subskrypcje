@@ -17,6 +17,8 @@ import {
   TouchableWithoutFeedback,
   Keyboard,
   Alert,
+  Animated,
+  Easing,
   ActivityIndicator,
   LayoutAnimation,
 } from 'react-native';
@@ -25,7 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { 
   X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, ChevronDown,
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
-  PiggyBank, Truck, Globe, AlertCircle, ArrowRight, ShieldCheck
+  PiggyBank, Truck, Globe, AlertCircle, ArrowRight, ShieldCheck, Sparkles, Wand2
 } from 'lucide-react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -43,6 +45,8 @@ import { ApiError } from '../lib/apiClient';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { formatInputDate, parseAppDate } from '../utils/date';
+import { isTimeoutLikeError } from '../utils/requestErrors';
+import { fetchEstimatedCost, type EstimatedCostPlan } from '../services/aiPricePredictor';
 
 const CATEGORIES: Array<{
   id: SubscriptionCategory;
@@ -95,6 +99,77 @@ const getSuggestedNextPaymentDate = (billingCycle: BillingCycle, baseDate = new 
   }
 };
 
+const CATEGORY_LABELS_LOCAL: Record<SubscriptionCategory, string> = {
+  entertainment: 'Rozrywka',
+  utilities: 'Narzędzia',
+  health: 'Zdrowie',
+  education: 'Edukacja',
+  productivity: 'Produktywność',
+  shopping: 'Zakupy',
+  finance: 'Finanse',
+  transport: 'Transport',
+  other: 'Inne',
+};
+
+const GENERATED_BRAND_PALETTES: Array<[string, string]> = [
+  ['#20F6B5', '#22D3EE'],
+  ['#A78BFA', '#F472B6'],
+  ['#FBBF24', '#FB7185'],
+  ['#60A5FA', '#34D399'],
+  ['#F97316', '#F43F5E'],
+  ['#E879F9', '#38BDF8'],
+];
+
+const CATEGORY_KEYWORDS: Array<{ category: SubscriptionCategory; terms: string[] }> = [
+  { category: 'entertainment', terms: ['video', 'vod', 'film', 'serial', 'music', 'muzyka', 'stream', 'tidal', 'deezer', 'hbo', 'kino'] },
+  { category: 'education', terms: ['duolingo', 'course', 'kurs', 'academy', 'learning', 'nauka', 'skillshare', 'masterclass'] },
+  { category: 'productivity', terms: ['canva', 'figma', 'adobe', 'notion', 'office', 'workspace', 'chatgpt', 'ai', 'saas', 'pro'] },
+  { category: 'health', terms: ['fitness', 'fit', 'calm', 'meditation', 'medytacja', 'diet', 'health', 'zdrowie'] },
+  { category: 'shopping', terms: ['shop', 'smart', 'delivery', 'prime', 'market', 'allegro'] },
+  { category: 'finance', terms: ['bank', 'budget', 'finanse', 'trading', 'broker'] },
+  { category: 'transport', terms: ['uber', 'bolt', 'taxi', 'car', 'parking', 'transport'] },
+  { category: 'utilities', terms: ['cloud', 'storage', 'vpn', 'hosting', 'domain', 'icloud', 'dropbox'] },
+];
+
+const normalizeServiceName = (value: string) =>
+  value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+
+const getServiceInitials = (value: string) => {
+  const words = value.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+  return `${words[0][0]}${words[1][0]}`.toUpperCase();
+};
+
+const hashString = (value: string) =>
+  normalizeServiceName(value).split('').reduce((hash, char) => hash + char.charCodeAt(0), 0);
+
+const inferCategoryFromName = (value: string): SubscriptionCategory => {
+  const normalized = normalizeServiceName(value);
+  const match = CATEGORY_KEYWORDS.find((item) =>
+    item.terms.some((term) => normalized.includes(normalizeServiceName(term)))
+  );
+
+  return match?.category ?? 'other';
+};
+
+const buildGeneratedIdentity = (value: string) => {
+  const hash = hashString(value);
+  const gradient = GENERATED_BRAND_PALETTES[hash % GENERATED_BRAND_PALETTES.length];
+  const suggestedCategory = inferCategoryFromName(value);
+
+  return {
+    gradient,
+    initials: getServiceInitials(value),
+    suggestedCategory,
+    categoryLabel: CATEGORY_LABELS_LOCAL[suggestedCategory],
+  };
+};
+
 export const ManualAddScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'AddSubscription'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
@@ -102,6 +177,7 @@ export const ManualAddScreen = () => {
   const subscriptionId = route.params?.subscriptionId;
 
   const amountInputRef = useRef<TextInput>(null);
+  const aiPulseAnim = useRef(new Animated.Value(0)).current;
   const createMutation = useCreateSubscription();
   const updateMutation = useUpdateSubscription();
   const { data: existingSub, isLoading: isLoadingSub } = useSubscription(subscriptionId || '');
@@ -116,6 +192,7 @@ export const ManualAddScreen = () => {
   const [category, setCategory] = useState<SubscriptionCategory>('entertainment');
   const [date, setDate] = useState(() => getSuggestedNextPaymentDate('monthly'));
   const [hasManualDate, setHasManualDate] = useState(false);
+  const [hasManualCategory, setHasManualCategory] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currency, setCurrency] = useState('PLN');
   const [isTrial, setIsTrial] = useState(false);
@@ -129,6 +206,11 @@ export const ManualAddScreen = () => {
   const [peopleCount, setPeopleCount] = useState(2);
   const [includeInStats, setIncludeInStats] = useState(true);
   const [isAdditionalOptionsOpen, setIsAdditionalOptionsOpen] = useState(false);
+  const [aiStatus, setAiStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
+  const [aiPlans, setAiPlans] = useState<EstimatedCostPlan[]>([]);
+  const [aiMessage, setAiMessage] = useState('');
+  const [aiServiceName, setAiServiceName] = useState('');
+  const [showSlowSaveHint, setShowSlowSaveHint] = useState(false);
 
   const parsedAmount = parseFloat(amount.replace(',', '.'));
   const finalCalculatedCost = useMemo(() => {
@@ -199,6 +281,53 @@ export const ManualAddScreen = () => {
     return [...list].sort((a, b) => a.name.localeCompare(b.name));
   }, [name, subscriptionPlans]);
 
+  const normalizedName = useMemo(() => normalizeServiceName(name), [name]);
+  const hasExactPopularMatch = useMemo(
+    () => subscriptionPlans.some((service) => normalizeServiceName(service.name) === normalizedName),
+    [normalizedName, subscriptionPlans]
+  );
+  const isCustomServiceMode = normalizedName.length >= 3 && !selectedService && !hasExactPopularMatch;
+  const generatedIdentity = useMemo(() => buildGeneratedIdentity(name), [name]);
+  const aiButtonGlow = aiPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.5, 1],
+  });
+  const aiButtonScale = aiPulseAnim.interpolate({
+    inputRange: [0, 0.5, 1],
+    outputRange: [1, 1.015, 1],
+  });
+  const shimmerTranslateX = aiPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [-180, 220],
+  });
+
+  useEffect(() => {
+    if (!isCustomServiceMode && aiStatus !== 'loading') {
+      aiPulseAnim.stopAnimation();
+      aiPulseAnim.setValue(0);
+      return;
+    }
+
+    const loop = Animated.loop(
+      Animated.timing(aiPulseAnim, {
+        toValue: 1,
+        duration: aiStatus === 'loading' ? 950 : 1700,
+        easing: Easing.inOut(Easing.ease),
+        useNativeDriver: true,
+      })
+    );
+
+    loop.start();
+    return () => loop.stop();
+  }, [aiPulseAnim, aiStatus, isCustomServiceMode]);
+
+  useEffect(() => {
+    setAiPlans([]);
+    setAiMessage('');
+    setAiServiceName('');
+    setAiStatus('idle');
+  }, [normalizedName]);
+
   const handleSelectPopular = (service: PopularSubscription) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     if (selectedService?.name === service.name) {
@@ -209,11 +338,13 @@ export const ManualAddScreen = () => {
       setProvider('');
       setCurrency('PLN');
       setPlanName('');
+      setHasManualCategory(false);
     } else {
       setSelectedService(service);
       setName(service.name);
       setAmount(service.defaultPrice);
       setCategory(service.category);
+      setHasManualCategory(false);
       setProvider(service.provider);
       setPlanName(service.availablePlans?.find((plan) => plan.price.toFixed(2) === Number(service.defaultPrice).toFixed(2))?.name || '');
       if (service.name.includes('ChatGPT')) setCurrency('USD');
@@ -290,6 +421,57 @@ export const ManualAddScreen = () => {
     }
   };
 
+  const applyGeneratedCategory = () => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setCategory(generatedIdentity.suggestedCategory);
+    setHasManualCategory(true);
+  };
+
+  const handleSelectAiPlan = (plan: EstimatedCostPlan) => {
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setAmount(plan.price.toString());
+    setPlanName(plan.name);
+    setCurrency('PLN');
+    handleCycleChange(plan.billingCycle);
+
+    if (!provider.trim()) {
+      setProvider(aiServiceName || name.trim());
+    }
+
+    scrollToForm();
+  };
+
+  const handleFetchAiEstimate = async () => {
+    const serviceName = name.trim();
+    if (!serviceName || aiStatus === 'loading') return;
+
+    Keyboard.dismiss();
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    setAiStatus('loading');
+    setAiMessage('');
+    setAiPlans([]);
+    setAiServiceName(serviceName);
+
+    try {
+      const result = await fetchEstimatedCost(serviceName);
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setAiMessage(result.message);
+      setAiPlans(result.plans);
+      setAiServiceName(result.serviceName || serviceName);
+
+      if (result.suggestedCategory && !hasManualCategory) {
+        setCategory(result.suggestedCategory);
+      }
+
+      setAiStatus(result.plans.length > 0 ? 'ready' : 'error');
+    } catch {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+      setAiStatus('error');
+      setAiMessage('Nie udało się uruchomić predykcji AI. Wpisz koszt ręcznie albo spróbuj ponownie później.');
+      setAiPlans([]);
+    }
+  };
+
   const handleSave = async () => {
     setIsSubmitted(true);
     if (!isValid || createMutation.isPending || updateMutation.isPending) return;
@@ -338,7 +520,15 @@ export const ManualAddScreen = () => {
 
   const handleApiError = (error: any) => {
     if (__DEV__) {
-      console.error('[ManualAddScreen] Save error:', error);
+      console.warn('[ManualAddScreen] Save warning:', error);
+    }
+
+    if (isTimeoutLikeError(error)) {
+      Alert.alert(
+        'Backend odpowiada wolno',
+        'Nie mamy jeszcze potwierdzenia zapisu. Daliśmy backendowi więcej czasu, ale jeśli ten komunikat wróci, sprawdź listę subskrypcji przed kolejną próbą, żeby nie dodać duplikatu.'
+      );
+      return;
     }
 
     if (error instanceof ApiError) {
@@ -347,7 +537,7 @@ export const ManualAddScreen = () => {
       } else if (error.status === 400 && error.body) {
         const body = error.body as any;
         const details = body.errors?.map((e: any) => `- ${e.message}`).join('\n') || error.message;
-        Alert.alert('Sprawdz dane', details);
+        Alert.alert('Sprawdź dane', details);
       } else {
         Alert.alert('Nie udało się zapisać', error.message || 'Spróbuj ponownie za chwilę.');
       }
@@ -356,6 +546,16 @@ export const ManualAddScreen = () => {
     }
   };
   const isLoading = createMutation.isPending || updateMutation.isPending;
+
+    useEffect(() => {
+      if (!isLoading) {
+        setShowSlowSaveHint(false);
+        return;
+      }
+
+      const timeoutId = setTimeout(() => setShowSlowSaveHint(true), 8000);
+      return () => clearTimeout(timeoutId);
+    }, [isLoading]);
 
     const scrollViewRef = useRef<ScrollView>(null);
   
@@ -579,10 +779,114 @@ export const ManualAddScreen = () => {
                   <TextInput 
                     style={[styles.textInput, { color: theme.colors.text, borderColor: theme.colors.border }, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: theme.colors.danger }]}
                     value={name} 
-                    onChangeText={setName}
+                    onChangeText={(value) => {
+                      setName(value);
+                      if (selectedService && value !== selectedService.name) {
+                        setSelectedService(null);
+                      }
+                    }}
                     placeholder="np. Netflix" 
                     placeholderTextColor={theme.colors.textSubtle}
                   />
+
+                  {isCustomServiceMode && (
+                    <View style={[styles.customIdentityCard, { borderColor: `${theme.colors.primary}33` }]}>
+                      <LinearGradient colors={generatedIdentity.gradient} style={styles.generatedBrandMark}>
+                        <Text style={styles.generatedBrandInitials}>{generatedIdentity.initials}</Text>
+                      </LinearGradient>
+                      <View style={styles.customIdentityCopy}>
+                        <Text style={[styles.customIdentityTitle, { color: theme.colors.text }]}>Własna usługa wykryta</Text>
+                        <Text style={[styles.customIdentityText, { color: theme.colors.textMuted }]}>
+                          Wygenerowaliśmy styl i kategorię: {generatedIdentity.categoryLabel}.
+                        </Text>
+                      </View>
+                      {category !== generatedIdentity.suggestedCategory && (
+                        <TouchableOpacity
+                          style={[styles.useCategoryButton, { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}
+                          onPress={applyGeneratedCategory}
+                        >
+                          <Wand2 size={14} color={theme.colors.primary} />
+                          <Text style={[styles.useCategoryText, { color: theme.colors.primary }]}>Użyj</Text>
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  )}
+
+                  {isCustomServiceMode && (
+                    <View style={styles.aiPredictorBlock}>
+                      <Animated.View style={[styles.aiGlowLayer, { opacity: aiButtonGlow, transform: [{ scale: aiButtonScale }], backgroundColor: `${theme.colors.primary}26` }]} />
+                      <TouchableOpacity
+                        activeOpacity={0.86}
+                        style={[styles.aiPredictButton, { borderColor: `${theme.colors.primary}55`, shadowColor: theme.colors.primary }]}
+                        onPress={handleFetchAiEstimate}
+                        disabled={aiStatus === 'loading'}
+                      >
+                        <Sparkles size={18} color={theme.colors.darkText} />
+                        <Text style={[styles.aiPredictButtonText, { color: theme.colors.darkText }]}>
+                          {aiStatus === 'loading' ? 'Szukam orientacyjnych cen...' : '✨ Poszukaj cen w sieci / Zapytaj AI'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {aiStatus === 'loading' && (
+                    <View style={[styles.aiLoadingCard, { borderColor: theme.colors.border }]}>
+                      <Animated.View style={[styles.aiShimmer, { transform: [{ translateX: shimmerTranslateX }, { rotate: '12deg' }] }]} />
+                      <View style={styles.aiSkeletonLineWide} />
+                      <View style={styles.aiSkeletonLine} />
+                      <View style={styles.aiSkeletonPlans}>
+                        <View style={styles.aiSkeletonPlan} />
+                        <View style={styles.aiSkeletonPlan} />
+                      </View>
+                    </View>
+                  )}
+
+                  {aiStatus !== 'loading' && aiMessage ? (
+                    <View style={[styles.aiMessageCard, { borderColor: aiStatus === 'ready' ? `${theme.colors.primary}33` : `${theme.colors.warning}44` }]}>
+                      <Sparkles size={16} color={aiStatus === 'ready' ? theme.colors.primary : theme.colors.warning} />
+                      <Text style={[styles.aiMessageText, { color: theme.colors.textMuted }]}>{aiMessage}</Text>
+                    </View>
+                  ) : null}
+
+                  {aiPlans.length > 0 && (
+                    <View style={styles.aiPlansSection}>
+                      <Text style={[styles.aiPlansTitle, { color: theme.colors.text }]}>Orientacyjne plany</Text>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={styles.aiPlansContent}
+                      >
+                        {aiPlans.map((plan) => {
+                          const isActivePlan = planName === plan.name && parsedAmount === plan.price;
+                          return (
+                            <TouchableOpacity
+                              key={`${plan.name}-${plan.price}-${plan.billingCycle}`}
+                              style={[
+                                styles.aiPlanCard,
+                                isActivePlan && { borderColor: theme.colors.primary, backgroundColor: `${theme.colors.primary}20` },
+                              ]}
+                              onPress={() => handleSelectAiPlan(plan)}
+                            >
+                              <Text style={[styles.aiPlanName, isActivePlan && { color: theme.colors.primary }]} numberOfLines={1}>
+                                {plan.name}
+                              </Text>
+                              <View style={styles.planCardPriceRow}>
+                                <Text style={[styles.aiPlanPrice, isActivePlan && { color: theme.colors.primary }]}>
+                                  {plan.price.toFixed(2)}
+                                </Text>
+                                <Text style={[styles.aiPlanCurrency, isActivePlan && { color: theme.colors.primary }]}>PLN</Text>
+                              </View>
+                              <Text style={[styles.aiPlanCycle, isActivePlan && { color: theme.colors.primary }]}>
+                                {CYCLES.find((item) => item.id === plan.billingCycle)?.label || plan.billingCycle}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+                    </View>
+                  )}
                 </View>
 
                 <View style={styles.inputGroup}>
@@ -647,7 +951,10 @@ export const ManualAddScreen = () => {
                       <TouchableOpacity 
                         key={cat.id} 
                         style={[styles.catPill, category === cat.id && { borderColor: cat.textColor, borderWidth: 2 }]}
-                        onPress={() => setCategory(cat.id)}
+                        onPress={() => {
+                          setCategory(cat.id);
+                          setHasManualCategory(true);
+                        }}
                       >
                         <cat.icon size={16} color={cat.textColor} />
                         <Text style={[styles.catText, { color: cat.textColor }]}>{cat.label}</Text>
@@ -822,7 +1129,12 @@ export const ManualAddScreen = () => {
                   activeOpacity={0.8}
                 >
                   {isLoading ? (
-                    <ActivityIndicator color={theme.colors.darkText} />
+                    <>
+                      <ActivityIndicator color={theme.colors.darkText} />
+                      <Text style={styles.saveButtonText}>
+                        {showSlowSaveHint ? 'Nadal zapisuję...' : 'Zapisuję...'}
+                      </Text>
+                    </>
                   ) : (
                     <>
                       <Text style={styles.saveButtonText}>Zapisz subskrypcję</Text>
@@ -830,6 +1142,15 @@ export const ManualAddScreen = () => {
                     </>
                   )}
                 </TouchableOpacity>
+
+                {showSlowSaveHint && (
+                  <View style={[styles.slowSaveHint, { borderColor: `${theme.colors.warning}44`, backgroundColor: `${theme.colors.warning}14` }]}>
+                    <AlertCircle size={16} color={theme.colors.warning} />
+                    <Text style={[styles.slowSaveHintText, { color: theme.colors.textMuted }]}>
+                      Backend odpowiada wolniej niż zwykle. Czekamy na potwierdzenie, żeby nie wysłać zapisu drugi raz.
+                    </Text>
+                  </View>
+                )}
               </View>
             </ScrollView>
           </View>
@@ -1100,6 +1421,21 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '800',
   },
+  slowSaveHint: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+  },
+  slowSaveHintText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
   suggestionsScroll: {
     marginBottom: 12,
     marginLeft: -4,
@@ -1135,6 +1471,196 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
     color: vibrantTheme.colors.text,
+  },
+  customIdentityCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+  },
+  generatedBrandMark: {
+    width: 48,
+    height: 48,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.22,
+    shadowRadius: 14,
+    elevation: 5,
+  },
+  generatedBrandInitials: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  customIdentityCopy: {
+    flex: 1,
+  },
+  customIdentityTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  customIdentityText: {
+    marginTop: 3,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
+  },
+  useCategoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  useCategoryText: {
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  aiPredictorBlock: {
+    marginTop: 12,
+  },
+  aiGlowLayer: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    right: -4,
+    bottom: -4,
+    borderRadius: 22,
+  },
+  aiPredictButton: {
+    minHeight: 52,
+    borderRadius: 20,
+    borderWidth: 1,
+    paddingHorizontal: 15,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 9,
+    backgroundColor: vibrantTheme.colors.primary,
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.28,
+    shadowRadius: 22,
+    elevation: 8,
+  },
+  aiPredictButtonText: {
+    flexShrink: 1,
+    fontSize: 13,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  aiLoadingCard: {
+    marginTop: 12,
+    minHeight: 112,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderWidth: 1,
+    padding: 14,
+    overflow: 'hidden',
+  },
+  aiShimmer: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: 90,
+    backgroundColor: 'rgba(255,255,255,0.16)',
+    transform: [{ rotate: '12deg' }],
+  },
+  aiSkeletonLineWide: {
+    width: '78%',
+    height: 13,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    marginBottom: 10,
+  },
+  aiSkeletonLine: {
+    width: '52%',
+    height: 11,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 16,
+  },
+  aiSkeletonPlans: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  aiSkeletonPlan: {
+    flex: 1,
+    height: 42,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  aiMessageCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 9,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+  },
+  aiMessageText: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  aiPlansSection: {
+    marginTop: 14,
+  },
+  aiPlansTitle: {
+    fontSize: 12,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  aiPlansContent: {
+    gap: 10,
+    paddingRight: 16,
+  },
+  aiPlanCard: {
+    minWidth: 128,
+    padding: 14,
+    borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    alignItems: 'center',
+  },
+  aiPlanName: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '900',
+    maxWidth: 104,
+    marginBottom: 8,
+  },
+  aiPlanPrice: {
+    color: vibrantTheme.colors.text,
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  aiPlanCurrency: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginLeft: 3,
+  },
+  aiPlanCycle: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    textTransform: 'uppercase',
+    marginTop: 2,
   },
   planSelectionContainer: {
     width: '100%',

@@ -6,7 +6,14 @@
 // Wywoływane przez hooki w src/hooks/.
 // =============================================================
 
-import { apiGet, apiGetWithTimeout, apiPost, apiPatch, apiDelete } from '../lib/apiClient';
+import {
+  apiGet,
+  apiGetWithTimeout,
+  apiPost,
+  apiPostWithTimeout,
+  apiPatchWithTimeout,
+  apiDeleteWithTimeout,
+} from '../lib/apiClient';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Subscription,
@@ -22,6 +29,8 @@ import {
 } from '../types/api';
 
 const SUBSCRIPTIONS_CACHE_KEY = 'sub-sentry.subscriptions.v1';
+const SUBSCRIPTION_WRITE_TIMEOUT_MS = 45000;
+const SUBSCRIPTION_ACTION_TIMEOUT_MS = 30000;
 
 // ─────────────────────────────────────────────────────────────
 // Helper do normalizacji danych (string amount -> number)
@@ -216,7 +225,7 @@ export async function getSubscriptionPayments(id: string): Promise<SubscriptionP
 export async function createSubscription(
   payload: CreateSubscriptionPayload
 ): Promise<Subscription> {
-  const data = await apiPost<any>('/subscriptions', payload);
+  const data = await apiPostWithTimeout<any>('/subscriptions', payload, SUBSCRIPTION_WRITE_TIMEOUT_MS);
   return normalizeSubscription(data);
 }
 
@@ -224,22 +233,22 @@ export async function updateSubscription(
   id: string,
   payload: UpdateSubscriptionPayload
 ): Promise<Subscription> {
-  const data = await apiPatch<any>(`/subscriptions/${id}`, payload);
+  const data = await apiPatchWithTimeout<any>(`/subscriptions/${id}`, payload, SUBSCRIPTION_WRITE_TIMEOUT_MS);
   return normalizeSubscription(data);
 }
 
 export async function paySubscription(id: string): Promise<Subscription> {
-  const data = await apiPatch<any>(`/subscriptions/${id}/pay`);
+  const data = await apiPatchWithTimeout<any>(`/subscriptions/${id}/pay`, undefined, SUBSCRIPTION_ACTION_TIMEOUT_MS);
   return normalizeSubscription(data);
 }
 
 export async function cancelSubscription(id: string): Promise<Subscription> {
-  const data = await apiPatch<any>(`/subscriptions/${id}/cancel`);
+  const data = await apiPatchWithTimeout<any>(`/subscriptions/${id}/cancel`, undefined, SUBSCRIPTION_ACTION_TIMEOUT_MS);
   return normalizeSubscription(data);
 }
 
 export async function deleteSubscription(id: string): Promise<void> {
-  return apiDelete(`/subscriptions/${id}`);
+  return apiDeleteWithTimeout(`/subscriptions/${id}`, SUBSCRIPTION_ACTION_TIMEOUT_MS);
 }
 
 export async function getSubscriptionCancelGuideLookup(id: string): Promise<CancelGuideLookupResponse> {
