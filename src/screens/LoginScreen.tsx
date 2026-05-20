@@ -32,7 +32,7 @@ export default function LoginScreen() {
     try {
       await signIn(email.trim(), password);
     } catch (error: any) {
-      Alert.alert('Blad logowania', error.message || 'Sprobuj ponownie.');
+      Alert.alert('Błąd logowania', error.message || 'Spróbuj ponownie.');
     } finally {
       setIsLoading(false);
     }
@@ -72,7 +72,7 @@ export default function LoginScreen() {
               <Lock size={20} color={theme.colors.primary} />
               <TextInput
                 style={styles.input}
-                placeholder="Haslo"
+                placeholder="Hasło"
                 placeholderTextColor={theme.colors.textSubtle}
                 value={password}
                 onChangeText={setPassword}

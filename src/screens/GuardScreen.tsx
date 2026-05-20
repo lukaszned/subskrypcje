@@ -301,8 +301,8 @@ export const GuardScreen = () => {
         }
       >
         {isError && (
-          <View style={styles.errorBanner}>
-            <AlertCircle size={17} color={vibrantTheme.colors.warning} />
+          <View style={[styles.errorBanner, { borderColor: `${theme.colors.warning}44`, backgroundColor: `${theme.colors.warning}18` }]}>
+            <AlertCircle size={17} color={theme.colors.warning} />
             <Text style={[styles.errorBannerText, { color: theme.colors.textMuted }]}>
               Nie udało się odświeżyć danych. Pokazuję ostatni znany stan. {error?.message || ''}
             </Text>

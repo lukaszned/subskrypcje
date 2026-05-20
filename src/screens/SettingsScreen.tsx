@@ -61,7 +61,7 @@ export const SettingsScreen = () => {
         .join('\n');
     }
 
-    return error?.body?.message || error?.message || 'Nie udalo sie zapisac ustawien.';
+    return error?.body?.message || error?.message || 'Nie udało się zapisać ustawień.';
   };
 
   const handleSave = () => {
@@ -92,11 +92,13 @@ export const SettingsScreen = () => {
           return;
         }
 
-        Alert.alert('Sukces', 'Ustawienia zostaly zapisane.');
+        Alert.alert('Sukces', 'Ustawienia zostały zapisane.');
       },
       onError: (error) => {
-        console.warn('[SettingsScreen] Save settings error:', error);
-        Alert.alert('Blad zapisu', getErrorMessage(error));
+        if (__DEV__) {
+          console.warn('[SettingsScreen] Save settings error:', error);
+        }
+        Alert.alert('Błąd zapisu', getErrorMessage(error));
       }
     });
   };

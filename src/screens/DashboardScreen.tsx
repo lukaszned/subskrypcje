@@ -7,10 +7,7 @@ import {
   TouchableOpacity, 
   RefreshControl,
   Dimensions,
-  Animated,
   ActivityIndicator,
-  FlatList,
-  Alert,
   InteractionManager,
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -52,7 +49,6 @@ import { useDashboardTrends } from '../hooks/useDashboardTrends';
 import { useReminders } from '../hooks/useReminders';
 import { syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
-import { ErrorState } from '../components/ErrorState';
 import { NetworkStatusBanner } from '../components/NetworkStatusBanner';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
@@ -145,26 +141,6 @@ const BrandMark = React.memo(({
   );
 });
 
-// ─────────────────────────────────────────────────────────────
-// SKELETON
-// ─────────────────────────────────────────────────────────────
-const Skeleton = React.memo(({ width, height, style, borderRadius = 8 }: any) => {
-  const pulseAnim = React.useRef(new Animated.Value(0.3)).current;
-  useEffect(() => {
-    Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 0.7, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 0.3, duration: 800, useNativeDriver: true }),
-      ])
-    ).start();
-  }, [pulseAnim]);
-
-  return (
-    <Animated.View
-      style={[{ width, height, backgroundColor: '#E2E8F0', borderRadius, opacity: pulseAnim }, style]}
-    />
-  );
-});
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENT
@@ -180,38 +156,52 @@ export const DashboardScreen = () => {
   const [notifPermission, setNotifPermission] = useState<string>('granted');
   const [trendType, setTrendType] = useState<'planned' | 'real'>('planned');
   const [renderDeferredSections, setRenderDeferredSections] = useState(false);
+  const [secondaryStage, setSecondaryStage] = useState(0);
 
   // Data
-  const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, error: summaryError, refetch: refetchSummary } = useDashboardSummary();
-  const secondaryEnabled = false;
+  const { data: summaryData, isLoading: isSummaryLoading, isError: isSummaryError, refetch: refetchSummary } = useDashboardSummary();
+  const stageOneEnabled = !!summaryData && secondaryStage >= 1;
+  const stageTwoEnabled = !!summaryData && secondaryStage >= 2;
+  const stageThreeEnabled = !!summaryData && secondaryStage >= 3;
   const { data: upcomingData, refetch: refetchUpcoming } = useUpcomingPayments(30, !!summaryData);
-  const { data: breakdownData, refetch: refetchBreakdown } = useCategoryBreakdown(secondaryEnabled);
-  const { data: trialsData, refetch: refetchTrials } = useTrials(30, secondaryEnabled);
-  const { data: savingsData, refetch: refetchSavings } = useDashboardSavings(secondaryEnabled);
-  const { data: trendsData, refetch: refetchTrends } = useDashboardTrends(6, trendType, secondaryEnabled);
-  const { data: remindersData, refetch: refetchReminders } = useReminders(secondaryEnabled);
-  const { data: healthData, refetch: refetchHealth } = useHealthScore(secondaryEnabled);
-  const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10, secondaryEnabled);
+  const { data: breakdownData, refetch: refetchBreakdown } = useCategoryBreakdown(stageOneEnabled);
+  const { data: trialsData, refetch: refetchTrials } = useTrials(30, stageOneEnabled);
+  const { data: savingsData, refetch: refetchSavings } = useDashboardSavings(stageTwoEnabled);
+  const { data: trendsData, refetch: refetchTrends } = useDashboardTrends(6, trendType, stageThreeEnabled);
+  const { data: remindersData, refetch: refetchReminders } = useReminders(stageThreeEnabled);
+  const { data: healthData, refetch: refetchHealth } = useHealthScore(stageTwoEnabled);
+  const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10, stageThreeEnabled);
 
-  const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(secondaryEnabled);
+  const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(stageTwoEnabled);
   useNotificationPreview(false);
 
   useEffect(() => {
+    if (!summaryData) {
+      setRenderDeferredSections(false);
+      setSecondaryStage(0);
+      return;
+    }
+
+    let stageTwoTimer: ReturnType<typeof setTimeout> | undefined;
+    let stageThreeTimer: ReturnType<typeof setTimeout> | undefined;
+
     const task = InteractionManager.runAfterInteractions(() => {
       setRenderDeferredSections(true);
+      setSecondaryStage(1);
+      stageTwoTimer = setTimeout(() => setSecondaryStage(2), 450);
+      stageThreeTimer = setTimeout(() => setSecondaryStage(3), 1100);
     });
 
-    return () => task.cancel?.();
-  }, []);
+    return () => {
+      task.cancel?.();
+      if (stageTwoTimer) clearTimeout(stageTwoTimer);
+      if (stageThreeTimer) clearTimeout(stageThreeTimer);
+    };
+  }, [summaryData]);
 
   const isLoading = isSummaryLoading;
   const isError = isSummaryError;
   const hasData = !!summaryData;
-
-  if (__DEV__) {
-    console.log('[DashboardScreen] State:', { isLoading, isError, hasData });
-    if (isSummaryError) console.warn('[DashboardScreen] Summary Error:', summaryError);
-  }
 
   const monthlyTotal = summaryData?.monthlyTotal ?? 0;
   const yearlyTotal = summaryData?.yearlyTotal ?? 0;
@@ -270,8 +260,8 @@ export const DashboardScreen = () => {
       (async () => {
         try {
           await syncReminders(reminderItems);
-        } catch (e) {
-          console.warn('Notification sync failed', e);
+        } catch {
+          // Local notifications are best-effort; the dashboard should stay responsive.
         }
       })();
     }
@@ -293,20 +283,18 @@ export const DashboardScreen = () => {
         refetchUpcoming(),
       ]);
 
-      if (secondaryEnabled) {
-        await Promise.allSettled([
-          refetchBreakdown(),
-          refetchTrials(),
-          refetchSavings(),
-          refetchTrends(),
-          refetchReminders(),
-          refetchHealth(),
-          refetchActivity(),
-          refetchBudgetImpact(),
-        ]);
-      }
-    } catch (e) {
-      console.warn('Refresh failed', e);
+      await Promise.allSettled([
+        stageOneEnabled ? refetchBreakdown() : Promise.resolve(),
+        stageOneEnabled ? refetchTrials() : Promise.resolve(),
+        stageTwoEnabled ? refetchSavings() : Promise.resolve(),
+        stageThreeEnabled ? refetchTrends() : Promise.resolve(),
+        stageThreeEnabled ? refetchReminders() : Promise.resolve(),
+        stageTwoEnabled ? refetchHealth() : Promise.resolve(),
+        stageThreeEnabled ? refetchActivity() : Promise.resolve(),
+        stageTwoEnabled ? refetchBudgetImpact() : Promise.resolve(),
+      ]);
+    } catch {
+      // Pull-to-refresh should never block the screen with technical noise.
     } finally {
       setIsRefreshing(false);
     }
@@ -2110,7 +2098,7 @@ export const DashboardScreen = () => {
         >
           <AlertCircle size={18} color={theme.error} />
           <Text style={dynamicStyles.dashboardNoticeText}>
-            Nie udalo sie odswiezyc czesci danych. Pokazujemy ostatni znany stan. Dotknij, aby sprobowac ponownie.
+            Nie udało się odświeżyć części danych. Pokazujemy ostatni znany stan. Dotknij, aby spróbować ponownie.
           </Text>
         </TouchableOpacity>
       );
@@ -2120,66 +2108,13 @@ export const DashboardScreen = () => {
       return (
         <View style={dynamicStyles.dashboardNotice}>
           <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={dynamicStyles.dashboardNoticeText}>Przygotowuje Twoje centrum decyzji...</Text>
+          <Text style={dynamicStyles.dashboardNoticeText}>Przygotowuję Twoje centrum decyzji...</Text>
         </View>
       );
     }
 
     return null;
   };
-
-  // MAIN RENDER
-  if (false && isLoading && !hasData) {
-    return (
-      <SafeAreaView style={dynamicStyles.safeArea}>
-        <View style={dynamicStyles.content}>
-          <Skeleton width="100%" height={240} borderRadius={24} style={{ marginBottom: 24 }} />
-          <Skeleton width={180} height={24} style={{ marginBottom: 16 }} />
-          <View style={{ flexDirection: 'row', gap: 16 }}>
-            <Skeleton width={150} height={100} borderRadius={20} />
-            <Skeleton width={150} height={100} borderRadius={20} />
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  if (false && isError && !hasData) {
-    const errorDetails = isSummaryError
-      ? `Summary Error: ${summaryError?.message || JSON.stringify(summaryError)}`
-      : 'Unknown error';
-
-    const checkConnectivity = async () => {
-      try {
-        const baseUrl = process.env.EXPO_PUBLIC_API_BASE_URL;
-        const res = await fetch(`${baseUrl}/health`);
-        const data = await res.json();
-        Alert.alert('Połączenie OK', `Serwer odpowiedział: ${JSON.stringify(data)}\nURL: ${baseUrl}`);
-      } catch (err: any) {
-        Alert.alert('Błąd połączenia', `Nie udało się połączyć z serwerem!\nURL: ${process.env.EXPO_PUBLIC_API_BASE_URL}\nBłąd: ${err.message}`);
-      }
-    };
-
-    return (
-      <SafeAreaView style={dynamicStyles.safeArea}>
-        <ErrorState 
-          isDark={isDark} 
-          message="Nie udało się pobrać danych z serwera. Sprawdź połączenie." 
-          details={errorDetails}
-          onRetry={handleRefresh}
-          onSignOut={handleSignOut}
-        />
-        <TouchableOpacity 
-          style={{ padding: 15, alignItems: 'center' }} 
-          onPress={checkConnectivity}
-        >
-          <Text style={{ color: theme.primary, fontWeight: '700' }}>Sprawdź połączenie z backendem</Text>
-        </TouchableOpacity>
-      </SafeAreaView>
-    );
-  }
-
-  const upcomingItems = upcomingData?.items ?? [];
 
   return (
     <SafeAreaView style={dynamicStyles.safeArea}>
@@ -2215,61 +2150,6 @@ export const DashboardScreen = () => {
           </>
         )}
 
-        {false && (<>
-        {renderHeader()}
-
-        {renderHealthScore()}
-
-        {renderSmartInsights()}
-        {renderBudgetCard()}
-
-        {renderSavingsCard()}
-
-        {upcomingItems.length > 0 && (
-          <View style={dynamicStyles.sectionContainer}>
-            <View style={dynamicStyles.sectionHeader}>
-              <Text style={dynamicStyles.sectionTitle}>Nadchodzące płatności</Text>
-              <TouchableOpacity
-                style={dynamicStyles.seeAllBtn}
-                onPress={() => navigation.navigate('SubscriptionList')}
-              >
-                <Text style={dynamicStyles.seeAllText}>Wszystkie</Text>
-                <ArrowRight size={16} color="#6366F1" />
-              </TouchableOpacity>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={dynamicStyles.horizontalListPadding}>
-              {upcomingItems.map((item, idx) => (
-                <React.Fragment key={item.id}>
-                  {renderUpcomingPayment({ item })}
-                  {idx < upcomingItems.length - 1 && <View style={{ width: 16 }} />}
-                </React.Fragment>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {(trialsData?.items?.length ?? 0) > 0 && (
-          <View style={dynamicStyles.sectionContainer}>
-            <View style={dynamicStyles.sectionHeader}>
-              <Text style={dynamicStyles.sectionTitle}>Kończące się okresy próbne</Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={dynamicStyles.horizontalListPadding}>
-              {(trialsData?.items ?? []).map((item, idx) => (
-                <React.Fragment key={item.id}>
-                  {renderTrialItem({ item })}
-                  {idx < (trialsData?.items.length ?? 0) - 1 && <View style={{ width: 16 }} />}
-                </React.Fragment>
-              ))}
-            </ScrollView>
-          </View>
-        )}
-
-        {renderCategoryBreakdown()}
-
-        {renderRecentActivity()}
-        {renderFinancialTip()}
-        {renderTrendsChart()}
-        </>)}
       </ScrollView>
 
       <TouchableOpacity 

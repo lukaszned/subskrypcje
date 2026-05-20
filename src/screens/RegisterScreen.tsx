@@ -28,7 +28,7 @@ export default function RegisterScreen() {
   const handleRegister = async () => {
     if (!email || !password) return;
     if (password.length < 6) {
-      Alert.alert('Blad', 'Haslo musi miec co najmniej 6 znakow.');
+      Alert.alert('Błąd', 'Hasło musi mieć co najmniej 6 znaków.');
       return;
     }
     setIsLoading(true);
@@ -40,7 +40,7 @@ export default function RegisterScreen() {
         [{ text: 'OK', onPress: () => navigation.navigate('Login') }]
       );
     } catch (error: any) {
-      Alert.alert('Blad rejestracji', error.message || 'Sprobuj ponownie.');
+      Alert.alert('Błąd rejestracji', error.message || 'Spróbuj ponownie.');
     } finally {
       setIsLoading(false);
     }
@@ -70,7 +70,7 @@ export default function RegisterScreen() {
           />
           <TextInput
             style={styles.input}
-            placeholder="Haslo (min. 6 znakow)"
+            placeholder="Hasło (min. 6 znaków)"
             placeholderTextColor={theme.colors.textSubtle}
             value={password}
             onChangeText={setPassword}

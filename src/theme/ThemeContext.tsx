@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ColorValue } from 'react-native';
 import { vibrantTheme } from './vibrantTheme';
 
@@ -107,10 +107,11 @@ const THEME_STORAGE_KEY = 'sub_sentry_theme';
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themeName, setThemeName] = useState<ThemeName>('default');
-  const updateThemeName = (nextTheme: ThemeName) => {
+
+  const updateThemeName = useCallback((nextTheme: ThemeName) => {
     setThemeName(nextTheme);
     AsyncStorage.setItem(THEME_STORAGE_KEY, nextTheme).catch(() => undefined);
-  };
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -136,7 +137,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setThemeName: updateThemeName,
       themes: APP_THEMES,
     }),
-    [themeName]
+    [themeName, updateThemeName]
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

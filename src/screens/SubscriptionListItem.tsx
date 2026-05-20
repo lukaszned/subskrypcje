@@ -79,12 +79,12 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
   const isCancelled = safeItem.status === 'canceled';
 
   const getStatusInfo = (status: string, isTrial?: boolean) => {
-    if (isTrial) return { label: 'Trial', color: '#F59E0B', bg: '#FFFBEB' };
+    if (isTrial) return { label: 'Trial', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
     switch (status) {
       case 'paid': return { label: 'Opłacona', color: theme.colors.primary, bg: `${theme.colors.primary}18` };
-      case 'overdue': return { label: 'Zaległa', color: '#EF4444', bg: '#FEE2E2' };
-      case 'canceled': return { label: 'Anulowana', color: '#64748B', bg: '#F1F5F9' };
-      default: return { label: 'Aktywna', color: '#6366F1', bg: '#EEF2FF' };
+      case 'overdue': return { label: 'Zaległa', color: theme.colors.danger, bg: `${theme.colors.danger}18` };
+      case 'canceled': return { label: 'Anulowana', color: theme.colors.textSubtle, bg: theme.colors.cardStrong };
+      default: return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}18` };
     }
   };
 
@@ -118,7 +118,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
 
         {/* Anuluj — czerwony */}
         <TouchableOpacity
-          style={[styles.actionButton, styles.cancelAction]}
+          style={[styles.actionButton, styles.cancelAction, { backgroundColor: theme.colors.danger }]}
           onPress={() => onDelete(safeItem.id)}
           activeOpacity={0.8}
         >
@@ -139,7 +139,14 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
       rightThreshold={40}
     >
       <TouchableOpacity 
-        style={[styles.rowContainer, isCancelled && styles.rowContainerCancelled]}
+        style={[
+          styles.rowContainer,
+          {
+            backgroundColor: isCancelled ? theme.colors.cardSoft : theme.colors.card,
+            borderColor: theme.colors.border,
+            shadowColor: theme.colors.primary,
+          },
+        ]}
         onPress={onPress}
         activeOpacity={0.7}
       >
@@ -147,13 +154,13 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         <View
           style={[
             styles.avatar,
-            { backgroundColor: isCancelled ? '#F1F5F9' : catStyle.bg },
+            { backgroundColor: isCancelled ? theme.colors.cardStrong : catStyle.bg },
           ]}
         >
           <Text
             style={[
               styles.avatarText,
-              { color: isCancelled ? '#94A3B8' : catStyle.text },
+              { color: isCancelled ? theme.colors.textSubtle : catStyle.text },
             ]}
           >
             {safeItem.name.charAt(0).toUpperCase()}
@@ -163,7 +170,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         {/* Środek — nazwa + status + data */}
         <View style={styles.middleContent}>
           <Text
-            style={[styles.name, isCancelled && styles.textCancelled]}
+            style={[styles.name, { color: theme.colors.text }, isCancelled && { color: theme.colors.textSubtle, textDecorationLine: 'line-through' }]}
             numberOfLines={2}
           >
             {safeItem.name}
@@ -175,7 +182,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
               </Text>
             </View>
           </View>
-          <Text style={styles.dateText} numberOfLines={1}>
+          <Text style={[styles.dateText, { color: theme.colors.textMuted }]} numberOfLines={1}>
             {isCancelled ? 'Anulowana' : `Następna: ${safeItem.nextPaymentDate}`}
           </Text>
         </View>
@@ -183,15 +190,15 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         {/* Prawa strona — kwota + cykl */}
         <View style={styles.rightContent}>
           <Text
-            style={[styles.amount, isCancelled && styles.textCancelled]}
+            style={[styles.amount, { color: theme.colors.text }, isCancelled && { color: theme.colors.textSubtle, textDecorationLine: 'line-through' }]}
             numberOfLines={1}
             adjustsFontSizeToFit
             minimumFontScale={0.82}
           >
             {safeItem.amount.toFixed(2)} {safeItem.currency}
           </Text>
-          <View style={styles.cycleBadge}>
-            <Text style={styles.cycleText} numberOfLines={1}>{safeItem.cycle}</Text>
+          <View style={[styles.cycleBadge, { backgroundColor: theme.colors.cardStrong }]}>
+            <Text style={[styles.cycleText, { color: theme.colors.textMuted }]} numberOfLines={1}>{safeItem.cycle}</Text>
           </View>
         </View>
       </TouchableOpacity>

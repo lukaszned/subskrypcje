@@ -175,7 +175,7 @@ export const SubscriptionListScreen = () => {
     if (isError) {
       return (
         <ErrorState
-          message={error?.message || 'Nie udalo sie odswiezyc listy. Jesli mamy cache, pokazemy ostatni zapisany stan.'}
+          message={error?.message || 'Nie udało się odświeżyć listy. Jeśli mamy cache, pokażemy ostatni zapisany stan.'}
           onRetry={() => refetch()}
         />
       );
@@ -184,11 +184,11 @@ export const SubscriptionListScreen = () => {
     return (
       <EmptyState
         type={searchQuery ? 'search' : 'add'}
-        title={searchQuery ? 'Nie ma takiej subskrypcji' : 'Dodaj pierwsza subskrypcje'}
+        title={searchQuery ? 'Nie ma takiej subskrypcji' : 'Dodaj pierwszą subskrypcję'}
         message={searchQuery
-          ? 'Zmien filtr albo wyszukaj po nazwie uslugi, planu lub kategorii.'
-          : 'Zbuduj swoje centrum kosztow: platnosci, triale, decyzje i oszczednosci beda widoczne w jednym miejscu.'}
-        actionLabel={!searchQuery && activeStatus === 'all' ? 'Dodaj subskrypcje' : undefined}
+          ? 'Zmień filtr albo wyszukaj po nazwie usługi, planu lub kategorii.'
+          : 'Zbuduj swoje centrum kosztów: płatności, triale, decyzje i oszczędności będą widoczne w jednym miejscu.'}
+        actionLabel={!searchQuery && activeStatus === 'all' ? 'Dodaj subskrypcję' : undefined}
         onAction={!searchQuery && activeStatus === 'all' ? () => navigation.navigate('AddSubscription') : undefined}
       />
     );
@@ -196,8 +196,8 @@ export const SubscriptionListScreen = () => {
 
   const renderLoadingState = () => (
     <View style={styles.loadingShell}>
-      <Text style={[styles.loadingTitle, { color: theme.colors.text }]}>Przygotowuje liste</Text>
-      <Text style={[styles.loadingSubtitle, { color: theme.colors.textMuted }]}>Jesli odswiezanie potrwa dluzej, aplikacja skorzysta z ostatniego zapisanego stanu.</Text>
+      <Text style={[styles.loadingTitle, { color: theme.colors.text }]}>Przygotowuję listę</Text>
+      <Text style={[styles.loadingSubtitle, { color: theme.colors.textMuted }]}>Jeśli odświeżanie potrwa dłużej, aplikacja skorzysta z ostatniego zapisanego stanu.</Text>
       <SkeletonList rows={5} isDark />
     </View>
   );
@@ -261,8 +261,9 @@ export const SubscriptionListScreen = () => {
           <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Search size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
             <TextInput
-              style={styles.searchInput}
+              style={[styles.searchInput, { color: theme.colors.text }]}
               placeholder="Szukaj..."
+              placeholderTextColor={theme.colors.textSubtle}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />

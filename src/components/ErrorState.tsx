@@ -14,7 +14,7 @@ interface ErrorStateProps {
 }
 
 export const ErrorState = ({
-  message = 'Nie udalo sie odswiezyc danych. Pokazujemy bezpieczny stan aplikacji.',
+  message = 'Nie udało się odświeżyć danych. Pokazujemy bezpieczny stan aplikacji.',
   details,
   onRetry,
   onSignOut,
@@ -36,13 +36,13 @@ export const ErrorState = ({
         <View style={[styles.iconContainer, { backgroundColor: `${appTheme.colors.warning}1F` }]}>
           <AlertCircle size={34} color={appTheme.colors.warning} />
         </View>
-        <Text style={[styles.title, { color: localTheme.text }]}>Nie udalo sie odswiezyc danych</Text>
+        <Text style={[styles.title, { color: localTheme.text }]}>Nie udało się odświeżyć danych</Text>
         <Text style={[styles.message, { color: localTheme.textDim }]}>{message}</Text>
 
         <View style={[styles.cacheHint, { borderColor: localTheme.border }]}>
           <ShieldCheck size={16} color={appTheme.colors.primary} />
           <Text style={[styles.cacheHintText, { color: localTheme.textDim }]}>
-            Jesli mamy zapisany stan, aplikacja pokaze ostatnie dostepne dane.
+            Jeśli mamy zapisany stan, aplikacja pokaże ostatnie dostępne dane.
           </Text>
         </View>
 
@@ -59,7 +59,7 @@ export const ErrorState = ({
               onPress={onRetry}
             >
               <RefreshCw size={20} color={appTheme.colors.darkText} style={{ marginRight: 8 }} />
-              <Text style={[styles.buttonText, { color: appTheme.colors.darkText }]}>Sprobuj ponownie</Text>
+              <Text style={[styles.buttonText, { color: appTheme.colors.darkText }]}>Spróbuj ponownie</Text>
             </PressableScale>
           )}
 
@@ -68,7 +68,7 @@ export const ErrorState = ({
               style={[styles.button, styles.buttonSecondary, { borderColor: localTheme.border }]}
               onPress={onSignOut}
             >
-              <Text style={[styles.buttonText, { color: localTheme.textDim }]}>Wyloguj sie</Text>
+              <Text style={[styles.buttonText, { color: localTheme.textDim }]}>Wyloguj się</Text>
             </PressableScale>
           )}
         </View>

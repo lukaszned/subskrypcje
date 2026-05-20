@@ -29,30 +29,30 @@ export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
   }
 
   const isOffline = network.status === 'offline';
-  const title = isOffline ? 'Pracujemy na ostatnich danych' : 'Odswiezanie trwa dluzej niz zwykle';
+  const title = isOffline ? 'Pracujemy na ostatnich danych' : 'Odświeżanie trwa dłużej niż zwykle';
   const description = network.message || (
     isOffline
-      ? 'Sprawdz polaczenie telefonu. Jesli mamy cache, aplikacja nadal pokaze zapisany stan.'
-      : 'Nie blokujemy ekranu. Dane dosynchronizuja sie, gdy API odpowie.'
+      ? 'Sprawdź połączenie telefonu. Jeśli mamy cache, aplikacja nadal pokaże zapisany stan.'
+      : 'Nie blokujemy ekranu. Dane dosynchronizują się, gdy odświeżanie się zakończy.'
   );
 
   return (
-    <View style={[styles.container, isOffline ? styles.offline : styles.slow]}>
-      <View style={styles.iconWrap}>
+    <View style={[styles.container, isOffline ? styles.offline : styles.slow, { borderColor: isOffline ? theme.colors.danger : theme.colors.warning }]}>
+      <View style={[styles.iconWrap, { backgroundColor: theme.colors.cardStrong }]}>
         {isOffline ? (
-          <WifiOff size={18} color="#B91C1C" />
+          <WifiOff size={18} color={theme.colors.danger} />
         ) : network.activeRequests > 0 ? (
-          <ActivityIndicator size="small" color="#B45309" />
+          <ActivityIndicator size="small" color={theme.colors.warning} />
         ) : (
-          <CloudOff size={18} color="#B45309" />
+          <CloudOff size={18} color={theme.colors.warning} />
         )}
       </View>
       <View style={styles.copy}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.description}>{description}</Text>
+        <Text style={[styles.title, { color: theme.colors.text }]}>{title}</Text>
+        <Text style={[styles.description, { color: theme.colors.textMuted }]}>{description}</Text>
       </View>
       {onRetry && (
-        <TouchableOpacity style={styles.retryButton} onPress={onRetry} activeOpacity={0.8}>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: `${theme.colors.primary}18` }]} onPress={onRetry} activeOpacity={0.8}>
           <RotateCw size={16} color={theme.colors.primary} />
         </TouchableOpacity>
       )}

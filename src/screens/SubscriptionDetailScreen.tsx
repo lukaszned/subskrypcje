@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { 
-  ArrowLeft, Edit, Trash2, Calendar, CreditCard, 
+import {
+  ArrowLeft, Edit, Trash2, Calendar, CreditCard,
   Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users, AlertCircle,
   ShieldCheck, FileText, Link as LinkIcon
 } from 'lucide-react-native';
@@ -57,7 +57,7 @@ export const SubscriptionDetailScreen = () => {
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
   const requestGuideMutation = useCancelGuideRequest();
-  
+
   const { data: cancelGuideLookup } = useSubscriptionCancelGuide(id);
 
   const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
@@ -93,10 +93,10 @@ export const SubscriptionDetailScreen = () => {
   const handleDelete = () => {
     Alert.alert('Usuń subskrypcję', 'Czy na pewno chcesz trwale usunąć tę subskrypcję?', [
       { text: 'Anuluj', style: 'cancel' },
-      { 
-        text: 'Usuń', 
-        style: 'destructive', 
-        onPress: () => deleteMutation.mutate(id, { onSuccess: () => navigation.goBack() }) 
+      {
+        text: 'Usuń',
+        style: 'destructive',
+        onPress: () => deleteMutation.mutate(id, { onSuccess: () => navigation.goBack() })
       },
     ]);
   };
@@ -146,12 +146,12 @@ export const SubscriptionDetailScreen = () => {
   } catch(e) {}
 
   const statusConfig = (() => {
-    if (sub.status === 'canceled') return { label: 'Anulowana', color: vibrantTheme.colors.textMuted, bg: 'rgba(255,255,255,0.1)' };
+    if (sub.status === 'canceled') return { label: 'Anulowana', color: theme.colors.textMuted, bg: theme.colors.cardStrong };
     if (sub.status === 'overdue' || (nextDaysLeft !== null && nextDaysLeft < 0)) {
-      return { label: 'Po terminie', color: vibrantTheme.colors.danger, bg: 'rgba(255,77,109,0.16)' };
+      return { label: 'Po terminie', color: theme.colors.danger, bg: `${theme.colors.danger}18` };
     }
-    if (sub.isTrial) return { label: 'Trial', color: vibrantTheme.colors.warning, bg: 'rgba(251,191,36,0.16)' };
-    if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: vibrantTheme.colors.warning, bg: 'rgba(251,191,36,0.16)' };
+    if (sub.isTrial) return { label: 'Trial', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
+    if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
     return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}24` };
   })();
 
@@ -162,7 +162,7 @@ export const SubscriptionDetailScreen = () => {
         desc: 'Ta usługa nie powinna już generować kolejnych płatności.',
         icon: CheckCircle,
         color: theme.colors.primary,
-        bg: 'rgba(52,211,153,0.14)',
+        bg: `${theme.colors.primary}18`,
       };
     }
     if (cancelGuideLookup?.hasGuide) {
@@ -179,16 +179,16 @@ export const SubscriptionDetailScreen = () => {
         title: 'Link anulowania zapisany',
         desc: 'Masz bezpośredni skrót do strony rezygnacji u dostawcy.',
         icon: LinkIcon,
-        color: vibrantTheme.colors.cyan,
-        bg: 'rgba(34,211,238,0.14)',
+        color: theme.colors.cyan,
+        bg: `${theme.colors.cyan}18`,
       };
     }
     return {
       title: 'Brakuje instrukcji anulowania',
       desc: 'Możesz zgłosić brak poradnika, a na razie anulować usługę u dostawcy.',
       icon: FileText,
-      color: vibrantTheme.colors.warning,
-      bg: 'rgba(251,191,36,0.14)',
+      color: theme.colors.warning,
+      bg: `${theme.colors.warning}18`,
     };
   })();
   const CancelReadinessIcon = cancelReadiness.icon;
@@ -196,14 +196,14 @@ export const SubscriptionDetailScreen = () => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <View style={[styles.glowTop, { backgroundColor: `${theme.colors.primary}29` }]} />
-      <View style={styles.glowBottom} />
+      <View style={[styles.glowBottom, { backgroundColor: `${theme.colors.cyan}18` }]} />
       <View style={styles.header}>
         <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
           <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerEyebrow}>Subskrypcja</Text>
-          <Text style={styles.headerTitle}>Szczegóły planu</Text>
+          <Text style={[styles.headerEyebrow, { color: theme.colors.textMuted }]}>Subskrypcja</Text>
+          <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Szczegóły planu</Text>
         </View>
         <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}>
           <Edit size={20} color={theme.colors.primary} />
@@ -247,18 +247,18 @@ export const SubscriptionDetailScreen = () => {
           )}
           {sub.status !== 'canceled' ? (
             <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} onPress={handleCancel}>
-              <XCircle size={20} color="#EF4444" />
-              <Text style={[styles.actionBtnText, { color: '#EF4444' }]}>Anuluj</Text>
+              <XCircle size={20} color={theme.colors.danger} />
+              <Text style={[styles.actionBtnText, { color: theme.colors.danger }]}>Anuluj</Text>
             </TouchableOpacity>
           ) : (
-            <View style={styles.canceledBadge}>
-              <Text style={styles.canceledBadgeText}>ANULOWANA</Text>
+            <View style={[styles.canceledBadge, { backgroundColor: theme.colors.cardStrong }]}>
+              <Text style={[styles.canceledBadgeText, { color: theme.colors.textSubtle }]}>ANULOWANA</Text>
             </View>
           )}
         </View>
 
         <View style={styles.decisionGrid}>
-          <View style={styles.decisionCard}>
+          <View style={[styles.decisionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={[styles.decisionIcon, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
               <Calendar size={19} color={theme.colors.primary} />
             </View>
@@ -272,7 +272,7 @@ export const SubscriptionDetailScreen = () => {
             </View>
           </View>
 
-          <View style={styles.decisionCard}>
+          <View style={[styles.decisionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <View style={[styles.decisionIcon, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
               <CreditCard size={19} color={theme.colors.primary} />
             </View>
@@ -284,7 +284,7 @@ export const SubscriptionDetailScreen = () => {
         </View>
 
         <TouchableOpacity
-          style={styles.readinessCard}
+          style={[styles.readinessCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
           activeOpacity={0.86}
           onPress={sub.status === 'canceled' ? undefined : handleCancel}
         >
@@ -295,12 +295,12 @@ export const SubscriptionDetailScreen = () => {
             <Text style={styles.readinessTitle}>{cancelReadiness.title}</Text>
             <Text style={styles.readinessDesc}>{cancelReadiness.desc}</Text>
           </View>
-          {sub.status !== 'canceled' && <ArrowRight size={18} color={vibrantTheme.colors.textMuted} />}
+          {sub.status !== 'canceled' && <ArrowRight size={18} color={theme.colors.textMuted} />}
         </TouchableOpacity>
 
-        <View style={styles.infoCard}>
+        <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.infoRow}>
-            <Calendar size={20} color="#94A3B8" />
+            <Calendar size={20} color={theme.colors.textSubtle} />
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Następna płatność</Text>
               <Text style={styles.infoValue}>
@@ -312,7 +312,7 @@ export const SubscriptionDetailScreen = () => {
           </View>
 
           <View style={styles.infoRow}>
-            <Tag size={20} color="#94A3B8" />
+            <Tag size={20} color={theme.colors.textSubtle} />
             <View style={styles.infoTextContainer}>
               <Text style={styles.infoLabel}>Kategoria</Text>
               <Text style={styles.infoValue}>{CATEGORY_LABELS[sub.category]}</Text>
@@ -321,7 +321,7 @@ export const SubscriptionDetailScreen = () => {
 
           {parsedNotes.isShared && parsedNotes.peopleCount && (
             <View style={styles.infoRow}>
-              <Users size={20} color="#94A3B8" />
+              <Users size={20} color={theme.colors.textSubtle} />
               <View style={styles.infoTextContainer}>
                 <Text style={styles.infoLabel}>Współdzielenie</Text>
                 <Text style={styles.infoValue}>Koszt podzielony na {parsedNotes.peopleCount} osoby</Text>
@@ -331,9 +331,9 @@ export const SubscriptionDetailScreen = () => {
 
           {sub.isTrial && sub.trialEndDate && (
             <View style={[styles.infoRow, styles.trialRow]}>
-              <Clock size={20} color="#F59E0B" />
+              <Clock size={20} color={theme.colors.warning} />
               <View style={styles.infoTextContainer}>
-                <Text style={[styles.infoLabel, { color: vibrantTheme.colors.warning }]}>Okres próbny</Text>
+                <Text style={[styles.infoLabel, { color: theme.colors.warning }]}>Okres próbny</Text>
                 <Text style={styles.infoValue}>
                   Kończy się {parseAppDate(sub.trialEndDate)?.toLocaleDateString('pl-PL') || '-'}
                   {trialDaysLeft !== null && trialDaysLeft > 0 ? ` (za ${trialDaysLeft} dni)` : ' (dziś)'}
@@ -343,27 +343,27 @@ export const SubscriptionDetailScreen = () => {
           )}
 
           {sub.cancelUrl && (
-            <TouchableOpacity 
-              style={styles.cancelUrlBtn} 
+            <TouchableOpacity
+              style={styles.cancelUrlBtn}
               onPress={openCancelUrl}
             >
-              <ExternalLink size={20} color="#6366F1" />
-              <Text style={styles.cancelUrlBtnText}>Otwórz stronę rezygnacji</Text>
+              <ExternalLink size={20} color={theme.colors.primary} />
+              <Text style={[styles.cancelUrlBtnText, { color: theme.colors.primary }]}>Otwórz stronę rezygnacji</Text>
             </TouchableOpacity>
           )}
-          
+
           {cancelGuideLookup?.hasGuide === false && cancelGuideLookup.source === 'none' && (
-            <TouchableOpacity 
-              style={[styles.cancelUrlBtn, { borderTopWidth: sub.cancelUrl ? 1 : 0 }]} 
+            <TouchableOpacity
+              style={[styles.cancelUrlBtn, { borderTopWidth: sub.cancelUrl ? 1 : 0 }]}
               onPress={handleRequestGuide}
               disabled={requestGuideMutation.isPending}
             >
               {requestGuideMutation.isPending ? (
-                <ActivityIndicator size="small" color="#6366F1" />
+                <ActivityIndicator size="small" color={theme.colors.primary} />
               ) : (
                 <>
-                  <AlertCircle size={20} color="#6366F1" />
-                  <Text style={styles.cancelUrlBtnText}>Zgłoś brak instrukcji anulowania</Text>
+                  <AlertCircle size={20} color={theme.colors.primary} />
+                  <Text style={[styles.cancelUrlBtnText, { color: theme.colors.primary }]}>Zgłoś brak instrukcji anulowania</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -371,20 +371,20 @@ export const SubscriptionDetailScreen = () => {
         </View>
 
         {parsedNotes.text ? (
-          <View style={styles.infoCard}>
+          <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Text style={styles.infoLabel}>Notatki</Text>
             <Text style={styles.notesText}>{parsedNotes.text}</Text>
           </View>
         ) : null}
 
-        <View style={styles.infoCard}>
+        <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.infoLabel}>Historia płatności</Text>
             <View style={styles.historyBadge}>
               <Text style={styles.historyBadgeText}>{paymentsData?.count || 0} płatności</Text>
             </View>
           </View>
-          
+
           {isPaymentsLoading ? (
             <Text style={{ color: vibrantTheme.colors.textMuted, fontSize: 14, marginTop: 8 }}>Ładuję historię płatności...</Text>
           ) : paymentsData?.items && paymentsData.items.length > 0 ? (
@@ -417,14 +417,14 @@ export const SubscriptionDetailScreen = () => {
           )}
         </View>
 
-        <View style={styles.infoCard}>
+        <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.sectionHeader}>
             <Text style={styles.infoLabel}>Historia aktywności</Text>
             <View style={styles.historyBadge}>
               <Text style={styles.historyBadgeText}>{historyData?.count || 0} zdarzeń</Text>
             </View>
           </View>
-          
+
           {isHistoryLoading ? (
             <Text style={{ color: vibrantTheme.colors.textMuted, fontSize: 14, marginTop: 8 }}>Ładuję historię aktywności...</Text>
           ) : historyData?.items && historyData.items.length > 0 ? (
@@ -432,14 +432,14 @@ export const SubscriptionDetailScreen = () => {
               {historyData.items.map((event: any, index: number) => (
                 <View key={event.id} style={styles.historyItem}>
                   <View style={[
-                    styles.historyDot, 
-                    { backgroundColor: event.type === 'paid' ? theme.colors.primary : event.type === 'canceled' ? '#EF4444' : theme.colors.cyan }
+                    styles.historyDot,
+                    { backgroundColor: event.type === 'paid' ? theme.colors.primary : event.type === 'canceled' ? theme.colors.danger : theme.colors.cyan }
                   ]} />
                   {index < historyData.items.length - 1 && <View style={styles.historyLine} />}
                   <View style={styles.historyMain}>
                     <Text style={styles.historyTitle}>
-                      {event.type === 'created' ? 'Utworzono subskrypcję' : 
-                       event.type === 'paid' ? 'Odnotowano płatność' : 
+                      {event.type === 'created' ? 'Utworzono subskrypcję' :
+                       event.type === 'paid' ? 'Odnotowano płatność' :
                        event.type === 'canceled' ? 'Anulowano subskrypcję' : 'Zaktualizowano dane'}
                     </Text>
                     <Text style={styles.historyDate}>
@@ -455,8 +455,8 @@ export const SubscriptionDetailScreen = () => {
         </View>
 
         <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Trash2 size={20} color="#EF4444" />
-          <Text style={styles.deleteBtnText}>Usuń subskrypcję na stałe</Text>
+          <Trash2 size={20} color={theme.colors.danger} />
+          <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>Usuń subskrypcję na stałe</Text>
         </TouchableOpacity>
       </ScrollView>
 

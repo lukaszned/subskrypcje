@@ -141,8 +141,8 @@ export const PaymentCalendarScreen = () => {
     if (isLoading) {
       return (
         <View style={[styles.centerState, { backgroundColor: theme.colors.card, borderColor: theme.colors.border, alignItems: 'stretch' }]}>
-          <Text style={[styles.centerTitle, { color: theme.colors.text, textAlign: 'left' }]}>Buduje kalendarz platnosci</Text>
-          <Text style={[styles.centerText, { color: theme.colors.textMuted, textAlign: 'left' }]}>Ukladamy najblizsze terminy. Gdy API zwolni, pokazemy ostatni zapisany stan.</Text>
+          <Text style={[styles.centerTitle, { color: theme.colors.text, textAlign: 'left' }]}>Buduję kalendarz płatności</Text>
+          <Text style={[styles.centerText, { color: theme.colors.textMuted, textAlign: 'left' }]}>Układamy najbliższe terminy. Jeśli odświeżanie potrwa dłużej, pokażemy ostatni zapisany stan.</Text>
           <SkeletonList rows={4} isDark />
         </View>
       );
@@ -151,7 +151,7 @@ export const PaymentCalendarScreen = () => {
     if (isError) {
       return (
         <ErrorState
-          message={error?.message || 'Nie udalo sie odswiezyc kalendarza. Sprawdz polaczenie albo sprobuj ponownie.'}
+          message={error?.message || 'Nie udało się odświeżyć kalendarza. Sprawdź połączenie albo spróbuj ponownie.'}
           onRetry={() => refetch()}
         />
       );
@@ -162,8 +162,8 @@ export const PaymentCalendarScreen = () => {
         <EmptyState
           type="calm"
           title="Spokojny horyzont"
-          message="Nie widze zaplanowanych platnosci w wybranym okresie. Mozesz rozszerzyc zakres albo dodac brakujaca subskrypcje."
-          actionLabel="Dodaj subskrypcje"
+          message="Nie widzę zaplanowanych płatności w wybranym okresie. Możesz rozszerzyć zakres albo dodać brakującą subskrypcję."
+          actionLabel="Dodaj subskrypcję"
           onAction={() => navigation.navigate('AddSubscription')}
         />
       );
@@ -193,7 +193,12 @@ export const PaymentCalendarScreen = () => {
                   activeOpacity={0.86}
                   onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
                 >
-                  <View style={[styles.brandMark, { backgroundColor: `${theme.colors.primary}18` }, isOverdue && styles.brandMarkDanger, isSoon && styles.brandMarkWarning]}>
+                  <View style={[
+                    styles.brandMark,
+                    { backgroundColor: `${theme.colors.primary}18` },
+                    isOverdue && { backgroundColor: `${theme.colors.danger}18` },
+                    isSoon && { backgroundColor: `${theme.colors.warning}18` },
+                  ]}>
                     <Text style={[styles.brandMarkText, { color: theme.colors.text }]}>{getBrandInitial(item)}</Text>
                   </View>
                   <View style={styles.paymentMain}>
@@ -204,7 +209,7 @@ export const PaymentCalendarScreen = () => {
                   </View>
                   <View style={styles.paymentAmountBlock}>
                     <Text style={[styles.paymentAmount, { color: theme.colors.text }]}>{item.amount.toFixed(2)} {item.currency}</Text>
-                    <Text style={[styles.paymentStatus, { color: theme.colors.textMuted }, isOverdue && styles.paymentStatusDanger, isSoon && styles.paymentStatusWarning]}>
+                    <Text style={[styles.paymentStatus, { color: theme.colors.textMuted }, isOverdue && { color: theme.colors.danger }, isSoon && { color: theme.colors.warning }]}>
                       {formatRelativeDay(item.paymentDate)}
                     </Text>
                   </View>

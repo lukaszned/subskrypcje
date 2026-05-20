@@ -156,6 +156,21 @@ function getDecisionLabel(action: string | undefined) {
   return PRODUCT_DECISION_LABELS[action] || action;
 }
 
+function getScanModeLabel(mode?: string | null) {
+  switch (mode) {
+    case 'review':
+      return 'Do sprawdzenia';
+    case 'current':
+      return 'Aktywne';
+    case 'empty':
+      return 'Brak wyników';
+    case 'history':
+      return 'Historia';
+    default:
+      return 'Wynik skanu';
+  }
+}
+
 function getProductResultFromScan(scanResult: unknown): EmailScanProductResult | null {
   const productResult = (scanResult as any)?.productResult;
   if (!productResult) return null;
@@ -237,7 +252,7 @@ const ONET_PRODUCT_RESULT_DEMO: EmailScanProductResult = {
       category: 'utilities_energy',
       amount: '216.39 zł',
       primaryAction: 'review_old_bill',
-      evidenceSnippet: 'Wykryto rachunek za energię. To formalny bill/utility, więc pokazujemy go osobno od subskrypcji.',
+      evidenceSnippet: 'Wykryto rachunek za energię. To formalny rachunek, więc pokazujemy go osobno od subskrypcji.',
     },
   ],
   scanSummary: {
@@ -367,7 +382,7 @@ export const EmailScanScreen = () => {
         if (payload.dryRun) {
           setDryRunResults(result.created || []);
           Alert.alert(
-            'Dry Run zakończony',
+            'Podgląd zakończony',
             `Znaleziono ${result.created?.length ?? 0} potencjalnych kandydatur (nie zapisano ich w bazie).`
           );
         } else {
@@ -380,7 +395,7 @@ export const EmailScanScreen = () => {
         }
       },
       onError: (error: any) => {
-        Alert.alert('Nie udalo sie przeskanowac skrzynki', error?.message || 'Nie udało się przeskanować Gmaila.');
+        Alert.alert('Nie udało się przeskanować skrzynki', error?.message || 'Nie udało się przeskanować Gmaila.');
       },
     });
   };
@@ -392,7 +407,7 @@ export const EmailScanScreen = () => {
       scanReliabilityLevel: 'medium',
       deepScanRecommended: false,
       quickScanLikelyIncomplete: false,
-      userFacingCoverageNote: 'Demo pokazuje bucketowy wynik skanu: historyczne subskrypcje do potwierdzenia, zmianę ceny i rachunek utility.',
+      userFacingCoverageNote: 'Demo pokazuje bucketowy wynik skanu: historyczne subskrypcje do potwierdzenia, zmianę ceny i rachunek za usługę.',
       deepScanReason: null,
     });
     setLocallyReviewedProductItems({});
@@ -412,7 +427,7 @@ export const EmailScanScreen = () => {
           onPress: () => {
             ignoreMutation.mutate(detection.id, {
               onError: (error: any) => {
-                Alert.alert('Błąd', error?.message || 'Nie udalo sie odlozyc tej pozycji.');
+                Alert.alert('Błąd', error?.message || 'Nie udało się odłożyć tej pozycji.');
               },
             });
           },
@@ -460,7 +475,7 @@ export const EmailScanScreen = () => {
           }
         }
 
-        Alert.alert('Błąd', error?.message || 'Nie udalo sie dodac tej pozycji do subskrypcji.');
+        Alert.alert('Błąd', error?.message || 'Nie udało się dodać tej pozycji do subskrypcji.');
       },
     });
   };
@@ -483,16 +498,16 @@ export const EmailScanScreen = () => {
         style={styles.advancedHeader}
         onPress={() => setShowAdvanced(!showAdvanced)}
       >
-        <Wrench size={16} color="#64748B" />
+        <Wrench size={16} color={theme.colors.textMuted} />
         <Text style={styles.advancedTitle}>Opcje zaawansowane / Dev</Text>
-        <Settings size={16} color={showAdvanced ? theme.colors.primary : "#94A3B8"} />
+        <Settings size={16} color={showAdvanced ? theme.colors.primary : theme.colors.textMuted} />
       </TouchableOpacity>
 
       {showAdvanced && (
         <View style={styles.advancedContent}>
           <View style={styles.toggleRow}>
             <View>
-              <Text style={styles.toggleLabel}>Tryb Dry Run</Text>
+              <Text style={styles.toggleLabel}>Tryb podglądu</Text>
               <Text style={styles.toggleDesc}>Symulacja skanowania bez zapisu</Text>
             </View>
             <TouchableOpacity
@@ -522,7 +537,7 @@ export const EmailScanScreen = () => {
             disabled={scanMutation.isPending}
           >
             <FlaskConical size={18} color={theme.colors.primary} />
-            <Text style={styles.testBtnText}>Uruchom testowy skan (Dry Run)</Text>
+            <Text style={styles.testBtnText}>Uruchom testowy skan bez zapisu</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -545,9 +560,9 @@ export const EmailScanScreen = () => {
       <View style={styles.dryRunSection}>
         <View style={styles.dryRunHeader}>
           <FlaskConical size={20} color={theme.colors.primary} />
-          <Text style={styles.dryRunTitle}>Wyniki Dry Run (Podgląd)</Text>
+          <Text style={styles.dryRunTitle}>Wyniki podglądu</Text>
           <TouchableOpacity onPress={() => setDryRunResults(null)}>
-            <X size={20} color="#64748B" />
+            <X size={20} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
         <Text style={styles.dryRunDesc}>To są kandydatury znalezione podczas symulacji. Nie zostały zapisane w Twoim profilu.</Text>
@@ -584,8 +599,8 @@ export const EmailScanScreen = () => {
 
         {(trialDate || nextDate) && (
           <View style={styles.dateRow}>
-            <Clock size={16} color="#F59E0B" />
-            <Text style={styles.dateRowText}>
+            <Clock size={16} color={theme.colors.warning} />
+            <Text style={[styles.dateRowText, { color: theme.colors.warning }]}>
               {trialDate ? `Koniec triala: ${trialDate}` : `Następna płatność: ${nextDate}`}
             </Text>
           </View>
@@ -598,16 +613,16 @@ export const EmailScanScreen = () => {
         <View style={styles.actionsRow}>
           {isPreview ? (
             <View style={styles.previewBadge}>
-              <Text style={styles.previewBadgeText}>Tylko podgląd (Dry Run)</Text>
+              <Text style={styles.previewBadgeText}>Tylko podgląd</Text>
             </View>
           ) : (
             <>
               <TouchableOpacity style={styles.secondaryBtn} onPress={() => handleIgnore(item)} disabled={ignoreMutation.isPending}>
-                <XCircle size={18} color="#64748B" />
+                <XCircle size={18} color={theme.colors.textMuted} />
                 <Text style={styles.secondaryBtnText}>Ignoruj</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.primaryBtn, { backgroundColor: theme.colors.primary }]} onPress={() => setSelectedDetection(item)}>
-                <CheckCircle size={18} color="#FFFFFF" />
+                <CheckCircle size={18} color={theme.colors.darkText} />
                 <Text style={styles.primaryBtnText}>Sprawdź</Text>
               </TouchableOpacity>
             </>
@@ -859,7 +874,7 @@ export const EmailScanScreen = () => {
         bucket: 'bill' as ProductBucket,
         label: 'Rachunki',
         title: 'Rachunki i usługi',
-        caption: 'Formalne rachunki i utility bills pokazane osobno od subskrypcji.',
+        caption: 'Formalne rachunki i usługi pokazane osobno od subskrypcji.',
         icon: FileText,
         items: lastScanProductResult.billsOrUtilities,
       },
@@ -888,7 +903,7 @@ export const EmailScanScreen = () => {
               <ShieldCheck size={24} color="#FFFFFF" />
             </View>
             <View style={[styles.productModePill, { backgroundColor: `${theme.colors.primary}22`, borderColor: `${theme.colors.primary}44` }]}>
-              <Text style={[styles.productModePillText, { color: theme.colors.primary }]}>{scanSummary.recommendedDefaultMode || 'review'}</Text>
+              <Text style={[styles.productModePillText, { color: theme.colors.primary }]}>{getScanModeLabel(scanSummary.recommendedDefaultMode)}</Text>
             </View>
           </View>
           <Text style={styles.productHeroTitle}>
@@ -983,7 +998,7 @@ export const EmailScanScreen = () => {
 
         {!hasAnyProductFinding && (
           <View style={styles.emptyState}>
-            <Inbox size={32} color="#94A3B8" />
+            <Inbox size={32} color={theme.colors.textMuted} />
             <Text style={styles.emptyTitle}>Brak pewnych wyników</Text>
             <Text style={styles.emptyText}>
               Nie traktujemy tego jako dowodu, że nie masz subskrypcji. Jeśli skan był szybki, uruchom dokładniejszy profil.
@@ -1026,7 +1041,7 @@ export const EmailScanScreen = () => {
             <View style={styles.productModalHeader}>
               <View style={styles.productModalTitleBlock}>
                 <Text style={styles.productModalEyebrow}>
-                  {bucket === 'price' ? 'Zmiana ceny' : bucket === 'bill' ? 'Rachunek / utility' : 'Pozycja do sprawdzenia'}
+                  {bucket === 'price' ? 'Zmiana ceny' : bucket === 'bill' ? 'Rachunek / usługa' : 'Pozycja do sprawdzenia'}
                 </Text>
                 <Text style={styles.productModalTitle}>{title}</Text>
               </View>
@@ -1092,7 +1107,7 @@ export const EmailScanScreen = () => {
                   itemId: {String(item.id || item.sourceMessageId || key)}{'\n'}
                   bucket: {bucket}{'\n'}
                   primaryAction: {action}{'\n'}
-                  reviewedAt: client timestamp
+                  reviewedAt: znacznik czasu z aplikacji
                 </Text>
               </View>
 
@@ -1166,7 +1181,7 @@ export const EmailScanScreen = () => {
                 onChangeText={setAmount}
                 keyboardType="decimal-pad"
                 placeholder="29.99"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.colors.textSubtle}
               />
             </View>
 
@@ -1236,7 +1251,7 @@ export const EmailScanScreen = () => {
 
             {selectedDetection?.isTrial && selectedDetection.trialEndDate && (
               <View style={styles.trialInfo}>
-                <AlertCircle size={16} color="#F59E0B" />
+                <AlertCircle size={16} color={theme.colors.warning} />
                 <Text style={styles.trialInfoText}>Wykryto trial do {formatDate(selectedDetection.trialEndDate)}.</Text>
               </View>
             )}
@@ -1249,7 +1264,7 @@ export const EmailScanScreen = () => {
                 onChangeText={setNotes}
                 multiline
                 placeholder="Notatka dla subskrypcji"
-                placeholderTextColor="#94A3B8"
+                placeholderTextColor={theme.colors.textSubtle}
               />
             </View>
 
@@ -1259,10 +1274,10 @@ export const EmailScanScreen = () => {
               disabled={acceptMutation.isPending}
             >
               {acceptMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={theme.colors.darkText} />
               ) : (
                 <>
-                  <CheckCircle size={20} color="#FFFFFF" />
+                  <CheckCircle size={20} color={theme.colors.darkText} />
                   <Text style={styles.acceptBtnText}>Dodaj subskrypcję</Text>
                 </>
               )}
@@ -1396,7 +1411,7 @@ export const EmailScanScreen = () => {
           </View>
         ) : detections.length === 0 ? (
           <View style={styles.emptyState}>
-            <Inbox size={32} color="#94A3B8" />
+            <Inbox size={32} color={theme.colors.textMuted} />
             <Text style={styles.emptyTitle}>Brak kandydatur</Text>
             <Text style={styles.emptyText}>
               Po skanie nowe wykrycia pojawią się tutaj do ręcznego zatwierdzenia.
@@ -2024,7 +2039,7 @@ const styles = StyleSheet.create({
   acceptBtnDisabled: { opacity: 0.55 },
   acceptBtnText: { color: vibrantTheme.colors.darkText, fontSize: 15, fontWeight: '900' },
 
-  // Advanced & Dry Run Styles
+  // Advanced preview styles
   advancedSection: {
     backgroundColor: vibrantTheme.colors.card,
     borderRadius: 24,

@@ -69,6 +69,32 @@ const CYCLES: Array<{ id: BillingCycle; label: string }> = [
   { id: 'one_time', label: 'Jednorazowo'},
 ];
 
+const addMonthsClamped = (baseDate: Date, monthsToAdd: number) => {
+  const year = baseDate.getFullYear();
+  const month = baseDate.getMonth() + monthsToAdd;
+  const day = baseDate.getDate();
+  const lastDayInTargetMonth = new Date(year, month + 1, 0).getDate();
+
+  return new Date(year, month, Math.min(day, lastDayInTargetMonth));
+};
+
+const getSuggestedNextPaymentDate = (billingCycle: BillingCycle, baseDate = new Date()) => {
+  const base = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+
+  switch (billingCycle) {
+    case 'weekly':
+      return new Date(base.getFullYear(), base.getMonth(), base.getDate() + 7);
+    case 'monthly':
+      return addMonthsClamped(base, 1);
+    case 'yearly':
+      return addMonthsClamped(base, 12);
+    case 'one_time':
+    case 'custom':
+    default:
+      return base;
+  }
+};
+
 export const ManualAddScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'AddSubscription'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
@@ -88,7 +114,8 @@ export const ManualAddScreen = () => {
   const [planName, setPlanName] = useState('');
   const [cycle, setCycle] = useState<BillingCycle>('monthly');
   const [category, setCategory] = useState<SubscriptionCategory>('entertainment');
-  const [date, setDate] = useState(new Date());
+  const [date, setDate] = useState(() => getSuggestedNextPaymentDate('monthly'));
+  const [hasManualDate, setHasManualDate] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [currency, setCurrency] = useState('PLN');
   const [isTrial, setIsTrial] = useState(false);
@@ -230,6 +257,7 @@ export const ManualAddScreen = () => {
       setCancelUrl(existingSub.cancelUrl || '');
       if (existingSub.nextPaymentDate) {
         setDate(parseAppDate(existingSub.nextPaymentDate) || new Date());
+        setHasManualDate(true);
       }
       if (existingSub.trialEndDate) {
         setTrialEndDate(parseAppDate(existingSub.trialEndDate) || new Date());
@@ -239,7 +267,10 @@ export const ManualAddScreen = () => {
 
   const onDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') setShowDatePicker(false);
-    if (selectedDate) setDate(selectedDate);
+    if (selectedDate) {
+      setHasManualDate(true);
+      setDate(selectedDate);
+    }
   };
 
   const onTrialDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
@@ -249,6 +280,14 @@ export const ManualAddScreen = () => {
 
   const formatDate = (d: Date) => {
     return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
+  };
+
+  const handleCycleChange = (nextCycle: BillingCycle) => {
+    setCycle(nextCycle);
+
+    if (!subscriptionId && !hasManualDate) {
+      setDate(getSuggestedNextPaymentDate(nextCycle));
+    }
   };
 
   const handleSave = async () => {
@@ -304,16 +343,16 @@ export const ManualAddScreen = () => {
 
     if (error instanceof ApiError) {
       if (error.status === 409) {
-        Alert.alert('Duplikat', 'Subskrypcja o tej nazwie juz istnieje. Otworz ja z listy albo zmien nazwe planu.');
+        Alert.alert('Duplikat', 'Subskrypcja o tej nazwie już istnieje. Otwórz ją z listy albo zmień nazwę planu.');
       } else if (error.status === 400 && error.body) {
         const body = error.body as any;
         const details = body.errors?.map((e: any) => `- ${e.message}`).join('\n') || error.message;
         Alert.alert('Sprawdz dane', details);
       } else {
-        Alert.alert('Nie udalo sie zapisac', error.message || 'Sprobuj ponownie za chwile.');
+        Alert.alert('Nie udało się zapisać', error.message || 'Spróbuj ponownie za chwilę.');
       }
     } else {
-      Alert.alert('Brak polaczenia', 'Nie udalo sie polaczyc. Sprawdz siec telefonu i sprobuj ponownie.');
+      Alert.alert('Brak połączenia', 'Nie udało się połączyć. Sprawdź sieć telefonu i spróbuj ponownie.');
     }
   };
   const isLoading = createMutation.isPending || updateMutation.isPending;
@@ -396,7 +435,7 @@ export const ManualAddScreen = () => {
                             LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
                             setAmount(plan.price.toString());
                             setPlanName(plan.name);
-                            if (plan.billingCycle) setCycle(plan.billingCycle);
+                            if (plan.billingCycle) handleCycleChange(plan.billingCycle);
                             scrollToForm();
                           }}
                         >
@@ -450,7 +489,7 @@ export const ManualAddScreen = () => {
                 ) : (
                   <View style={styles.amountRow}>
                     <TextInput
-                      style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: '#FECACA' }]}
+                      style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: theme.colors.danger }]}
                       value={amount}
                       onChangeText={(value) => {
                         setAmount(value);
@@ -538,22 +577,22 @@ export const ManualAddScreen = () => {
                   )}
 
                   <TextInput 
-                    style={[styles.textInput, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: '#EF4444' }]} 
+                    style={[styles.textInput, { color: theme.colors.text, borderColor: theme.colors.border }, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: theme.colors.danger }]}
                     value={name} 
                     onChangeText={setName}
                     placeholder="np. Netflix" 
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={theme.colors.textSubtle}
                   />
                 </View>
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.labelOptional}>Dostawca</Text>
                   <TextInput 
-                    style={styles.textInput} 
+                    style={[styles.textInput, { color: theme.colors.text, borderColor: theme.colors.border }]}
                     value={provider} 
                     onChangeText={setProvider} 
                     placeholder="np. Google, Apple" 
-                    placeholderTextColor="#94A3B8"
+                    placeholderTextColor={theme.colors.textSubtle}
                   />
                 </View>
 
@@ -572,7 +611,7 @@ export const ManualAddScreen = () => {
                       <TouchableOpacity 
                         key={c.id} 
                         style={[styles.pill, cycle === c.id && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
-                        onPress={() => setCycle(c.id)}
+                        onPress={() => handleCycleChange(c.id)}
                       >
                         <Text style={[styles.pillText, cycle === c.id && { color: theme.colors.primary }]}>{c.label}</Text>
                       </TouchableOpacity>
@@ -586,6 +625,11 @@ export const ManualAddScreen = () => {
                     <Calendar size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
                     <Text style={styles.dateText}>{formatDate(date)}</Text>
                   </TouchableOpacity>
+                  <Text style={[styles.dateHint, { color: theme.colors.textMuted }]}>
+                    {hasManualDate
+                      ? 'Data ustawiona ręcznie.'
+                      : 'Podpowiadamy ją automatycznie na podstawie cyklu.'}
+                  </Text>
                   {showDatePicker && (
                     <DateTimePicker
                       value={date}
@@ -628,8 +672,8 @@ export const ManualAddScreen = () => {
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Koniec triala</Text>
                     <TouchableOpacity style={styles.dateButton} onPress={() => setShowTrialPicker(true)}>
-                      <Calendar size={20} color="#F59E0B" style={{ marginRight: 8 }} />
-                      <Text style={[styles.dateText, { color: '#F59E0B' }]}>{formatDate(trialEndDate)}</Text>
+                      <Calendar size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
+                      <Text style={[styles.dateText, { color: theme.colors.warning }]}>{formatDate(trialEndDate)}</Text>
                     </TouchableOpacity>
                     {showTrialPicker && (
                       <DateTimePicker
@@ -963,6 +1007,7 @@ const styles = StyleSheet.create({
   pillTextActive: { color: vibrantTheme.colors.primary },
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.09)', padding: 15, borderRadius: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   dateText: { fontSize: 16, fontWeight: '700', color: vibrantTheme.colors.primary },
+  dateHint: { marginTop: 8, fontSize: 12, fontWeight: '700', lineHeight: 16 },
   catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: vibrantTheme.colors.border },
   catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },

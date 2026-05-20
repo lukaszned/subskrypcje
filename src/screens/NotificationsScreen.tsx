@@ -66,14 +66,14 @@ export const NotificationsScreen = React.memo(() => {
           </View>
         ) : isError ? (
           <ErrorState
-            message="Nie udalo sie odswiezyc przypomnien. Pokazemy je ponownie, gdy API odpowie."
+            message="Nie udało się odświeżyć przypomnień. Pokażemy je ponownie, gdy odświeżanie się uda."
             onRetry={() => refetch()}
           />
         ) : (
           <>
             {nextReminder && (
               <View style={[styles.nextCard, { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
-                <Text style={styles.sectionLabel}>Najbliższe</Text>
+                <Text style={[styles.sectionLabel, { color: theme.colors.textSubtle }]}>Najbliższe</Text>
                 <Text style={[styles.nextTitle, { color: theme.colors.text }]}>{nextReminder.name}</Text>
                 <Text style={[styles.nextDescription, { color: theme.colors.textMuted }]}>{nextReminder.body}</Text>
                 <Text style={[styles.nextDate, { color: theme.colors.primary }]}>
@@ -87,12 +87,12 @@ export const NotificationsScreen = React.memo(() => {
               </View>
             )}
 
-            <Text style={styles.sectionLabel}>Kolejka</Text>
+            <Text style={[styles.sectionLabel, { color: theme.colors.textSubtle }]}>Kolejka</Text>
             {items.length === 0 ? (
               <EmptyState
                 type="calm"
-                title="Brak zaplanowanych alertow"
-                message="Gdy pojawia sie platnosci albo triale do przypomnienia, zobaczysz je tutaj."
+                title="Brak zaplanowanych alertów"
+                message="Gdy pojawią się płatności albo triale do przypomnienia, zobaczysz je tutaj."
               />
             ) : (
               items.map((item) => (
