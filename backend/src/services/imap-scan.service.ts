@@ -15,6 +15,7 @@ import {
 } from "./imap-scan-planner.service";
 import {
     buildProductResult,
+    isBillLikeCategory,
     ProductBucketInput,
     ProductResult,
 } from "./subscription-product-buckets.service";
@@ -169,6 +170,21 @@ export type ImapScanSummary = {
     deepScanReason?: string;
     canonicalSubscriptions: number;
     reviewCandidates: number;
+    billLikeMetadataMatches?: number;
+    billLikeCandidatesFound?: number;
+    billLikeCanonicalCount?: number;
+    billLikeMessagesMerged?: number;
+    candidateMessagesAfterDedupe?: number;
+    canonicalMergeGroups?: number;
+    preservedHighSignalCandidates?: number;
+    preservedSubscriptionLikeCandidates?: number;
+    preservedBillLikeCandidates?: number;
+    sampledLowSignalCandidates?: number;
+    candidatesDroppedByCap?: number;
+    candidatePreservationCap?: number;
+    metadataPrepassCandidatesBeforeCap?: number;
+    deepFallbackCandidatesBeforeCap?: number;
+    deepFallbackCandidatesAfterPriorityPreserve?: number;
 };
 
 export type ScanImapSubscriptionsResult = {
@@ -435,10 +451,27 @@ const TARGETED_SEARCH_TERMS = [
     "e-faktura",
     "rachunek",
     "kwota do zaplaty",
+    "do zaplaty",
     "termin platnosci",
+    "naleznosc",
+    "oplata",
+    "platnosc",
+    "payment due",
+    "amount due",
+    "total due",
+    "bill",
     "invoice",
+    "billing",
+    "statement",
+    "rozliczenie",
     "receipt",
     "payment",
+    "energia",
+    "prad",
+    "electricity",
+    "internet",
+    "telefon",
+    "telecom",
     "Google Play",
     "App Store",
     "Prime Video",
@@ -532,6 +565,204 @@ function confidenceLevelFor(confidence: number): "high" | "medium" | "low" {
     return "low";
 }
 
+function hasBillLikeMetadataText(value: string) {
+    return /\b(faktura|e-faktura|efaktura|rachunek|invoice|bill|billing|statement|payment due|amount due|total due|kwota do zaplaty|do zaplaty|termin platnosci|naleznosc|rozliczenie|oplata|platnosc|energia|prad|electricity|internet|telefon|telecom)\b/.test(
+        normalizeAsciiText(value)
+    );
+}
+
+function hasEcommerceOrRiskText(value: string) {
+    return /\b(zamowienie|order|rental|wypozyczenie|refund|zwrot|reklamacja|wysylka|dostawa|shipping|delivery|newsletter|regulamin|terms update|security|login|kod|verification code|kredyt|pozyczka|leasing|rrso)\b/.test(
+        normalizeAsciiText(value)
+    );
+}
+
+function hasExplicitDueEvidence(value: string) {
+    return /\b(kwota do zaplaty|do zaplaty|termin platnosci|amount due|total due|payment due|due date|naleznosc|invoice total)\b/.test(
+        normalizeAsciiText(value)
+    );
+}
+
+type RetrievalSignalKind =
+    | "subscription"
+    | "bill"
+    | "payment"
+    | "price_change"
+    | "trial"
+    | "low"
+    | "risk";
+
+export type RetrievalPreservationInput = {
+    uid: number;
+    from?: string;
+    subject?: string;
+    score?: number;
+};
+
+type RetrievalPreservationCandidate = RetrievalPreservationInput & {
+    preservationScore: number;
+    kind: RetrievalSignalKind;
+    isHighSignal: boolean;
+    isSubscriptionLike: boolean;
+    isBillLike: boolean;
+};
+
+function scoreRetrievalPreservationCandidate(
+    candidate: RetrievalPreservationInput
+): RetrievalPreservationCandidate {
+    const text = normalizeAsciiText(
+        [candidate.from, candidate.subject].filter(Boolean).join(" ")
+    );
+    let preservationScore = candidate.score ?? 0;
+    let kind: RetrievalSignalKind = "low";
+    const risk = hasEcommerceOrRiskText(text);
+    const subscriptionLike =
+        /\b(subscription|subskrypcja|abonament|membership|czlonkostwo|premium|paid plan|plan platny|automatycznie odnaw|will renew|renewal|odnowienie|next billing|next renewal)\b/.test(
+            text
+        );
+    const marketplaceLike =
+        /\b(prime video|google play|app store|apple|paypal|stripe|autopay|payu|przelewy24|tpay)\b/.test(
+            text
+        ) && subscriptionLike;
+    const trialLike =
+        /\b(trial|okres probny|bezplatny okres probny|after trial|zostanie naliczona)\b/.test(
+            text
+        );
+    const priceChangeLike =
+        /\b(price change|new price|nowa cena|aktualna cena|current price|zaktualizowana cena)\b/.test(
+            text
+        );
+    const billLike = hasBillLikeMetadataText(text);
+    const paymentLike =
+        /\b(payment confirmation|potwierdzenie platnosci|charged|obciaz|pobrano|paid|platnosc)\b/.test(
+            text
+        ) && (subscriptionLike || billLike || marketplaceLike);
+
+    if (subscriptionLike || marketplaceLike) {
+        kind = "subscription";
+        preservationScore += marketplaceLike ? 0.85 : 0.75;
+    }
+
+    if (trialLike) {
+        kind = kind === "low" ? "trial" : kind;
+        preservationScore += 0.65;
+    }
+
+    if (priceChangeLike) {
+        kind = "price_change";
+        preservationScore += 0.7;
+    }
+
+    if (paymentLike) {
+        kind = kind === "low" ? "payment" : kind;
+        preservationScore += 0.45;
+    }
+
+    if (billLike && !risk) {
+        kind = kind === "low" ? "bill" : kind;
+        preservationScore += hasExplicitDueEvidence(text) ? 0.8 : 0.55;
+    }
+
+    if (risk && !subscriptionLike && !billLike && !priceChangeLike && !trialLike) {
+        kind = "risk";
+        preservationScore -= 0.75;
+    } else if (risk) {
+        preservationScore -= 0.35;
+    }
+
+    const isSubscriptionLike =
+        kind === "subscription" ||
+        kind === "trial" ||
+        kind === "payment" ||
+        kind === "price_change";
+    const isBillLike = kind === "bill";
+
+    return {
+        ...candidate,
+        preservationScore,
+        kind,
+        isSubscriptionLike,
+        isBillLike,
+        isHighSignal:
+            preservationScore >= 0.45 &&
+            kind !== "risk" &&
+            (isSubscriptionLike || isBillLike),
+    };
+}
+
+function sortPreservationCandidate(
+    a: RetrievalPreservationCandidate,
+    b: RetrievalPreservationCandidate
+) {
+    return b.preservationScore - a.preservationScore || b.uid - a.uid;
+}
+
+export function selectPreservedRetrievalCandidatesForTest(
+    candidates: RetrievalPreservationInput[],
+    limit: number
+) {
+    return selectPreservedRetrievalCandidates(candidates, limit).selected;
+}
+
+function selectPreservedRetrievalCandidates(
+    candidates: RetrievalPreservationInput[],
+    limit: number
+) {
+    const scored = candidates
+        .map(scoreRetrievalPreservationCandidate)
+        .filter((candidate) => Number.isFinite(candidate.uid) && candidate.uid > 0);
+    const selected = new Map<number, RetrievalPreservationCandidate>();
+    const addCandidates = (
+        pool: RetrievalPreservationCandidate[],
+        maxCount: number
+    ) => {
+        for (const candidate of pool.sort(sortPreservationCandidate)) {
+            if (selected.size >= limit || maxCount <= 0) break;
+            if (selected.has(candidate.uid)) continue;
+            selected.set(candidate.uid, candidate);
+            maxCount -= 1;
+        }
+    };
+    const highSubscription = scored.filter(
+        (candidate) => candidate.isHighSignal && candidate.isSubscriptionLike
+    );
+    const highBill = scored.filter(
+        (candidate) => candidate.isHighSignal && candidate.isBillLike
+    );
+    const highOther = scored.filter(
+        (candidate) =>
+            candidate.isHighSignal &&
+            !candidate.isSubscriptionLike &&
+            !candidate.isBillLike
+    );
+    const lowSignal = scored.filter((candidate) => !candidate.isHighSignal);
+    const reservedPerHighSignalClass = Math.max(1, Math.floor(limit * 0.35));
+
+    addCandidates(highSubscription, reservedPerHighSignalClass);
+    addCandidates(highBill, reservedPerHighSignalClass);
+    addCandidates(highOther, Math.max(0, limit - selected.size));
+    addCandidates(
+        scored.filter((candidate) => candidate.isHighSignal),
+        Math.max(0, limit - selected.size)
+    );
+    addCandidates(lowSignal, Math.max(0, limit - selected.size));
+
+    const selectedItems = [...selected.values()].sort(sortPreservationCandidate);
+    const selectedIds = new Set(selectedItems.map((candidate) => candidate.uid));
+    const droppedByCap = Math.max(0, scored.length - selectedItems.length);
+
+    return {
+        selected: selectedItems,
+        droppedByCap,
+        highSignalCount: selectedItems.filter((item) => item.isHighSignal).length,
+        subscriptionLikeCount: selectedItems.filter((item) => item.isSubscriptionLike)
+            .length,
+        billLikeCount: selectedItems.filter((item) => item.isBillLike).length,
+        lowSignalCount: selectedItems.filter((item) => !item.isHighSignal).length,
+        dropped: scored.filter((candidate) => !selectedIds.has(candidate.uid)),
+    };
+}
+
 function broadCategoryFor(category: string | undefined) {
     switch (category) {
         case "design_creative":
@@ -611,6 +842,10 @@ type AmountSemantic = {
     raw: string;
     kind: AmountKind;
     confidence: number;
+    position: number;
+    context: string;
+    beforeContext: string;
+    afterContext: string;
 };
 
 type AmountSelection = {
@@ -626,7 +861,16 @@ type AmountSelection = {
     amounts: string[];
     selectedAmountSourceDate?: string;
     selectedAmountSourceSubject?: string;
+    dueDateText?: string;
 };
+
+function parseComparableAmount(value: string | undefined) {
+    if (!value) return undefined;
+    const match = value.replace(/\s/g, "").match(/\d+(?:[,.]\d{2})?/);
+    if (!match) return undefined;
+    const parsed = Number(match[0].replace(",", "."));
+    return Number.isFinite(parsed) ? parsed : undefined;
+}
 
 function visibleTextForAmountSelection(message: ProductionImapScanMessage) {
     return [message.subject, message.snippet, ...message.reasons].join(" ");
@@ -641,53 +885,104 @@ function extractAmountSemantics(message: ProductionImapScanMessage): AmountSeman
     let match: RegExpExecArray | null;
 
     while ((match = amountPattern.exec(text)) !== null) {
-        const raw = cleanText(match[0]);
+        let raw = cleanText(match[0]);
+        const trailingCycle = text
+            .slice(match.index + match[0].length, match.index + match[0].length + 12)
+            .match(/^\s*\/\s*(year|month)\b/i)?.[0];
+
+        if (trailingCycle && !/\/\s*(year|month)\b/i.test(raw)) {
+            raw = cleanText(`${raw}${trailingCycle}`);
+        }
 
         if (!raw) continue;
 
-        const start = Math.max(0, match.index - 90);
-        const end = Math.min(text.length, match.index + raw.length + 90);
+        const start = Math.max(0, match.index - 140);
+        const end = Math.min(text.length, match.index + raw.length + 140);
         const context = normalizeAsciiText(text.slice(start, end));
         const beforeContext = normalizeAsciiText(text.slice(start, match.index));
         const afterContext = normalizeAsciiText(
             text.slice(match.index + raw.length, end)
         );
         const localBeforeContext = beforeContext.slice(-70);
+        const localAfterContext = afterContext.slice(0, 90);
+        const extendedBeforeContext = beforeContext.slice(-180);
+        const extendedAfterContext = afterContext.slice(0, 180);
+        const explicitPromoContext =
+            /(oferta specjalna|special offer|cena promocyjna|promocyjna|promo|discount|rabat)/;
+        const promoDurationContext =
+            /(przez pierwszy miesiac|przez kolejny okres|przez\s+\d+\s+miesiac|for\s+\d+\s+month|for the first month)/;
+        const postPromoContext =
+            /(po uplywie okresu promocji|after (?:the )?promotional period|regular price|standard price|cena regularna)/;
+        const futureRenewalContext =
+            /(odnowiona w cenie|odnowi sie w cenie|will renew at|next renewal price|bedzie obciazana kwota|your payment method will be charged)/;
         const fullTrialContext = /\b(trial|okres probny|bezplatny okres probny)\b/.test(
             asciiText
         );
+        const fullPromoContext =
+            /(oferta specjalna|special offer|cena promocyjna|promocyjna|promo|discount|rabat|okresu promocji|promotional period)/.test(
+                asciiText
+            );
+        const hasLocalTrialCharge =
+            /(po zakonczeniu|after.*trial|zostanie naliczona|will be charged|automatically renew at|odnowi sie w cenie|odnowiona w cenie)/.test(
+                context
+            ) ||
+            ((/(zostanie naliczona|will be charged)/.test(extendedBeforeContext) ||
+                /(miesiecznie|monthly|rocznie|yearly)/.test(extendedAfterContext)) &&
+                fullTrialContext);
+        const hasNearDueLabel =
+            /(kwota do zaplaty|amount due|invoice total|total due|do zaplaty)/.test(
+                localBeforeContext
+            );
+        const hasBroadDueLabel =
+            /(kwota do zaplaty|amount due|invoice total|total due|do zaplaty|faktura.*na kwote|na kwote)/.test(
+                context
+            );
+        const hasLocalPromoLabel =
+            explicitPromoContext.test(localBeforeContext) ||
+            explicitPromoContext.test(localAfterContext) ||
+            (fullPromoContext && promoDurationContext.test(localAfterContext));
+        const hasPostPromoLabel =
+            postPromoContext.test(localBeforeContext) ||
+            postPromoContext.test(extendedBeforeContext);
         let kind: AmountKind = "unknown";
         let confidence = 0.4;
 
         if (
-            fullTrialContext &&
-            /(po zakonczeniu|after.*trial|zostanie naliczona|will be charged|automatically renew at|odnowi sie w cenie|odnowiona w cenie)/.test(
-                context
-            )
+            (fullTrialContext ||
+                /(po zakonczeniu.*okresu probnego|after.*trial)/.test(asciiText)) &&
+            hasLocalTrialCharge
         ) {
             kind = "trial_then_price";
             confidence = 0.95;
-        } else if (/(kwota do zaplaty|do zaplaty|termin platnosci|amount due|invoice total|faktura.*na kwote|na kwote)/.test(context)) {
+        } else if (hasNearDueLabel) {
             kind = "due";
-            confidence = 0.9;
+            confidence = 0.98;
+        } else if (hasBroadDueLabel) {
+            kind = "due";
+            confidence = 0.86;
         } else if (/(nowa cena|zaktualizowana cena|new price|price will change to|cena zmieni sie na)/.test(localBeforeContext)) {
             kind = "new_price";
             confidence = 0.95;
         } else if (/(aktualna cena|obecna cena|dotychczasowa cena|current price|current plan price|old price)/.test(localBeforeContext)) {
             kind = "current_price";
             confidence = 0.9;
-        } else if (/(po uplywie okresu promocji|after promotional period|regular price|standard price|cena regularna|odnowiona w cenie|will renew at|next renewal price|bedzie obciazana kwota)/.test(beforeContext)) {
-            kind = /(regular price|standard price|cena regularna|po uplywie okresu promocji|after promotional period)/.test(context)
+        } else if (hasPostPromoLabel) {
+            kind = "regular_price";
+            confidence = 0.92;
+        } else if (fullPromoContext && hasLocalPromoLabel && !hasPostPromoLabel) {
+            kind = "promo_price";
+            confidence = 0.92;
+        } else if (futureRenewalContext.test(localBeforeContext) || futureRenewalContext.test(extendedBeforeContext)) {
+            kind = "future_price";
+            confidence = 0.9;
+        } else if (/(po uplywie okresu promocji|after (?:the )?promotional period|regular price|standard price|cena regularna|odnowiona w cenie|will renew at|next renewal price|bedzie obciazana kwota)/.test(beforeContext)) {
+            kind = /(regular price|standard price|cena regularna|po uplywie okresu promocji|after (?:the )?promotional period)/.test(context)
                 ? "regular_price"
                 : "future_price";
             confidence = 0.88;
         } else if (
-            /(oferta specjalna|special offer|cena promocyjna|promocyjna|promo|discount|rabat)/.test(
-                beforeContext
-            ) ||
-            /(przez pierwszy miesiac|przez kolejny okres|przez\s+\d+\s+miesiac)/.test(
-                afterContext
-            )
+            explicitPromoContext.test(localBeforeContext) ||
+            promoDurationContext.test(localAfterContext)
         ) {
             kind = "promo_price";
             confidence = 0.9;
@@ -699,7 +994,15 @@ function extractAmountSemantics(message: ProductionImapScanMessage): AmountSeman
             confidence = 0.82;
         }
 
-        results.push({ raw, kind, confidence });
+        results.push({
+            raw,
+            kind,
+            confidence,
+            position: match.index,
+            context,
+            beforeContext: localBeforeContext,
+            afterContext: localAfterContext,
+        });
     }
 
     const detectedAmount = message.detected.amountText ?? message.debug.amountText;
@@ -709,10 +1012,30 @@ function extractAmountSemantics(message: ProductionImapScanMessage): AmountSeman
             raw: detectedAmount,
             kind: "unknown",
             confidence: 0.35,
+            position: Number.MAX_SAFE_INTEGER,
+            context: "",
+            beforeContext: "",
+            afterContext: "",
         });
     }
 
     return results;
+}
+
+function extractDueDateFromAmountContext(amount: AmountSemantic | undefined) {
+    if (!amount) return undefined;
+
+    const labelBeforeDate = amount.context.match(
+        /(termin platnosci|due date|payment due|pay by|oplacenie do|naleznosc)\D{0,60}(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})/i
+    );
+
+    if (labelBeforeDate?.[2]) return labelBeforeDate[2];
+
+    const dateBeforeLabel = amount.context.match(
+        /(\d{1,2}[./-]\d{1,2}[./-]\d{2,4})\D{0,60}(termin platnosci|due date|payment due|pay by|oplacenie do)/i
+    );
+
+    return dateBeforeLabel?.[1];
 }
 
 function latestMessageWithAmount(
@@ -723,7 +1046,13 @@ function latestMessageWithAmount(
         .sort((a, b) => Date.parse(b.date) - Date.parse(a.date))
         .map((message) => ({
             message,
-            amount: extractAmountSemantics(message).find(predicate),
+            amount: extractAmountSemantics(message)
+                .filter(predicate)
+                .sort(
+                    (a, b) =>
+                        b.confidence - a.confidence ||
+                        a.position - b.position
+                )[0],
         }))
         .find((item) => item.amount);
 }
@@ -758,11 +1087,24 @@ function selectCanonicalAmounts(
         selectedAmountSourceSubject: latestAny?.message.subject,
     };
 
-    selection.futureAmount =
-        newPrice?.amount?.raw ?? future?.amount?.raw ?? trialThen?.amount?.raw;
     selection.regularAmount = regular?.amount?.raw;
     selection.promoAmount = promo?.amount?.raw;
     selection.trialThenAmount = trialThen?.amount?.raw;
+    selection.futureAmount =
+        newPrice?.amount?.raw ?? future?.amount?.raw ?? trialThen?.amount?.raw;
+
+    const promoValue = parseComparableAmount(selection.promoAmount);
+    const regularValue = parseComparableAmount(selection.regularAmount);
+
+    if (
+        selection.promoAmount &&
+        selection.regularAmount &&
+        regularValue !== undefined &&
+        promoValue !== undefined &&
+        regularValue > promoValue
+    ) {
+        selection.futureAmount = selection.futureAmount ?? selection.regularAmount;
+    }
 
     if (status === "price_change") {
         const source = newPrice ?? future ?? latestAny;
@@ -786,6 +1128,9 @@ function selectCanonicalAmounts(
         if (hasInvoiceEvidence && due) {
             selection.displayAmount = due.amount?.raw;
             selection.amountKind = "due";
+            selection.dueAmount = due.amount?.raw;
+            selection.latestAmount = due.amount?.raw;
+            selection.dueDateText = extractDueDateFromAmountContext(due.amount);
             selection.selectedAmountSourceDate = due.message.date;
             selection.selectedAmountSourceSubject = due.message.subject;
             return selection;
@@ -793,9 +1138,9 @@ function selectCanonicalAmounts(
     }
 
     const source =
+        charged ??
         trialThen ??
         promo ??
-        charged ??
         regular ??
         future ??
         newPrice ??
@@ -829,22 +1174,92 @@ function extractDateText(messages: ProductionImapScanMessage[], kind: "due" | "r
     return undefined;
 }
 
+function isBillingEvidenceMessage(message: ProductionImapScanMessage) {
+    const messageType = message.debug.messageType;
+    const tiers = message.debug.evidenceTiers.join(" ");
+
+    return (
+        ["invoice", "payment_due", "recurring_bill", "payment_confirmation", "processor_payment", "marketplace_subscription", "active_price_change", "price_change_active"].includes(
+            messageType
+        ) ||
+        /invoice|recurring bill|payment|price-change/i.test(tiers) ||
+        Boolean(message.detected.amountText ?? message.debug.amountText)
+    );
+}
+
+function isActiveEvidenceMessage(message: ProductionImapScanMessage) {
+    const messageType = message.debug.messageType;
+    const tiers = message.debug.evidenceTiers.join(" ");
+
+    return (
+        [
+            "payment_confirmation",
+            "subscription_started",
+            "subscription_active",
+            "subscription_continuation",
+            "trial_started_future_charge",
+            "marketplace_subscription",
+            "active_price_change",
+            "price_change_active",
+        ].includes(messageType) || /active subscription|payment evidence|price-change/i.test(tiers)
+    );
+}
+
+function isProductionBillLikeCandidate(message: ProductionImapScanMessage) {
+    if (message.debug.finalDecision === "candidate") return true;
+
+    const category = broadCategoryFor(message.debug.category);
+    const text = [
+        message.from,
+        message.subject,
+        message.snippet,
+        ...message.reasons,
+        message.debug.finalBlockReason,
+    ].join(" ");
+    const hasBillText = hasBillLikeMetadataText(text);
+    const hasDueEvidence = hasExplicitDueEvidence(text);
+    const hasAmounts = extractAmountSemantics(message).some(
+        (amount) => amount.kind === "due"
+    );
+
+    return Boolean(
+        isBillLikeCategory(category) &&
+            hasBillText &&
+            (hasDueEvidence || hasAmounts) &&
+            !hasEcommerceOrRiskText(text)
+    );
+}
+
+function latestByDate(messages: ProductionImapScanMessage[]) {
+    return [...messages].sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0];
+}
+
 function canonicalItemsFromCandidates(
     messages: ProductionImapScanMessage[],
     now: Date
 ): ImapProductCanonicalItem[] {
     const grouped = new Map<string, ProductionImapScanMessage[]>();
+    const seenMessageIdsByGroup = new Map<string, Set<string>>();
 
     for (const message of messages) {
         const provider = message.detected.provider ?? message.debug.provider;
         const name = message.detected.name ?? message.debug.name ?? provider;
         const billingChannel = message.debug.billingChannel;
-        const key = [provider ?? name ?? "unknown", billingChannel ?? ""]
+        const category = broadCategoryFor(message.debug.category);
+        const key = [provider ?? name ?? "unknown", billingChannel ?? "", category ?? ""]
             .join("|")
             .toLowerCase();
+        const seenIds = seenMessageIdsByGroup.get(key) ?? new Set<string>();
+
+        if (seenIds.has(message.id)) {
+            continue;
+        }
+
         const group = grouped.get(key) ?? [];
         group.push(message);
         grouped.set(key, group);
+        seenIds.add(message.id);
+        seenMessageIdsByGroup.set(key, seenIds);
     }
 
     return [...grouped.entries()].map(([key, group]) => {
@@ -862,9 +1277,20 @@ function canonicalItemsFromCandidates(
         const provider = latest.detected.provider ?? latest.debug.provider;
         const amount = latest.detected.amountText ?? latest.debug.amountText;
         const rawStatus = statusForMessage(latest);
-        const latestTime = Date.parse(latest.date);
-        const ageDays = Number.isFinite(latestTime)
-            ? Math.max(0, Math.floor((now.getTime() - latestTime) / (24 * 60 * 60 * 1000)))
+        const latestActive = latestByDate(group.filter(isActiveEvidenceMessage));
+        const latestBilling = latestByDate(group.filter(isBillingEvidenceMessage));
+        const freshnessMessage =
+            rawStatus === "invoice_due"
+                ? latestBilling ?? latest
+                : rawStatus === "price_change"
+                  ? latestBilling ?? latestActive ?? latest
+                  : latestActive ?? latestBilling ?? latest;
+        const freshnessTime = Date.parse(freshnessMessage.date);
+        const ageDays = Number.isFinite(freshnessTime)
+            ? Math.max(
+                  0,
+                  Math.floor((now.getTime() - freshnessTime) / (24 * 60 * 60 * 1000))
+              )
             : undefined;
         const staleThreshold =
             rawStatus === "trial" ? 45 : rawStatus === "invoice_due" ? 120 : 120;
@@ -873,23 +1299,12 @@ function canonicalItemsFromCandidates(
             ageDays !== undefined &&
             ageDays > staleThreshold;
         const status = isStale ? "stale_needs_review" : rawStatus;
-        const activeMessages = group.filter(
-            (message) => statusForMessage(message) !== "invoice_due"
-        );
-        const billingMessages = group.filter((message) =>
-            ["invoice_due", "price_change"].includes(statusForMessage(message))
-        );
-        const latestActive = [...activeMessages].sort(
-            (a, b) => Date.parse(b.date) - Date.parse(a.date)
-        )[0];
-        const latestBilling = [...billingMessages].sort(
-            (a, b) => Date.parse(b.date) - Date.parse(a.date)
-        )[0];
         const amountSelection = selectCanonicalAmounts(group, rawStatus);
-        const dueDateText = extractDateText(group, "due");
+        const dueDateText =
+            amountSelection.dueDateText ?? extractDateText(group, "due");
         const nextRenewalDateText = extractDateText(group, "renewal");
         const stalenessReason = isStale
-            ? `Latest evidence is ${ageDays} days old.`
+            ? `Latest relevant evidence is ${ageDays} days old`
             : undefined;
 
         return {
@@ -940,11 +1355,11 @@ function canonicalItemsFromCandidates(
                     : `Classified from latest message type ${latest.debug.messageType}.`,
             needsReview: isStale || confidenceLevelFor(highestConfidence) === "low",
             reviewReason:
-                isStale
-                    ? `${stalenessReason} Confirm whether it is still active.`
+                isStale && stalenessReason
+                    ? `${stalenessReason}. Confirm whether it is still active.`
                     : confidenceLevelFor(highestConfidence) === "low"
-                    ? "Low confidence IMAP detection should be reviewed before showing as active."
-                    : undefined,
+                      ? "Low confidence IMAP detection should be reviewed before showing as active."
+                      : undefined,
         };
     });
 }
@@ -954,7 +1369,7 @@ export function buildProductionImapCanonicalItemsForTest(
     now: Date
 ) {
     return canonicalItemsFromCandidates(
-        messages.filter((message) => message.debug.finalDecision === "candidate"),
+        messages.filter(isProductionBillLikeCandidate),
         now
     );
 }
@@ -1001,6 +1416,13 @@ type ScanCollectionStats = {
     deepFallbackMessagesMatchedBeforeCap: number;
     deepFallbackUidCandidatesBeforeSampling: number;
     deepFallbackUidCandidatesAfterSampling: number;
+    billLikeMetadataMatches: number;
+    preservedHighSignalCandidates: number;
+    preservedSubscriptionLikeCandidates: number;
+    preservedBillLikeCandidates: number;
+    sampledLowSignalCandidates: number;
+    candidatesDroppedByCap: number;
+    candidatePreservationCap: number;
 };
 
 function emptyCollectionStats(defaults: ScanProfileDefaults): ScanCollectionStats {
@@ -1037,6 +1459,13 @@ function emptyCollectionStats(defaults: ScanProfileDefaults): ScanCollectionStat
         deepFallbackMessagesMatchedBeforeCap: 0,
         deepFallbackUidCandidatesBeforeSampling: 0,
         deepFallbackUidCandidatesAfterSampling: 0,
+        billLikeMetadataMatches: 0,
+        preservedHighSignalCandidates: 0,
+        preservedSubscriptionLikeCandidates: 0,
+        preservedBillLikeCandidates: 0,
+        sampledLowSignalCandidates: 0,
+        candidatesDroppedByCap: 0,
+        candidatePreservationCap: defaults.deepFallbackPerBucketLimit,
     };
 }
 
@@ -1124,8 +1553,12 @@ function scoreMetadataMessage(message: {
         add(0.45, "subscription subject");
     }
 
-    if (/\b(faktura|e-faktura|efaktura|rachunek|invoice|receipt|payment|platnosc)\b/.test(asciiText)) {
+    if (hasBillLikeMetadataText(asciiText)) {
         add(0.4, "billing subject");
+    }
+
+    if (/\b(kwota do zaplaty|do zaplaty|termin platnosci|payment due|amount due|total due|naleznosc|rozliczenie|statement)\b/.test(asciiText)) {
+        add(0.28, "bill due subject");
     }
 
     if (/\b(renewal|odnowienie|automatycznie odnaw|trial|okres probny|zostanie naliczona)\b/.test(asciiText)) {
@@ -1148,13 +1581,15 @@ function scoreMetadataMessage(message: {
         }
     }
 
-    if (/\b(zamowienie|order|rental|wypozyczenie|refund|zwrot|reklamacja|newsletter|regulamin|terms update|security|login|kod|verification code)\b/.test(asciiText)) {
+    if (hasEcommerceOrRiskText(asciiText)) {
         score -= 0.35;
         terms.push("risk:order/security/newsletter");
     }
 
     return {
         uid: Number.isFinite(uid) && uid > 0 ? Math.trunc(uid) : undefined,
+        from,
+        subject,
         score,
         terms,
     };
@@ -1200,6 +1635,71 @@ function sampleBucketUids(
     return [...selected].sort((a, b) => b - a).slice(0, limit);
 }
 
+async function prioritizeBucketMetadataUids(params: {
+    client: ImapFlow;
+    uids: number[];
+    limit: number;
+}) {
+    const candidates: RetrievalPreservationInput[] = [];
+
+    if (params.uids.length === 0 || params.limit <= 0) {
+        return {
+            uids: [] as number[],
+            billLikeCount: 0,
+            highSignalCount: 0,
+            subscriptionLikeCount: 0,
+            lowSignalCount: 0,
+            droppedByCap: 0,
+        };
+    }
+
+    try {
+        for await (const message of params.client.fetch(
+            params.uids,
+            {
+                envelope: true,
+                internalDate: true,
+                flags: true,
+            } as any,
+            { uid: true }
+        )) {
+            const uid = Number(message.uid ?? message.seq);
+            const metadataScore = scoreMetadataMessage(message);
+            const from = cleanText(formatAddress(message.envelope?.from?.[0]));
+            const subject = cleanText(message.envelope?.subject ?? "");
+
+            if (!Number.isFinite(uid) || uid <= 0) continue;
+
+            candidates.push({
+                uid: Math.trunc(uid),
+                from,
+                subject,
+                score: metadataScore.score,
+            });
+        }
+    } catch {
+        return {
+            uids: [] as number[],
+            billLikeCount: 0,
+            highSignalCount: 0,
+            subscriptionLikeCount: 0,
+            lowSignalCount: 0,
+            droppedByCap: 0,
+        };
+    }
+
+    const preserved = selectPreservedRetrievalCandidates(candidates, params.limit);
+
+    return {
+        uids: preserved.selected.map((item) => item.uid),
+        billLikeCount: preserved.billLikeCount,
+        highSignalCount: preserved.highSignalCount,
+        subscriptionLikeCount: preserved.subscriptionLikeCount,
+        lowSignalCount: preserved.lowSignalCount,
+        droppedByCap: preserved.droppedByCap,
+    };
+}
+
 async function collectMetadataPrepassUids(params: {
     client: ImapFlow;
     totalMessages: number;
@@ -1232,7 +1732,13 @@ async function collectMetadataPrepassUids(params: {
         });
     }
 
-    const hits: Array<{ uid: number; score: number; terms: string[] }> = [];
+    const hits: Array<{
+        uid: number;
+        from?: string;
+        subject?: string;
+        score: number;
+        terms: string[];
+    }> = [];
     const termCounts = new Map<string, number>();
     let messagesScanned = 0;
 
@@ -1252,7 +1758,13 @@ async function collectMetadataPrepassUids(params: {
 
                 if (!scored.uid || scored.score < 0.25) continue;
 
-                hits.push(scored as { uid: number; score: number; terms: string[] });
+                hits.push(scored as {
+                    uid: number;
+                    from?: string;
+                    subject?: string;
+                    score: number;
+                    terms: string[];
+                });
 
                 for (const term of scored.terms.slice(0, 6)) {
                     termCounts.set(term, (termCounts.get(term) ?? 0) + 1);
@@ -1264,10 +1776,19 @@ async function collectMetadataPrepassUids(params: {
     }
 
     const sortedHits = hits.sort((a, b) => b.score - a.score);
+    const preservedHits = selectPreservedRetrievalCandidates(
+        sortedHits.map((hit) => ({
+            uid: hit.uid,
+            from: hit.from,
+            subject: hit.subject,
+            score: hit.score,
+        })),
+        params.matchLimit
+    );
     const selected: number[] = [];
     let skippedAlreadyFetched = 0;
 
-    for (const hit of sortedHits) {
+    for (const hit of preservedHits.selected) {
         if (params.alreadyFetchedIds.has(String(hit.uid))) {
             skippedAlreadyFetched += 1;
             continue;
@@ -1356,6 +1877,12 @@ async function collectDeepBucketUids(params: {
     let messagesMatchedBeforeCap = 0;
     let uidCandidatesBeforeSampling = 0;
     let uidCandidatesAfterSampling = 0;
+    let billLikeMetadataMatches = 0;
+    let preservedHighSignalCandidates = 0;
+    let preservedSubscriptionLikeCandidates = 0;
+    let preservedBillLikeCandidates = 0;
+    let sampledLowSignalCandidates = 0;
+    let candidatesDroppedByCap = 0;
 
     for (let index = 0; index < bucketsTotal; index += 1) {
         if (selected.size >= params.maxFetch) break;
@@ -1381,11 +1908,28 @@ async function collectDeepBucketUids(params: {
             if (matches.length === 0) continue;
 
             bucketsWithMatches += 1;
-            const sampled = sampleBucketUids(
-                matches,
-                params.perBucketLimit,
-                params.sampleMode
-            );
+            const priorityLimit = Math.max(1, Math.floor(params.perBucketLimit * 0.5));
+            const prioritized = await prioritizeBucketMetadataUids({
+                client: params.client,
+                uids: matches,
+                limit: priorityLimit,
+            });
+            billLikeMetadataMatches += prioritized.billLikeCount;
+            preservedHighSignalCandidates += prioritized.highSignalCount;
+            preservedSubscriptionLikeCandidates += prioritized.subscriptionLikeCount;
+            preservedBillLikeCandidates += prioritized.billLikeCount;
+            sampledLowSignalCandidates += prioritized.lowSignalCount;
+            candidatesDroppedByCap += prioritized.droppedByCap;
+            const priorityUids = prioritized.uids;
+            const remainingMatches = matches.filter((uid) => !priorityUids.includes(uid));
+            const sampled = [
+                ...priorityUids,
+                ...sampleBucketUids(
+                    remainingMatches,
+                    Math.max(0, params.perBucketLimit - priorityUids.length),
+                    params.sampleMode
+                ),
+            ].slice(0, params.perBucketLimit);
             uidCandidatesAfterSampling += sampled.length;
 
             for (const uid of sampled) {
@@ -1404,6 +1948,12 @@ async function collectDeepBucketUids(params: {
                 messagesMatchedBeforeCap,
                 uidCandidatesBeforeSampling,
                 uidCandidatesAfterSampling,
+                billLikeMetadataMatches,
+                preservedHighSignalCandidates,
+                preservedSubscriptionLikeCandidates,
+                preservedBillLikeCandidates,
+                sampledLowSignalCandidates,
+                candidatesDroppedByCap,
             };
         }
     }
@@ -1417,6 +1967,12 @@ async function collectDeepBucketUids(params: {
         messagesMatchedBeforeCap,
         uidCandidatesBeforeSampling,
         uidCandidatesAfterSampling,
+        billLikeMetadataMatches,
+        preservedHighSignalCandidates,
+        preservedSubscriptionLikeCandidates,
+        preservedBillLikeCandidates,
+        sampledLowSignalCandidates,
+        candidatesDroppedByCap,
     };
 }
 
@@ -1603,6 +2159,16 @@ async function fetchAnalyzedMessages(params: {
             bucketResult.uidCandidatesBeforeSampling;
         stats.deepFallbackUidCandidatesAfterSampling =
             bucketResult.uidCandidatesAfterSampling;
+        stats.billLikeMetadataMatches = bucketResult.billLikeMetadataMatches;
+        stats.preservedHighSignalCandidates =
+            bucketResult.preservedHighSignalCandidates;
+        stats.preservedSubscriptionLikeCandidates =
+            bucketResult.preservedSubscriptionLikeCandidates;
+        stats.preservedBillLikeCandidates =
+            bucketResult.preservedBillLikeCandidates;
+        stats.sampledLowSignalCandidates = bucketResult.sampledLowSignalCandidates;
+        stats.candidatesDroppedByCap = bucketResult.candidatesDroppedByCap;
+        stats.candidatePreservationCap = params.defaults.deepFallbackPerBucketLimit;
 
         let fallbackUids = bucketResult.uids;
 
@@ -1717,7 +2283,7 @@ export async function scanImapSubscriptions(
                       messages: [],
                       stats: emptyCollectionStats(defaults),
                   };
-        const candidates = messages.filter((message) => message.debug.finalDecision === "candidate");
+        const candidates = messages.filter(isProductionBillLikeCandidate);
         const canonicalItems = canonicalItemsFromCandidates(candidates, now);
         const productResult = buildProductResult(canonicalItems);
         const capabilityDiagnostics = buildScanCapabilityDiagnostics({
@@ -1846,6 +2412,30 @@ export async function scanImapSubscriptions(
             deepScanAvailable: plan.deepScanAvailable,
             canonicalSubscriptions: canonicalItems.length,
             reviewCandidates: 0,
+            billLikeMetadataMatches: stats.billLikeMetadataMatches,
+            billLikeCandidatesFound: candidates.filter((message) =>
+                isBillLikeCategory(broadCategoryFor(message.debug.category))
+            ).length,
+            billLikeCanonicalCount: canonicalItems.filter((item) =>
+                isBillLikeCategory(item.category)
+            ).length,
+            billLikeMessagesMerged: canonicalItems
+                .filter((item) => isBillLikeCategory(item.category))
+                .reduce((sum, item) => sum + item.sourceMessagesCount, 0),
+            candidateMessagesAfterDedupe: candidates.length,
+            canonicalMergeGroups: canonicalItems.length,
+            preservedHighSignalCandidates: stats.preservedHighSignalCandidates,
+            preservedSubscriptionLikeCandidates:
+                stats.preservedSubscriptionLikeCandidates,
+            preservedBillLikeCandidates: stats.preservedBillLikeCandidates,
+            sampledLowSignalCandidates: stats.sampledLowSignalCandidates,
+            candidatesDroppedByCap: stats.candidatesDroppedByCap,
+            candidatePreservationCap: stats.candidatePreservationCap,
+            metadataPrepassCandidatesBeforeCap: stats.metadataPrepassMatches,
+            deepFallbackCandidatesBeforeCap:
+                stats.deepFallbackUidCandidatesBeforeSampling,
+            deepFallbackCandidatesAfterPriorityPreserve:
+                stats.deepFallbackUidCandidatesAfterSampling,
         };
 
         return {

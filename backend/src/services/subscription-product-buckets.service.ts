@@ -18,6 +18,8 @@ export type ProductBucketInput = {
     billingChannel?: string;
     category?: string;
     status: string;
+    confidence?: number;
+    lastEvidenceDate?: string;
     recencyStatus?: string;
     source?: string;
     needsReview?: boolean;
@@ -131,6 +133,41 @@ export function isUtilityOrFormalBill(item: ProductBucketInput) {
     );
 }
 
+function sentenceWithDetail(prefix: string, detail: string) {
+    const trimmedDetail = detail.trim().replace(/[.!?]+$/g, "");
+    return `${prefix}: ${trimmedDetail}.`;
+}
+
+function itemTimestamp(item: ProductBucketInput) {
+    const parsed = Date.parse(item.lastEvidenceDate ?? "");
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function itemName(item: ProductBucketInput) {
+    return (item.displayName ?? item.provider ?? "").toLowerCase();
+}
+
+function sortByConfidenceDateName<T extends ProductBucketInput>(
+    left: ProductResultItem<T>,
+    right: ProductResultItem<T>
+) {
+    return (
+        (right.confidence ?? 0) - (left.confidence ?? 0) ||
+        itemTimestamp(right) - itemTimestamp(left) ||
+        itemName(left).localeCompare(itemName(right))
+    );
+}
+
+function sortByDateName<T extends ProductBucketInput>(
+    left: ProductResultItem<T>,
+    right: ProductResultItem<T>
+) {
+    return (
+        itemTimestamp(right) - itemTimestamp(left) ||
+        itemName(left).localeCompare(itemName(right))
+    );
+}
+
 export function classifyProductBucket(
     item: ProductBucketInput
 ): ProductBucketDecision {
@@ -183,7 +220,10 @@ export function classifyProductBucket(
             bucket: "needsReviewSubscriptions",
             primaryAction: "confirm_still_active",
             userFacingReason: item.stalenessReason
-                ? `Historical subscription evidence found: ${item.stalenessReason}.`
+                ? sentenceWithDetail(
+                      "Historical subscription evidence found",
+                      item.stalenessReason
+                  )
                 : "Subscription-like evidence was found, but it should be confirmed before showing as active.",
         };
     }
@@ -210,7 +250,10 @@ export function classifyProductBucket(
             bucket: "needsReviewSubscriptions",
             primaryAction: "confirm_still_active",
             userFacingReason: item.stalenessReason
-                ? `Historical subscription evidence found: ${item.stalenessReason}.`
+                ? sentenceWithDetail(
+                      "Historical subscription evidence found",
+                      item.stalenessReason
+                  )
                 : "Subscription-like evidence was found, but it should be confirmed before showing as active.",
         };
     }
@@ -258,6 +301,12 @@ export function buildProductResult<T extends ProductBucketInput>(
 
         productResult[productDecision.bucket].push(productItem);
     }
+
+    productResult.currentSubscriptions.sort(sortByConfidenceDateName);
+    productResult.needsReviewSubscriptions.sort(sortByConfidenceDateName);
+    productResult.historicalSubscriptions.sort(sortByDateName);
+    productResult.priceChanges.sort(sortByDateName);
+    productResult.billsOrUtilities.sort(sortByDateName);
 
     productResult.scanSummary.currentSubscriptions =
         productResult.currentSubscriptions.length;

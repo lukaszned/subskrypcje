@@ -6,8 +6,10 @@ import {
     planImapScanStrategy,
 } from "../services/imap-scan-planner.service";
 import {
+    buildProductionImapCanonicalItemsForTest,
     buildProductionImapProductResultForTest,
     ProductionImapScanMessage,
+    selectPreservedRetrievalCandidatesForTest,
 } from "../services/imap-scan.service";
 import {
     buildProductResult,
@@ -171,8 +173,8 @@ function makeProductionMessage(
                 (input.messageType === "invoice"
                     ? ["Tier B invoice/recurring bill evidence"]
                     : ["Tier A active subscription/payment evidence"]),
-            finalDecision: "candidate",
-            finalBlockReason: undefined,
+            finalDecision: input.debug?.finalDecision ?? "candidate",
+            finalBlockReason: input.debug?.finalBlockReason,
         } as ProductionImapScanMessage["debug"],
         sourceTags: input.sourceTags ?? ["test"],
     };
@@ -201,12 +203,12 @@ function runProductionImapAggregationCase() {
                 messageType: "invoice",
             }),
             makeProductionMessage({
-                id: "tauron-latest",
+                id: "utility-latest",
                 provider: "Tauron",
                 category: "utilities_energy",
                 subject: "Wystawiliśmy fakturę za prąd 11/2024",
                 date: "2024-11-27T10:00:00.000Z",
-                snippet: "Faktura jest dostępna. Kwota do zapłaty: 216.39 zł. Termin płatności: 12.12.2024.",
+                snippet: "Faktura jest dostępna. Harmonogram płatności zawiera 521.48 zł z terminem 12.02.2025. Kwota do zapłaty: 216.39 zł. Termin płatności: 12.12.2024.",
                 messageType: "invoice",
             }),
             makeProductionMessage({
@@ -294,28 +296,425 @@ function runProductionImapAggregationCase() {
     assertField("Tauron displayAmount", "216.39 zł", tauron?.displayAmount);
     assertField("Tauron amountKind", "due", tauron?.amountKind);
     assertField("Tauron source date", "2024-11-27T10:00:00.000Z", tauron?.selectedAmountSourceDate);
+    assertField("Tauron sourceMessagesCount", 2, tauron?.sourceMessagesCount);
+    assertField(
+        "Tauron allAmounts",
+        "466.51 zł|521.48 zł|216.39 zł",
+        tauron?.allAmounts?.join("|")
+    );
     assertField("Adobe trialThenAmount", "36,89 ( brutto) miesięcznie", adobe?.trialThenAmount);
     assertField("Adobe amountKind", "trial_then_price", adobe?.amountKind);
     assertField("Adobe billingCycle", "monthly", adobe?.billingCycle);
     assertField("Sky billingChannel", "Prime Video", sky?.billingChannel);
+    assertField("Sky futureAmount", "24,99 zł miesięcznie", sky?.futureAmount);
+    assertField("Sky amountKind", "promo_price", sky?.amountKind);
     assertField("Sky promoAmount", "4,00 zł miesięcznie", sky?.promoAmount);
     assertField("Sky regularAmount", "24,99 zł miesięcznie", sky?.regularAmount);
     assertField("Amazon bucket", "priceChanges", amazon?.productBucket);
     assertField("Amazon currentAmount", "49,00 zł/rok", amazon?.currentAmount);
     assertField("Amazon futureAmount", "69,00 zł/rok", amazon?.futureAmount);
     assertField("Amazon amountKind", "new_price", amazon?.amountKind);
+    assertField(
+        "User-facing reason has no double punctuation",
+        false,
+        Boolean(uber?.userFacingReason.includes(".."))
+    );
 
     if (failures.length === 0) {
         productResultPassed += 1;
-        console.log("PASS productResult: production IMAP canonical amount parity");
+        console.log("PASS productResult: global production IMAP aggregation semantics");
         return;
     }
 
     productResultFailed += 1;
-    failedProductResultCases.push("production IMAP canonical amount parity");
-    console.log("FAIL productResult: production IMAP canonical amount parity");
+    failedProductResultCases.push("global production IMAP aggregation semantics");
+    console.log("FAIL productResult: global production IMAP aggregation semantics");
     console.log("  failures:", JSON.stringify(failures, null, 2));
     console.log("  actual:", JSON.stringify(result, null, 2));
+}
+
+function runProductionImapAmountSemanticsCase() {
+    const now = new Date("2026-05-24T12:00:00.000Z");
+    const canonicalItems = buildProductionImapCanonicalItemsForTest(
+        [
+            makeProductionMessage({
+                id: "promo-1",
+                provider: "Generic Stream",
+                name: "Generic Stream on Marketplace",
+                category: "streaming_video",
+                subject: "Special offer subscription confirmation",
+                date: "2025-01-13T10:00:00.000Z",
+                snippet: "Continuing your subscription, you are using a special offer at 4.00 PLN monthly for 1 month. After the promotional period, your subscription will renew at 24.99 PLN monthly.",
+                messageType: "subscription_continuation",
+                detected: {
+                    provider: "Generic Stream",
+                    name: "Generic Stream on Marketplace",
+                    billingCycle: "monthly",
+                },
+                debug: {
+                    billingChannel: "Marketplace",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "trial-1",
+                provider: "Generic SaaS",
+                name: "Generic SaaS Pro",
+                category: "software_saas",
+                subject: "Your trial has started",
+                date: "2025-02-01T10:00:00.000Z",
+                snippet: "Your free trial has started. After your trial ends, your subscription will be charged 9.99 USD monthly and will automatically renew.",
+                messageType: "trial_started_future_charge",
+                detected: {
+                    provider: "Generic SaaS",
+                    name: "Generic SaaS Pro",
+                    billingCycle: "monthly",
+                    isTrial: true,
+                },
+            }),
+            makeProductionMessage({
+                id: "price-1",
+                provider: "Generic Membership",
+                name: "Generic Membership Annual",
+                category: "ecommerce_membership",
+                subject: "Your plan price is changing",
+                date: "2026-01-01T10:00:00.000Z",
+                snippet: "Current price: 49.00 PLN/year. New price: 69.00 PLN/year. The new price applies to your active membership next year.",
+                messageType: "active_price_change",
+                detected: {
+                    provider: "Generic Membership",
+                    name: "Generic Membership Annual",
+                    billingCycle: "yearly",
+                },
+                debug: {
+                    evidenceTiers: ["Tier C active price-change evidence"],
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "bill-old",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Utility invoice 01/2025",
+                date: "2025-01-10T10:00:00.000Z",
+                snippet: "Invoice available. Amount due: 101.11 PLN. Due date: 20.01.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "bill-2",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Utility invoice 02/2025",
+                date: "2025-02-10T10:00:00.000Z",
+                snippet: "Invoice available. Amount due: 112.22 PLN. Due date: 20.02.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "bill-3",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Utility invoice 03/2025",
+                date: "2025-03-10T10:00:00.000Z",
+                snippet: "Invoice available. Amount due: 123.33 PLN. Due date: 20.03.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "bill-4",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Utility invoice 04/2025",
+                date: "2025-04-10T10:00:00.000Z",
+                snippet: "Invoice available. Amount due: 134.44 PLN. Due date: 20.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "bill-new",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Utility invoice 05/2025",
+                date: "2025-05-10T10:00:00.000Z",
+                snippet: "Previous balance example 999.99 PLN. Invoice available. Amount due: 222.22 PLN. Due date: 20.05.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "telecom-old",
+                provider: "Generic Telecom",
+                category: "telecom_mobile",
+                subject: "Monthly phone bill 04/2025",
+                date: "2025-04-12T10:00:00.000Z",
+                snippet: "Your telecom bill is ready. Amount due: 55.00 PLN. Due date: 25.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "telecom-new",
+                provider: "Generic Telecom",
+                category: "telecom_mobile",
+                subject: "Monthly phone bill 05/2025",
+                date: "2025-05-12T10:00:00.000Z",
+                snippet: "Your telecom bill is ready. Amount due: 66.00 PLN. Due date: 25.05.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "shop-invoice",
+                provider: "Generic Shop",
+                category: "other_bill",
+                subject: "E-faktura do Twojego zamówienia",
+                date: "2025-05-13T10:00:00.000Z",
+                snippet: "Do Twojego zamówienia wygenerowaliśmy fakturę. Numer zamówienia 123. Dostawa, zwrot, reklamacja. Kwota do zapłaty: 88.00 PLN.",
+                messageType: "invoice",
+                debug: {
+                    finalDecision: "rejected",
+                    finalBlockReason: "blocked: ecommerce order invoice",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "loan-ad",
+                provider: "Generic Finance",
+                category: "other_bill",
+                subject: "Credit offer",
+                date: "2025-05-14T10:00:00.000Z",
+                snippet: "Loan credit offer RRSO 9.91%, kwota 16900 PLN, leasing and monthly installments.",
+                messageType: "marketing_offer",
+                debug: {
+                    finalDecision: "rejected",
+                    finalBlockReason: "blocked: credit marketing",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "saas-invoice",
+                provider: "Generic SaaS Invoice",
+                name: "Generic SaaS Invoice Pro",
+                category: "software_saas",
+                subject: "Subscription invoice",
+                date: "2025-05-15T10:00:00.000Z",
+                snippet: "Invoice for your monthly subscription plan. Amount due: 19.00 USD. Due date: 25.05.2025. The subscription renews monthly.",
+                messageType: "invoice",
+                detected: {
+                    provider: "Generic SaaS Invoice",
+                    name: "Generic SaaS Invoice Pro",
+                    billingCycle: "monthly",
+                },
+            }),
+            makeProductionMessage({
+                id: "sub-trial",
+                provider: "Generic Bundle",
+                name: "Generic Bundle Plus",
+                category: "software_saas",
+                subject: "Your trial started",
+                date: "2026-04-01T10:00:00.000Z",
+                snippet: "Your trial has started. After trial, your plan will renew at 15.00 USD monthly.",
+                messageType: "trial_started_future_charge",
+                detected: {
+                    provider: "Generic Bundle",
+                    name: "Generic Bundle Plus",
+                    billingCycle: "monthly",
+                    isTrial: true,
+                },
+            }),
+            makeProductionMessage({
+                id: "sub-payment",
+                provider: "Generic Bundle",
+                name: "Generic Bundle Plus",
+                category: "software_saas",
+                subject: "Payment confirmation",
+                date: "2026-05-01T10:00:00.000Z",
+                snippet: "Your monthly subscription payment was charged 15.00 USD.",
+                messageType: "payment_confirmation",
+                detected: {
+                    provider: "Generic Bundle",
+                    name: "Generic Bundle Plus",
+                    billingCycle: "monthly",
+                },
+            }),
+        ],
+        now
+    );
+    const result = buildProductResult(canonicalItems);
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const findCanonical = (displayName: string) =>
+        canonicalItems.find((item) => item.displayName === displayName);
+    const findProduct = (displayName: string) =>
+        [
+            ...result.currentSubscriptions,
+            ...result.needsReviewSubscriptions,
+            ...result.historicalSubscriptions,
+            ...result.priceChanges,
+            ...result.billsOrUtilities,
+        ].find((item: ProductBucketInput) => item.displayName === displayName);
+
+    const promo = findCanonical("Generic Stream on Marketplace");
+    const trial = findCanonical("Generic SaaS Pro");
+    const price = findCanonical("Generic Membership Annual");
+    const priceProduct = findProduct("Generic Membership Annual");
+    const bill = findCanonical("Generic Utility");
+    const billProduct = findProduct("Generic Utility");
+    const telecom = findCanonical("Generic Telecom");
+    const telecomProduct = findProduct("Generic Telecom");
+    const shop = findCanonical("Generic Shop");
+    const loan = findCanonical("Generic Finance");
+    const saasInvoiceProduct = findProduct("Generic SaaS Invoice Pro");
+    const bundle = findCanonical("Generic Bundle Plus");
+
+    assertField("Promo amount", "4.00 PLN monthly", promo?.promoAmount);
+    assertField("Promo futureAmount", "24.99 PLN monthly", promo?.futureAmount);
+    assertField("Promo regularAmount", "24.99 PLN monthly", promo?.regularAmount);
+    assertField("Promo future not current promo", false, promo?.futureAmount === promo?.promoAmount);
+    assertField("Promo amountKind", "promo_price", promo?.amountKind);
+    assertField("Trial amountKind", "trial_then_price", trial?.amountKind);
+    assertField("Trial trialThenAmount", "9.99 USD monthly", trial?.trialThenAmount);
+    assertField("Trial futureAmount", "9.99 USD monthly", trial?.futureAmount);
+    assertField("Price bucket", "priceChanges", priceProduct?.productBucket);
+    assertField("Price action", "review_price_change", priceProduct?.primaryAction);
+    assertField("Price currentAmount", "49.00 PLN/year", price?.currentAmount);
+    assertField("Price futureAmount", "69.00 PLN/year", price?.futureAmount);
+    assertField("Price amountKind", "new_price", price?.amountKind);
+    assertField("Bill bucket", "billsOrUtilities", billProduct?.productBucket);
+    assertField("Bill action", "review_old_bill", billProduct?.primaryAction);
+    assertField("Bill dueAmount", "222.22 PLN", bill?.dueAmount);
+    assertField("Bill dueDateText", "20.05.2025", bill?.dueDateText);
+    assertField("Bill sourceMessagesCount", 5, bill?.sourceMessagesCount);
+    assertField("Bill firstSeen", "2025-01-10T10:00:00.000Z", bill?.firstSeen);
+    assertField("Bill lastSeen", "2025-05-10T10:00:00.000Z", bill?.lastSeen);
+    assertField(
+        "Bill allAmounts",
+        "101.11 PLN|112.22 PLN|123.33 PLN|134.44 PLN|999.99 PLN|222.22 PLN",
+        bill?.allAmounts?.join("|")
+    );
+    assertField("Telecom bucket", "billsOrUtilities", telecomProduct?.productBucket);
+    assertField("Telecom sourceMessagesCount", 2, telecom?.sourceMessagesCount);
+    assertField("Telecom dueAmount", "66.00 PLN", telecom?.dueAmount);
+    assertField("Ecommerce invoice rejected", undefined, shop?.displayName);
+    assertField("Loan ad rejected", undefined, loan?.displayName);
+    assertField("SaaS invoice bucket", "needsReviewSubscriptions", saasInvoiceProduct?.productBucket);
+    assertField("Bundle sourceMessagesCount", 2, bundle?.sourceMessagesCount);
+    assertField("Bundle firstSeen", "2026-04-01T10:00:00.000Z", bundle?.firstSeen);
+    assertField("Bundle lastSeen", "2026-05-01T10:00:00.000Z", bundle?.lastSeen);
+    assertField("Bundle lastEvidenceDate", "2026-05-01T10:00:00.000Z", bundle?.lastEvidenceDate);
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: production IMAP amount semantics");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("production IMAP amount semantics");
+    console.log("FAIL productResult: production IMAP amount semantics");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify({ canonicalItems, result }, null, 2));
+}
+
+function runProductionImapRetrievalStabilityCase() {
+    const candidates = [
+        { uid: 1, from: "Shop <orders@example.com>", subject: "Order number 1 shipping" },
+        { uid: 2, from: "Stream <billing@example.com>", subject: "Your premium subscription renewal" },
+        { uid: 3, from: "Security <login@example.com>", subject: "Your verification code" },
+        { uid: 4, from: "Utility <billing@example.com>", subject: "Invoice amount due May" },
+        { uid: 5, from: "SaaS <billing@example.com>", subject: "Trial will be charged monthly after trial" },
+        { uid: 6, from: "Utility <billing@example.com>", subject: "Statement payment due April" },
+        { uid: 7, from: "Marketplace <billing@example.com>", subject: "Prime Video subscription will renew monthly" },
+        { uid: 8, from: "News <newsletter@example.com>", subject: "Premium tips newsletter" },
+        { uid: 9, from: "Finance <ads@example.com>", subject: "Loan credit offer RRSO" },
+    ];
+    const reversedCandidates = [...candidates].reverse();
+    const selected = selectPreservedRetrievalCandidatesForTest(candidates, 5).map(
+        (candidate) => candidate.uid
+    );
+    const selectedReversed = selectPreservedRetrievalCandidatesForTest(
+        reversedCandidates,
+        5
+    ).map((candidate) => candidate.uid);
+    const manyBills = [
+        { uid: 10, from: "Utility <billing@example.com>", subject: "Invoice amount due 1" },
+        { uid: 11, from: "Utility <billing@example.com>", subject: "Invoice amount due 2" },
+        { uid: 12, from: "Utility <billing@example.com>", subject: "Invoice amount due 3" },
+        { uid: 13, from: "Utility <billing@example.com>", subject: "Invoice amount due 4" },
+        { uid: 14, from: "Stream <billing@example.com>", subject: "Subscription renewal monthly" },
+        { uid: 15, from: "Software <billing@example.com>", subject: "Paid plan will renew monthly" },
+        { uid: 16, from: "Shop <orders@example.com>", subject: "Order confirmation delivery" },
+    ];
+    const selectedManyBills = selectPreservedRetrievalCandidatesForTest(
+        manyBills,
+        4
+    ).map((candidate) => candidate.uid);
+    const sortedResult = buildProductResult([
+        {
+            displayName: "Zulu",
+            category: "streaming_video",
+            status: "stale_needs_review",
+            confidence: 0.8,
+            lastEvidenceDate: "2025-01-01T00:00:00.000Z",
+            needsReview: true,
+        },
+        {
+            displayName: "Alpha",
+            category: "streaming_video",
+            status: "stale_needs_review",
+            confidence: 0.9,
+            lastEvidenceDate: "2025-01-01T00:00:00.000Z",
+            needsReview: true,
+        },
+        {
+            displayName: "Beta",
+            category: "streaming_video",
+            status: "stale_needs_review",
+            confidence: 0.9,
+            lastEvidenceDate: "2025-02-01T00:00:00.000Z",
+            needsReview: true,
+        },
+        {
+            displayName: "Energy",
+            category: "utilities_energy",
+            status: "stale_needs_review",
+            lastEvidenceDate: "2025-03-01T00:00:00.000Z",
+            needsReview: true,
+        },
+        {
+            displayName: "Annual Plan",
+            category: "ecommerce_membership",
+            status: "price_change",
+            lastEvidenceDate: "2025-04-01T00:00:00.000Z",
+            needsReview: false,
+        },
+    ]);
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+
+    assertField("Preserved deterministic order", selected.join(","), selectedReversed.join(","));
+    assertField("Preserves subscription candidate", true, selected.includes(2));
+    assertField("Preserves trial candidate", true, selected.includes(5));
+    assertField("Preserves marketplace subscription candidate", true, selected.includes(7));
+    assertField("Preserves bill candidate", true, selected.includes(4) || selected.includes(6));
+    assertField("Drops order/security risk first", false, selected.includes(1) || selected.includes(3));
+    assertField("Many bills keep subscription one", true, selectedManyBills.includes(14));
+    assertField("Many bills keep subscription two", true, selectedManyBills.includes(15));
+    assertField(
+        "Needs review deterministic sort",
+        "Beta|Alpha|Zulu",
+        sortedResult.needsReviewSubscriptions
+            .map((item) => item.displayName)
+            .join("|")
+    );
+    assertField("Bill sort bucket", "Energy", sortedResult.billsOrUtilities[0]?.displayName);
+    assertField("Price sort bucket", "Annual Plan", sortedResult.priceChanges[0]?.displayName);
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: production IMAP retrieval stability");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("production IMAP retrieval stability");
+    console.log("FAIL productResult: production IMAP retrieval stability");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
 function runPlannerCase(
@@ -704,6 +1103,8 @@ runProductBucketCase(
 
 runProductResultContractCase();
 runProductionImapAggregationCase();
+runProductionImapAmountSemanticsCase();
+runProductionImapRetrievalStabilityCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);
