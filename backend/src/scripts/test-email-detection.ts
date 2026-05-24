@@ -6,6 +6,10 @@ import {
     planImapScanStrategy,
 } from "../services/imap-scan-planner.service";
 import {
+    buildProductionImapProductResultForTest,
+    ProductionImapScanMessage,
+} from "../services/imap-scan.service";
+import {
     buildProductResult,
     classifyProductBucket,
     ProductBucketInput,
@@ -121,6 +125,198 @@ const failedBucketCases: string[] = [];
 let productResultPassed = 0;
 let productResultFailed = 0;
 const failedProductResultCases: string[] = [];
+
+function makeProductionMessage(
+    input: Partial<ProductionImapScanMessage> & {
+        id: string;
+        provider: string;
+        name?: string;
+        subject: string;
+        date: string;
+        snippet: string;
+        messageType: string;
+        category: string;
+    }
+): ProductionImapScanMessage {
+    return {
+        id: input.id,
+        from: input.from ?? `${input.provider} <billing@example.com>`,
+        subject: input.subject,
+        date: input.date,
+        snippet: input.snippet,
+        confidence: input.confidence ?? 1,
+        reasons: input.reasons ?? [`+ message type: ${input.messageType}`],
+        detected: {
+            provider: input.provider,
+            name: input.detected?.name ?? input.name ?? input.provider,
+            amountText: input.detected?.amountText,
+            billingCycle: input.detected?.billingCycle,
+            isTrial: input.detected?.isTrial,
+        },
+        debug: {
+            messageType: input.messageType,
+            provider: input.provider,
+            name: input.debug?.name ?? input.detected?.name ?? input.name,
+            category: input.category,
+            billingChannel: input.debug?.billingChannel,
+            amountText: input.debug?.amountText,
+            billingCycle: input.debug?.billingCycle ?? input.detected?.billingCycle,
+            isTrial: input.debug?.isTrial ?? input.detected?.isTrial,
+            positiveEvidence: input.debug?.positiveEvidence ?? [],
+            negativeEvidence: input.debug?.negativeEvidence ?? [],
+            trustEvidence: input.debug?.trustEvidence ?? [],
+            riskEvidence: input.debug?.riskEvidence ?? [],
+            evidenceTiers:
+                input.debug?.evidenceTiers ??
+                (input.messageType === "invoice"
+                    ? ["Tier B invoice/recurring bill evidence"]
+                    : ["Tier A active subscription/payment evidence"]),
+            finalDecision: "candidate",
+            finalBlockReason: undefined,
+        } as ProductionImapScanMessage["debug"],
+        sourceTags: input.sourceTags ?? ["test"],
+    };
+}
+
+function runProductionImapAggregationCase() {
+    const now = new Date("2026-05-24T12:00:00.000Z");
+    const result = buildProductionImapProductResultForTest(
+        [
+            makeProductionMessage({
+                id: "uber-1",
+                provider: "Uber One",
+                category: "delivery_membership",
+                subject: "Potwierdzenie płatności Uber One",
+                date: "2025-03-23T10:00:00.000Z",
+                snippet: "Dziękujemy za płatność za członkostwo Uber One.",
+                messageType: "payment_confirmation",
+            }),
+            makeProductionMessage({
+                id: "tauron-old",
+                provider: "Tauron",
+                category: "utilities_energy",
+                subject: "Wystawiliśmy fakturę za prąd 06/2024",
+                date: "2024-06-01T10:00:00.000Z",
+                snippet: "Faktura jest dostępna. Kwota do zapłaty: 466.51 zł. Termin płatności: 11.06.2024.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "tauron-latest",
+                provider: "Tauron",
+                category: "utilities_energy",
+                subject: "Wystawiliśmy fakturę za prąd 11/2024",
+                date: "2024-11-27T10:00:00.000Z",
+                snippet: "Faktura jest dostępna. Kwota do zapłaty: 216.39 zł. Termin płatności: 12.12.2024.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "adobe-1",
+                provider: "Adobe",
+                name: "Adobe Acrobat Pro",
+                category: "software_saas",
+                subject: "Dziękujemy za zakup!",
+                date: "2024-11-06T10:00:00.000Z",
+                snippet: "Rozpoczął się okres próbny Adobe Acrobat Pro. Po zakończeniu bezpłatnego okresu próbnego zostanie naliczona opłata w wysokości 36,89 ( brutto) miesięcznie. Subskrypcje będą automatycznie odnawiane co miesiąc.",
+                messageType: "trial_started_future_charge",
+                detected: {
+                    provider: "Adobe",
+                    name: "Adobe Acrobat Pro",
+                    billingCycle: "monthly",
+                    isTrial: true,
+                },
+            }),
+            makeProductionMessage({
+                id: "sky-1",
+                provider: "SkyShowtime",
+                name: "SkyShowtime on Prime Video",
+                category: "streaming_video",
+                subject: "Potwierdzenie — Oferta specjalna dotycząca subskrypcji SkyShowtime",
+                date: "2025-01-13T10:00:00.000Z",
+                snippet: "Kontynuując subskrypcję, korzystasz z oferty specjalnej kwotą 4,00 zł miesięcznie przez kolejny okres wynoszący 1 miesiąc. Po upływie okresu promocji subskrypcja zostanie automatycznie odnowiona w cenie 24,99 zł miesięcznie.",
+                messageType: "subscription_continuation",
+                detected: {
+                    provider: "SkyShowtime",
+                    name: "SkyShowtime on Prime Video",
+                    billingCycle: "monthly",
+                    amountText: "4,00 zł",
+                },
+                debug: {
+                    billingChannel: "Prime Video",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "amazon-1",
+                provider: "Amazon",
+                name: "Amazon Prime",
+                category: "ecommerce_membership",
+                subject: "Wymagane działanie: Przejrzyj nową cenę Amazon Prime",
+                date: "2026-01-25T10:00:00.000Z",
+                snippet: "Aktualna cena planu: 49,00 zł/rok. Nowa cena planu: 69,00 zł/rok. Dla Ciebie, aktualnego klienta Prime, zmiana wejdzie w życie w 2027.",
+                messageType: "active_price_change",
+                detected: {
+                    provider: "Amazon",
+                    name: "Amazon Prime",
+                    amountText: "69,00 zł",
+                    billingCycle: "yearly",
+                },
+                debug: {
+                    evidenceTiers: ["Tier C active price-change evidence"],
+                } as ProductionImapScanMessage["debug"],
+            }),
+        ],
+        now
+    );
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const findByName = (displayName: string) =>
+        [
+            ...result.currentSubscriptions,
+            ...result.needsReviewSubscriptions,
+            ...result.historicalSubscriptions,
+            ...result.priceChanges,
+            ...result.billsOrUtilities,
+        ].find((item) => item.displayName === displayName);
+
+    const uber = findByName("Uber One");
+    const tauron = findByName("Tauron");
+    const adobe = findByName("Adobe Acrobat Pro");
+    const sky = findByName("SkyShowtime on Prime Video");
+    const amazon = findByName("Amazon Prime");
+
+    assertField("Uber bucket", "needsReviewSubscriptions", uber?.productBucket);
+    assertField("Uber action", "confirm_still_active", uber?.primaryAction);
+    assertField("Uber displayAmount", undefined, uber?.displayAmount);
+    assertField("Tauron bucket", "billsOrUtilities", tauron?.productBucket);
+    assertField("Tauron displayAmount", "216.39 zł", tauron?.displayAmount);
+    assertField("Tauron amountKind", "due", tauron?.amountKind);
+    assertField("Tauron source date", "2024-11-27T10:00:00.000Z", tauron?.selectedAmountSourceDate);
+    assertField("Adobe trialThenAmount", "36,89 ( brutto) miesięcznie", adobe?.trialThenAmount);
+    assertField("Adobe amountKind", "trial_then_price", adobe?.amountKind);
+    assertField("Adobe billingCycle", "monthly", adobe?.billingCycle);
+    assertField("Sky billingChannel", "Prime Video", sky?.billingChannel);
+    assertField("Sky promoAmount", "4,00 zł miesięcznie", sky?.promoAmount);
+    assertField("Sky regularAmount", "24,99 zł miesięcznie", sky?.regularAmount);
+    assertField("Amazon bucket", "priceChanges", amazon?.productBucket);
+    assertField("Amazon currentAmount", "49,00 zł/rok", amazon?.currentAmount);
+    assertField("Amazon futureAmount", "69,00 zł/rok", amazon?.futureAmount);
+    assertField("Amazon amountKind", "new_price", amazon?.amountKind);
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: production IMAP canonical amount parity");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("production IMAP canonical amount parity");
+    console.log("FAIL productResult: production IMAP canonical amount parity");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify(result, null, 2));
+}
 
 function runPlannerCase(
     name: string,
@@ -507,6 +703,7 @@ runProductBucketCase(
 );
 
 runProductResultContractCase();
+runProductionImapAggregationCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);
