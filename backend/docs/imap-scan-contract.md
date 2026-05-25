@@ -6,6 +6,64 @@ Frontend integration target for:
 
 The route requires the same `Authorization: Bearer <token>` auth as the other backend routes. Do not send IMAP credentials to any frontend logging or analytics sink.
 
+## MVP Email Provider Scope
+
+MVP supported/tested email providers:
+
+- Gmail through the existing Gmail OAuth flow.
+- Onet through manual IMAP.
+- Interia through manual IMAP.
+
+Other IMAP providers are not blocked architecturally, but they are not officially marked ready for MVP until we have real test accounts or user-provided validation. They can be added later as provider presets or app updates.
+
+### Provider Readiness Matrix
+
+| Provider | Flow type | Endpoint | Tested | Reliability | Notes |
+| --- | --- | --- | --- | --- | --- |
+| Gmail | OAuth / Gmail API | `POST /email-scan/gmail/scan` | Existing flow; contract audited in Phase 63 | Depends on Gmail API path | Does not require IMAP password. Current response is legacy detection-oriented, not `productResult` bucket-oriented yet. |
+| Onet | Manual IMAP | `POST /email-scan/imap/scan` | Yes | Medium | Server-side BODY/HEADER targeted search was not useful; adaptive scan uses metadata prepass plus time-bucket fallback. |
+| Interia | Manual IMAP | `POST /email-scan/imap/scan` | Yes | High | BODY targeted search is useful; payment-processor bill dedupe is handled globally. |
+| Other IMAP | Manual IMAP later | `POST /email-scan/imap/scan` | No | Unknown | Future provider preset/update after real testing. Manual endpoint may work, but frontend should mark it experimental if exposed. |
+
+### Gmail Contract Audit
+
+`POST /email-scan/gmail/scan` is currently a legacy Gmail detection flow:
+
+- Uses OAuth/Gmail API, not IMAP credentials.
+- Searches Gmail with query variants.
+- Analyzes message metadata/snippets.
+- Saves candidate detections to `DetectedSubscription` unless `dryRun=true`.
+- Returns legacy fields such as:
+  - `connection`
+  - `scannedMessages`
+  - `candidatesFound`
+  - `createdDetections`
+  - `skippedExisting`
+  - `rejectedMessages`
+  - `querySummaries`
+  - `created`
+  - optional `debugMessages` when `debug=true`
+
+Current Gmail response does **not** return:
+
+- `productResult`
+- `productResult.currentSubscriptions`
+- `productResult.needsReviewSubscriptions`
+- `productResult.priceChanges`
+- `productResult.billsOrUtilities`
+- IMAP-style `scanSummary`
+
+Frontend implication:
+
+- IMAP Onet/Interia can use the new bucket UI directly.
+- Gmail should use the existing Gmail connect/scan/detected-subscriptions flow for MVP unless/until a Gmail `productResult` adapter is added.
+- Do not send Gmail legacy `created` detections directly to `POST /email-scan/import-preview`; import-preview expects product bucket items from the IMAP `productResult` contract.
+
+Backend TODO, post-MVP or before unified UI:
+
+- Add a backward-compatible Gmail adapter that preserves existing Gmail response fields and adds `productResult` using the same bucket contract.
+- Add import-preview compatibility for Gmail product bucket items after that adapter exists.
+
 ## Request
 
 ```json
@@ -299,8 +357,24 @@ Mapping notes:
 
 This is the suggested end-to-end frontend flow for the first IMAP scan UI. Frontend code is expected to stay responsible for UX, confirmation, editing, and final save decisions.
 
+For MVP provider selection, show:
+
+- Gmail
+- Onet
+- Interia
+
+Recommended MVP behavior:
+
+- Gmail starts the existing OAuth/connect flow and uses the existing Gmail scan/detected-subscriptions UI path.
+- Onet and Interia use manual or preset IMAP fields and the `productResult` bucket UI documented below.
+- Hide "Other provider" for MVP, or mark it experimental/future if product wants an escape hatch.
+
 1. Show an entry point such as "Scan email for subscriptions".
-2. Let the user choose manual IMAP setup first:
+2. Let the user choose provider:
+   - Gmail: OAuth, no IMAP password.
+   - Onet: manual/preset IMAP.
+   - Interia: manual/preset IMAP.
+3. For Onet/Interia, collect IMAP setup:
    - `host`
    - `port`
    - `secure`
@@ -308,28 +382,28 @@ This is the suggested end-to-end frontend flow for the first IMAP scan UI. Front
    - `password` or app password
    - `mailbox`, default `INBOX`
    - `profile`, default `adaptive`
-3. Call `POST /email-scan/imap/scan` with `includeDebug=false`.
-4. Show scan coverage before results:
+4. Call `POST /email-scan/imap/scan` with `includeDebug=false`.
+5. Show scan coverage before results:
    - `scanReliabilityLevel`
    - `userFacingCoverageNote`
    - `recommendedDefaultMode`
    - `deepScanRecommended`
    - `quickScanLikelyIncomplete`
-5. Render product buckets:
+6. Render product buckets:
    - `currentSubscriptions`
    - `needsReviewSubscriptions`
    - `priceChanges`
    - `billsOrUtilities`
    - `historicalSubscriptions`
-6. Let the user select items to review/import.
-7. Call `POST /email-scan/import-preview` with selected product bucket items.
-8. Show import preview:
+7. Let the user select items to review/import.
+8. Call `POST /email-scan/import-preview` with selected product bucket items.
+9. Show import preview:
    - `create_subscription` drafts
    - `review_price_change` items
    - `review_bill` items
    - `skip` items
    - warnings
-9. Do not assume `import-preview` writes to the database. Final save is a later confirmation step using existing or future subscription save flows.
+10. Do not assume `import-preview` writes to the database. Final save is a later confirmation step using existing or future subscription save flows.
 
 ### Frontend Should Not
 
@@ -341,6 +415,7 @@ This is the suggested end-to-end frontend flow for the first IMAP scan UI. Front
 - Do not send `includeDebug=true` in normal production UI.
 - Do not infer amount semantics manually when backend provides `amountKind`, `promoAmount`, `futureAmount`, `dueAmount`, or `currentAmount`.
 - Do not show "active subscriptions found" when `recommendedDefaultMode` is `review` and `hasCurrentSubscriptions=false`.
+- Do not reuse the IMAP bucket UI for Gmail until Gmail returns `productResult` or a frontend adapter is explicitly built.
 
 ## Recommended UI Copy
 
@@ -581,6 +656,8 @@ Send the selected product items as returned by the scan response:
 ## Security And Privacy Notes
 
 - IMAP password or app password is sent only to the backend scan endpoint.
+- Gmail OAuth does not require an IMAP password.
+- Onet and Interia may require an app password or external mail client / IMAP access enabled in provider settings.
 - Backend normal responses do not include raw email bodies.
 - `debug` should stay disabled in production UI.
 - Do not log scan request bodies because they include credentials.
@@ -596,6 +673,7 @@ Send the selected product items as returned by the scan response:
 - Provider preset UI is not implemented yet.
 - OAuth/non-password IMAP provider flows are not implemented yet.
 - Gmail scan endpoint remains separate and unchanged.
+- Gmail scan does not yet return the IMAP `productResult` bucket contract.
 - Current IMAP scan works with manual credentials or app password.
 
 ## Message To Frontend Developer
@@ -606,18 +684,28 @@ Ready endpoints:
 
 - `POST /email-scan/imap/scan`
 - `POST /email-scan/import-preview`
+- `POST /email-scan/gmail/scan`
 
-Both require the normal Bearer token. The scan endpoint accepts manual IMAP credentials and returns `productResult` buckets plus `scanSummary`. The import-preview endpoint accepts selected product bucket items and returns normalized drafts/warnings; it does not write to the database.
+All require the normal Bearer token. The IMAP scan endpoint accepts manual IMAP credentials and returns `productResult` buckets plus `scanSummary`. The import-preview endpoint accepts selected IMAP product bucket items and returns normalized drafts/warnings; it does not write to the database.
+
+MVP provider scope:
+
+- Gmail: use existing OAuth/Gmail scan flow. It is not bucket-compatible yet.
+- Onet: use manual/preset IMAP and the bucket UI.
+- Interia: use manual/preset IMAP and the bucket UI.
+- Other providers: future/experimental until tested.
 
 Recommended implementation:
 
-1. Build a manual IMAP scan form.
-2. Call scan with `profile="adaptive"` and `includeDebug=false`.
-3. Show reliability/coverage note first.
-4. Render buckets separately: current subscriptions, needs review, price changes, bills/utilities, historical.
-5. Let the user select items.
-6. Call import-preview.
-7. Show drafts and warnings before any real save action.
+1. Build a provider choice screen: Gmail, Onet, Interia.
+2. Gmail starts the existing OAuth/connect flow and uses the existing Gmail scan/detections path.
+3. Onet/Interia show IMAP fields or presets.
+4. Call IMAP scan with `profile="adaptive"` and `includeDebug=false`.
+5. Show reliability/coverage note first.
+6. Render IMAP buckets separately: current subscriptions, needs review, price changes, bills/utilities, historical.
+7. Let the user select IMAP bucket items.
+8. Call import-preview.
+9. Show drafts and warnings before any real save action.
 
 Important product behavior:
 
@@ -626,5 +714,6 @@ Important product behavior:
 - `billsOrUtilities` should be a separate section and can use `isRecurringBill=true` from preview drafts.
 - Do not store or log IMAP credentials.
 - Do not enable debug mode in production UI.
+- Do not assume Gmail has the same `productResult` shape as IMAP yet.
 
 Docs live in `backend/docs/imap-scan-contract.md`.
