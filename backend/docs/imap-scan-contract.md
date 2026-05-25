@@ -294,3 +294,337 @@ Mapping notes:
 - `dueAmount` is preferred for bill drafts.
 - `billingChannel`, amount semantics, evidence dates, and source message count are preserved in `notes`.
 - The endpoint never stores raw email bodies, IMAP credentials, or debug message payloads.
+
+## Frontend Implementation Checklist
+
+This is the suggested end-to-end frontend flow for the first IMAP scan UI. Frontend code is expected to stay responsible for UX, confirmation, editing, and final save decisions.
+
+1. Show an entry point such as "Scan email for subscriptions".
+2. Let the user choose manual IMAP setup first:
+   - `host`
+   - `port`
+   - `secure`
+   - `username`
+   - `password` or app password
+   - `mailbox`, default `INBOX`
+   - `profile`, default `adaptive`
+3. Call `POST /email-scan/imap/scan` with `includeDebug=false`.
+4. Show scan coverage before results:
+   - `scanReliabilityLevel`
+   - `userFacingCoverageNote`
+   - `recommendedDefaultMode`
+   - `deepScanRecommended`
+   - `quickScanLikelyIncomplete`
+5. Render product buckets:
+   - `currentSubscriptions`
+   - `needsReviewSubscriptions`
+   - `priceChanges`
+   - `billsOrUtilities`
+   - `historicalSubscriptions`
+6. Let the user select items to review/import.
+7. Call `POST /email-scan/import-preview` with selected product bucket items.
+8. Show import preview:
+   - `create_subscription` drafts
+   - `review_price_change` items
+   - `review_bill` items
+   - `skip` items
+   - warnings
+9. Do not assume `import-preview` writes to the database. Final save is a later confirmation step using existing or future subscription save flows.
+
+### Frontend Should Not
+
+- Do not treat `needsReviewSubscriptions` as confirmed active subscriptions.
+- Do not auto-create records from `priceChanges`.
+- Do not mix `billsOrUtilities` into normal subscriptions without user review.
+- Do not display `debug` as user-facing content.
+- Do not store IMAP passwords in `localStorage`, analytics, crash logs, or long-lived frontend state.
+- Do not send `includeDebug=true` in normal production UI.
+- Do not infer amount semantics manually when backend provides `amountKind`, `promoAmount`, `futureAmount`, `dueAmount`, or `currentAmount`.
+- Do not show "active subscriptions found" when `recommendedDefaultMode` is `review` and `hasCurrentSubscriptions=false`.
+
+## Recommended UI Copy
+
+Review mode:
+
+> We found historical subscription evidence. Please confirm which services are still active.
+
+Empty fast scan:
+
+> No current subscriptions were found in the quick scan. A deeper scan may find older, yearly, or marketplace-billed subscriptions.
+
+Price changes:
+
+> We found a price-change notice. Review it before updating an existing subscription.
+
+Bills and utilities:
+
+> We found recurring bills or utility invoices. Review them separately before adding them as recurring bills.
+
+## Bucket Display Policy
+
+`currentSubscriptions`
+
+- Show as high-confidence active subscriptions.
+- Primary CTA: add or confirm.
+
+`needsReviewSubscriptions`
+
+- Show as "Needs confirmation".
+- Primary CTA: confirm still active.
+- Secondary CTA: ignore or mark inactive.
+
+`priceChanges`
+
+- Show as a separate alert section.
+- Primary CTA: review price change.
+- Do not create a new subscription automatically.
+
+`billsOrUtilities`
+
+- Show in a separate "Bills and utilities" section.
+- Primary CTA: review as recurring bill.
+- Use `isRecurringBill=true` from the import-preview draft.
+
+`historicalSubscriptions`
+
+- Show lower priority or collapsed.
+- Default action should be skip unless the user explicitly reviews it.
+
+## Short Frontend Examples
+
+### A. IMAP Scan Request
+
+```json
+{
+  "host": "imap.example.com",
+  "port": 993,
+  "secure": true,
+  "username": "user@example.com",
+  "password": "app-password",
+  "mailbox": "INBOX",
+  "profile": "adaptive",
+  "includeDebug": false
+}
+```
+
+### B. IMAP Scan Response, Shortened
+
+```json
+{
+  "message": "IMAP scan completed.",
+  "productResult": {
+    "currentSubscriptions": [],
+    "needsReviewSubscriptions": [
+      {
+        "id": "streaming-service|marketplace|streaming_video",
+        "displayName": "Streaming Service on Marketplace",
+        "provider": "Streaming Service",
+        "billingChannel": "Marketplace",
+        "category": "streaming_video",
+        "status": "stale_needs_review",
+        "confidenceLevel": "high",
+        "productBucket": "needsReviewSubscriptions",
+        "primaryAction": "confirm_still_active",
+        "userFacingReason": "Historical subscription evidence found. Please confirm whether it is still active.",
+        "displayAmount": "24.99 PLN monthly",
+        "amountKind": "promo_price",
+        "promoAmount": "4.00 PLN monthly",
+        "futureAmount": "24.99 PLN monthly",
+        "regularAmount": "24.99 PLN monthly",
+        "billingCycle": "monthly",
+        "lastEvidenceDate": "2025-01-13T10:00:00.000Z",
+        "evidenceAgeDays": 484,
+        "sourceMessagesCount": 2
+      }
+    ],
+    "priceChanges": [
+      {
+        "id": "membership|ecommerce_membership",
+        "displayName": "Membership",
+        "provider": "Membership",
+        "category": "ecommerce_membership",
+        "status": "price_change",
+        "productBucket": "priceChanges",
+        "primaryAction": "review_price_change",
+        "userFacingReason": "Price-change evidence found. Review before updating an existing record.",
+        "currentAmount": "49.00 PLN/year",
+        "futureAmount": "69.00 PLN/year",
+        "amountKind": "new_price"
+      }
+    ],
+    "billsOrUtilities": [
+      {
+        "id": "utility-provider|utilities_energy",
+        "displayName": "Utility Provider",
+        "provider": "Utility Provider",
+        "category": "utilities_energy",
+        "status": "stale_needs_review",
+        "productBucket": "billsOrUtilities",
+        "primaryAction": "review_old_bill",
+        "userFacingReason": "Recurring bill evidence found. Review before adding as a recurring bill.",
+        "dueAmount": "216.39 PLN",
+        "dueDateText": "12.12.2024",
+        "amountKind": "due",
+        "sourceMessagesCount": 5
+      }
+    ],
+    "historicalSubscriptions": [],
+    "scanSummary": {
+      "recommendedDefaultMode": "review",
+      "hasCurrentSubscriptions": false,
+      "hasOnlyHistoricalEvidence": true,
+      "hasPriceChanges": true,
+      "hasBillsOrUtilities": true,
+      "totalCanonicalSubscriptions": 6
+    }
+  },
+  "scanSummary": {
+    "scanProfile": "adaptive",
+    "effectiveScanMode": "deep",
+    "scanReliabilityLevel": "medium",
+    "recommendedFallbackStrategy": "metadata_prepass_plus_time_buckets",
+    "deepScanRecommended": false,
+    "quickScanLikelyIncomplete": false,
+    "userFacingCoverageNote": "Historical subscription evidence was found. Please confirm which subscriptions are still active."
+  }
+}
+```
+
+### C. Import Preview Request
+
+Send the selected product items as returned by the scan response:
+
+```json
+{
+  "items": [
+    {
+      "id": "streaming-service|marketplace|streaming_video",
+      "displayName": "Streaming Service on Marketplace",
+      "provider": "Streaming Service",
+      "billingChannel": "Marketplace",
+      "category": "streaming_video",
+      "status": "stale_needs_review",
+      "productBucket": "needsReviewSubscriptions",
+      "primaryAction": "confirm_still_active",
+      "regularAmount": "24.99 PLN monthly",
+      "futureAmount": "24.99 PLN monthly",
+      "promoAmount": "4.00 PLN monthly",
+      "billingCycle": "monthly"
+    }
+  ]
+}
+```
+
+### D. Import Preview Response, Shortened
+
+```json
+{
+  "drafts": [
+    {
+      "sourceItemId": "streaming-service|marketplace|streaming_video",
+      "recommendedAction": "create_subscription",
+      "draft": {
+        "name": "Streaming Service on Marketplace",
+        "provider": "Streaming Service",
+        "amount": 24.99,
+        "currency": "PLN",
+        "category": "entertainment",
+        "billingCycle": "monthly",
+        "status": "pending",
+        "notes": "Imported from IMAP scan preview..."
+      },
+      "warnings": [
+        "User should confirm this historical subscription is still active."
+      ]
+    },
+    {
+      "sourceItemId": "membership|ecommerce_membership",
+      "recommendedAction": "review_price_change",
+      "warnings": [
+        "Price-change notices should be applied to an existing subscription after user review."
+      ]
+    },
+    {
+      "sourceItemId": "utility-provider|utilities_energy",
+      "recommendedAction": "review_bill",
+      "draft": {
+        "name": "Utility Provider",
+        "provider": "Utility Provider",
+        "amount": 216.39,
+        "currency": "PLN",
+        "category": "utilities",
+        "billingCycle": "monthly",
+        "isRecurringBill": true,
+        "status": "pending"
+      },
+      "warnings": [
+        "Bill-like items should be reviewed separately before adding as recurring bills."
+      ]
+    }
+  ]
+}
+```
+
+## Endpoint Error Handling For Frontend
+
+| HTTP | Code | Frontend behavior |
+| --- | --- | --- |
+| 400 | `VALIDATION_ERROR` | Show field-level validation messages. |
+| 401 | app auth / missing Bearer token | Redirect to login or refresh app auth. |
+| 401 | `IMAP_AUTH_FAILED` | Ask user to check email address, password, or app password. |
+| 404 | `IMAP_MAILBOX_NOT_FOUND` | Let user edit mailbox, usually `INBOX`. |
+| 422 | `IMAP_UNSUPPORTED` | Explain that this mailbox/server capability is unsupported. |
+| 502 | `IMAP_CONNECTION_FAILED` | Show connection error and retry option. |
+| 504 | `IMAP_CONNECTION_TIMEOUT` | Show timeout state and retry option. |
+| 500 | `IMAP_SCAN_FAILED` | Show a generic safe failure message. |
+
+## Security And Privacy Notes
+
+- IMAP password or app password is sent only to the backend scan endpoint.
+- Backend normal responses do not include raw email bodies.
+- `debug` should stay disabled in production UI.
+- Do not log scan request bodies because they include credentials.
+- Do not persist IMAP credentials in `localStorage`.
+- Prefer app-password guidance for providers that support it.
+- Browser network tools can still show the submitted password to the user on their own machine; avoid extra frontend logging.
+
+## Backend Current Limitations / Next Steps
+
+- `POST /email-scan/import-preview` does not write to the database.
+- Final save/confirm endpoint is not implemented yet.
+- Frontend can later use existing subscription creation after user edits/confirms a draft, but this is not automatic.
+- Provider preset UI is not implemented yet.
+- OAuth/non-password IMAP provider flows are not implemented yet.
+- Gmail scan endpoint remains separate and unchanged.
+- Current IMAP scan works with manual credentials or app password.
+
+## Message To Frontend Developer
+
+Backend IMAP scan is ready for frontend integration at contract level.
+
+Ready endpoints:
+
+- `POST /email-scan/imap/scan`
+- `POST /email-scan/import-preview`
+
+Both require the normal Bearer token. The scan endpoint accepts manual IMAP credentials and returns `productResult` buckets plus `scanSummary`. The import-preview endpoint accepts selected product bucket items and returns normalized drafts/warnings; it does not write to the database.
+
+Recommended implementation:
+
+1. Build a manual IMAP scan form.
+2. Call scan with `profile="adaptive"` and `includeDebug=false`.
+3. Show reliability/coverage note first.
+4. Render buckets separately: current subscriptions, needs review, price changes, bills/utilities, historical.
+5. Let the user select items.
+6. Call import-preview.
+7. Show drafts and warnings before any real save action.
+
+Important product behavior:
+
+- `needsReviewSubscriptions` are not confirmed active subscriptions.
+- `priceChanges` are review alerts, not new subscriptions.
+- `billsOrUtilities` should be a separate section and can use `isRecurringBill=true` from preview drafts.
+- Do not store or log IMAP credentials.
+- Do not enable debug mode in production UI.
+
+Docs live in `backend/docs/imap-scan-contract.md`.
