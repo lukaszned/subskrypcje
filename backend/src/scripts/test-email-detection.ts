@@ -11,6 +11,7 @@ import {
     ProductionImapScanMessage,
     selectPreservedRetrievalCandidatesForTest,
 } from "../services/imap-scan.service";
+import { calculateGmailDuplicateQueryMatches } from "../services/gmail-scan.service";
 import {
     buildProductResult,
     classifyProductBucket,
@@ -1184,6 +1185,124 @@ function runImportPreviewCase() {
     console.log("  actual:", JSON.stringify(preview, null, 2));
 }
 
+function runGmailLegacyQualityCase() {
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const duplicateSuppressed = calculateGmailDuplicateQueryMatches(
+        [
+            { analyzed: 12 },
+            { analyzed: 5 },
+            { analyzed: 1 },
+            { analyzed: 25 },
+            { analyzed: 9 },
+            { analyzed: 3 },
+        ],
+        38
+    );
+    const security = analyzeMessageForSubscription({
+        id: "gmail-security",
+        from: "Google <no-reply@accounts.google.com>",
+        subject: "Security alert",
+        snippet: "A new sign-in was detected. Check your Gmail account activity.",
+    });
+    const onboarding = analyzeMessageForSubscription({
+        id: "gmail-onboarding",
+        from: "Canva <hello@canva.com>",
+        subject: "Welcome to Canva",
+        snippet: "Your account is ready. Start using templates and designs today.",
+    });
+    const marketing = analyzeMessageForSubscription({
+        id: "gmail-marketing",
+        from: "Spotify <news@spotify.com>",
+        subject: "Premium offer",
+        snippet: "Get three free months of Premium in our limited promotion.",
+    });
+    const ecommerce = analyzeMessageForSubscription({
+        id: "gmail-shop",
+        from: "Shop <orders@example.com>",
+        subject: "Order receipt",
+        snippet: "Order number 123. Your item was shipped. Total paid 49.99 USD.",
+    });
+    const processorSetup = analyzeMessageForSubscription({
+        id: "gmail-processor-setup",
+        from: "PayPal <service@paypal.com>",
+        subject: "Your PayPal account is ready",
+        snippet: "You can now send payments and manage your account.",
+    });
+    const subscription = analyzeMessageForSubscription({
+        id: "gmail-subscription",
+        from: "Netflix <info@netflix.com>",
+        subject: "Your Netflix subscription receipt",
+        snippet: "Your monthly subscription renews automatically. You were charged 29.99 PLN monthly.",
+    });
+    const trialThenPaid = analyzeMessageForSubscription({
+        id: "gmail-trial",
+        from: "Canva <billing@canva.com>",
+        subject: "Your Canva Pro trial started",
+        snippet: "Your free trial has started. After trial, you will be charged 12.99 USD monthly unless canceled.",
+    });
+    const priceChange = analyzeMessageForSubscription({
+        id: "gmail-price",
+        from: "Spotify <no-reply@spotify.com>",
+        subject: "Your Premium price is changing",
+        snippet: "You are a Premium subscriber. Current price is 23.99 PLN monthly. New price is 26.99 PLN monthly.",
+    });
+    const termsUpdate = analyzeMessageForSubscription({
+        id: "gmail-terms",
+        from: "Google One <googleone-noreply@google.com>",
+        subject: "We've updated our Google One Terms of Service",
+        snippet: "We updated our terms and privacy information. Review the changes in your account settings.",
+    });
+    const repoInvite = analyzeMessageForSubscription({
+        id: "gmail-repo-invite",
+        from: "GitHub <noreply@github.com>",
+        subject: "lukaszned invited you to lukaszned/subskrypcje",
+        snippet: "You can accept or decline this repository invitation.",
+    });
+    const googlePlayTrialReceipt = analyzeMessageForSubscription({
+        id: "gmail-google-play-trial",
+        from: "Google Play <googleplay-noreply@google.com>",
+        subject: "Your Google Play Order Receipt from Nov 10, 2025",
+        snippet: "You have signed up for a trial subscription for YouTube Premium on Google Play. Your trial will end on Dec 10, 2025. You will be automatically charged 25.99 PLN monthly unless canceled.",
+    });
+
+    assertField("Duplicate query matches suppressed", 17, duplicateSuppressed);
+    assertField("Security rejected", false, security.isCandidate);
+    assertField("Onboarding rejected", false, onboarding.isCandidate);
+    assertField("Marketing rejected", false, marketing.isCandidate);
+    assertField("Ecommerce rejected", false, ecommerce.isCandidate);
+    assertField("Processor account setup rejected", false, processorSetup.isCandidate);
+    assertField("Strong subscription accepted", true, subscription.isCandidate);
+    assertField("Trial then paid accepted", true, trialThenPaid.isCandidate);
+    assertField("Price change accepted", true, priceChange.isCandidate);
+    assertField("Terms update rejected", false, termsUpdate.isCandidate);
+    assertField("Repo invitation rejected", false, repoInvite.isCandidate);
+    assertField("Google Play trial receipt accepted", true, googlePlayTrialReceipt.isCandidate);
+    assertField(
+        "Google Play trial receipt does not infer Nov provider",
+        false,
+        googlePlayTrialReceipt.detected.provider === "Nov" ||
+            googlePlayTrialReceipt.reasons.some((reason) =>
+                /provider from payment processor:\s*Nov\b/i.test(reason)
+            )
+    );
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: Gmail legacy quality guardrails");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("Gmail legacy quality guardrails");
+    console.log("FAIL productResult: Gmail legacy quality guardrails");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
 function runPlannerCase(
     name: string,
     profile: "fast" | "balanced" | "deep" | "adaptive",
@@ -1575,6 +1694,7 @@ runProductionImapRetrievalStabilityCase();
 runProductionImapBillDedupeCase();
 runImapFrontendContractCase();
 runImportPreviewCase();
+runGmailLegacyQualityCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);

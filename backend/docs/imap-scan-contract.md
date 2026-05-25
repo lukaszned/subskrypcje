@@ -33,15 +33,21 @@ Other IMAP providers are not blocked architecturally, but they are not officiall
 - Searches Gmail with query variants.
 - Analyzes message metadata/snippets.
 - Saves candidate detections to `DetectedSubscription` unless `dryRun=true`.
+- `dryRun=true` analyzes messages and returns counts without creating detections or updating `lastScanAt`.
+- Non-dry-run scans create detections once per `userId + gmail + sourceMessageId`; repeated scans skip existing detections.
+- Duplicate Gmail query matches are deduped before candidate persistence.
 - Returns legacy fields such as:
   - `connection`
   - `scannedMessages`
+  - `uniqueMessagesAnalyzed`
+  - `duplicateQueryMatchesSuppressed`
   - `candidatesFound`
   - `createdDetections`
   - `skippedExisting`
   - `rejectedMessages`
   - `querySummaries`
   - `created`
+  - `dryRun`
   - optional `debugMessages` when `debug=true`
 
 Current Gmail response does **not** return:

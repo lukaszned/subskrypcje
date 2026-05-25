@@ -207,6 +207,11 @@ type DetectionSignals = {
     hasOnboardingOnlyEvidence: boolean;
     hasSubscriptionStartedEvidence: boolean;
     hasSubscriptionContinuationEvidence: boolean;
+    hasAccountAdminUpdateEvidence: boolean;
+    hasCollaborationInviteEvidence: boolean;
+    hasPlanFeatureUpdateEvidence: boolean;
+    hasReviewReplyEvidence: boolean;
+    hasProductUpdateQuotaSecurityEvidence: boolean;
 };
 
 function providerEntry(
@@ -441,6 +446,50 @@ function includesAny(text: string, patterns: RegExp[]) {
     return patterns.some((pattern) => pattern.test(text));
 }
 
+function hasAccountAdminUpdateSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(terms of service|terms update|updated our .*terms|updated .*terms|privacy policy|policy update|legal update)\b/i,
+        /\b(account settings|review your .*account settings|security checkup|account checkup|manage your account|oauth app|connected app)\b/i,
+        /\b(zmiany w regulaminie|aktualizacja regulaminu|polityka prywatno[s\u015b]ci|warunki korzystania)\b/i,
+    ]);
+}
+
+function hasCollaborationInviteSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\binvited you to\b.{0,100}\b(repository|repo|organization|project|workspace)\b/i,
+        /\b(repository invitation|repo invitation|collaboration invitation|invited you to collaborate)\b/i,
+        /\bgithub\b.{0,100}\binvited you\b/i,
+        /\binvited you to\s+[\w.-]+\/[\w.-]+\b/i,
+        /\bzapros(?:i[l\u0142]|zenie).{0,80}\b(repozytorium|projektu|organizacji|workspace)\b/i,
+    ]);
+}
+
+function hasReviewReplySignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\breplied to your review\b/i,
+        /\byour review on google\b/i,
+        /\bdeveloper replied to your review\b/i,
+        /\b(opinia|recenzja).{0,80}\b(odpowied[z\u017a]|odpowiedzia[l\u0142])\b/i,
+    ]);
+}
+
+function hasPlanFeatureUpdateSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(plan|subscription|membership)\b.{0,80}\b(now has|more storage|new storage|storage limit|usage limit|quota|new features|benefits)\b/i,
+        /\b(more storage|storage upgrade|usage limit|quota limit|plan benefits|included with your plan)\b/i,
+        /\bchanges to your\b.{0,60}\b(subscription|plan)\b/i,
+        /\b(plan|subskrypcja|abonament).{0,80}\b(wi[e\u0119]cej miejsca|limit|nowe funkcje|korzy[s\u015b]ci)\b/i,
+    ]);
+}
+
+function hasProductUpdateQuotaSecuritySignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(product update|service update|quota|usage quota|best practices|security best practices|security recommendations)\b/i,
+        /\bgoogle cloud\b.{0,120}\b(action required|quota|security|product update|best practices)\b/i,
+        /\b(action required)\b.{0,120}\b(google cloud|security|quota)\b/i,
+    ]);
+}
+
 function hasStrongSubscriptionSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
         /\b(receipt|order receipt|invoice|payment|billing|charged|automatically charged|renewal|renews|subscription|membership|trial|free trial|trial will end|faktura|rachunek|subskrypcja|abonament|okres pr[o\u00f3]bny|wersja pr[o\u00f3]bna)\b/i,
@@ -507,6 +556,11 @@ function hasNegatedBillingSignal(subjectAndSnippet: string) {
         /nie faktura ani potwierdzenie p[\u0142l]atno[s\u015b]ci/i,
         /nie faktura ani potwierdzenie platnosci/i,
         /nie jest faktur[a\u0105] ani rachunkiem/i,
+        /\bnot a receipt\b/i,
+        /\bnot a billing confirmation\b/i,
+        /\bnot a payment confirmation\b/i,
+        /\bdoes not confirm billing\b/i,
+        /\bdoes not confirm payment\b/i,
     ]);
 }
 
@@ -1289,7 +1343,7 @@ function hasUnreadableEncodedEvidenceSignal(subjectAndSnippet: string) {
 }
 
 function isTrustedPaymentProcessorText(text: string) {
-    return /(?:@|\.)paypal\.com\b|(?:@|\.)stripe\.com\b|(?:@|\.)payu\.(?:com|pl)\b|(?:@|\.)przelewy24\.pl\b|(?:@|\.)autopay\.pl\b|(?:@|\.)tpay\.com\b|(?:@|\.)google\.com\b|payments-noreply@google\.com/i.test(
+    return /(?:@|\.)paypal\.com\b|(?:@|\.)stripe\.com\b|(?:@|\.)payu\.(?:com|pl)\b|(?:@|\.)przelewy24\.pl\b|(?:@|\.)autopay\.pl\b|(?:@|\.)tpay\.com\b|payments-noreply@google\.com|\bgoogle payments\b/i.test(
         text
     );
 }
@@ -1461,9 +1515,94 @@ function cleanInferredProviderName(value: string | undefined) {
         return undefined;
     }
 
-    return cleaned
-        .split(" ")
-        .filter(Boolean)
+    const parts = cleaned.split(" ").filter(Boolean);
+    const normalizedParts = parts.map((part) => part.toLowerCase());
+    const unsafeProviderTokens = new Set([
+        "jan",
+        "january",
+        "feb",
+        "february",
+        "mar",
+        "march",
+        "apr",
+        "april",
+        "may",
+        "jun",
+        "june",
+        "jul",
+        "july",
+        "aug",
+        "august",
+        "sep",
+        "sept",
+        "september",
+        "oct",
+        "october",
+        "nov",
+        "november",
+        "dec",
+        "december",
+        "sty",
+        "styczen",
+        "styczeń",
+        "lut",
+        "luty",
+        "marzec",
+        "kwi",
+        "kwiecien",
+        "kwiecień",
+        "maj",
+        "cze",
+        "czerwiec",
+        "lip",
+        "lipiec",
+        "sie",
+        "sierpien",
+        "sierpień",
+        "wrz",
+        "wrzesien",
+        "wrzesień",
+        "paz",
+        "paź",
+        "pazdziernik",
+        "październik",
+        "lis",
+        "listopad",
+        "gru",
+        "grudzien",
+        "grudzień",
+        "receipt",
+        "order",
+        "invoice",
+        "from",
+        "on",
+        "for",
+        "payment",
+        "paid",
+        "charged",
+        "subscription",
+        "trial",
+        "date",
+        "data",
+        "zamowienie",
+        "zamówienie",
+        "faktura",
+        "rachunek",
+    ]);
+
+    if (
+        normalizedParts.length > 0 &&
+        normalizedParts.every(
+            (part) =>
+                unsafeProviderTokens.has(part) ||
+                /^\d+$/.test(part) ||
+                part.length < 3
+        )
+    ) {
+        return undefined;
+    }
+
+    return parts
         .slice(0, 3)
         .map((part) =>
             part.length <= 4 && part === part.toUpperCase()
@@ -1877,6 +2016,18 @@ function collectDetectionSignals(params: {
     const hasOnboardingOnlyEvidence = hasOnboardingOnlySignal(
         params.subjectAndSnippet
     );
+    const hasAccountAdminUpdateEvidence = hasAccountAdminUpdateSignal(
+        params.subjectAndSnippet
+    );
+    const hasCollaborationInviteEvidence = hasCollaborationInviteSignal(
+        params.subjectAndSnippet
+    );
+    const hasPlanFeatureUpdateEvidence = hasPlanFeatureUpdateSignal(
+        params.subjectAndSnippet
+    );
+    const hasReviewReplyEvidence = hasReviewReplySignal(params.subjectAndSnippet);
+    const hasProductUpdateQuotaSecurityEvidence =
+        hasProductUpdateQuotaSecuritySignal(params.subjectAndSnippet);
     const hasCreditLoanMarketingEvidence = hasCreditLoanMarketingSignal(
         params.subjectAndSnippet
     );
@@ -1975,6 +2126,7 @@ function collectDetectionSignals(params: {
     ]);
     const hasSubscriptionEvidence =
         !hasNegatedSubscriptionEvidence &&
+        !hasCollaborationInviteEvidence &&
         includesAny(params.subjectAndSnippet, [
             /\b(subscription|membership|subskrypcja|subskrypcji|subskrypcj[e\u0119]|subskrypcj[a\u0105]|abonament|abonamentu|abonamentem)\b/i,
         ]);
@@ -2108,6 +2260,11 @@ function collectDetectionSignals(params: {
         hasOnboardingOnlyEvidence,
         hasSubscriptionStartedEvidence,
         hasSubscriptionContinuationEvidence,
+        hasAccountAdminUpdateEvidence,
+        hasCollaborationInviteEvidence,
+        hasPlanFeatureUpdateEvidence,
+        hasReviewReplyEvidence,
+        hasProductUpdateQuotaSecurityEvidence,
     };
 }
 
@@ -2240,6 +2397,15 @@ function classifyMessage(signals: DetectionSignals): MessageClassification {
     } else if (signals.hasAccountSecurityEvidence) {
         messageType = "security_login";
         negativeEvidence.push("security/login/code evidence");
+    } else if (
+        signals.hasAccountAdminUpdateEvidence ||
+        signals.hasCollaborationInviteEvidence ||
+        signals.hasReviewReplyEvidence ||
+        signals.hasProductUpdateQuotaSecurityEvidence ||
+        signals.hasPlanFeatureUpdateEvidence
+    ) {
+        messageType = "security";
+        negativeEvidence.push("account/admin/project update evidence without billing confirmation");
     } else if (
         (signals.hasOneTimePurchaseEvidence || signals.hasTransportTicketEvidence) &&
         !hasExplicitActiveBillingEvidence(signals)
@@ -2762,22 +2928,33 @@ export function analyzeMessageForSubscription(
         reasons.push("+0.15 known provider onboarding signal");
     }
 
-    if (
-        includesAny(combinedText, [
-            /\baction required\b.*\bgoogle cloud\b/i,
-            /\bgoogle cloud\b.*\b(action required|quota|security)\b/i,
-            /\bquota\b/i,
-            /\bcompute\b/i,
-            /\bsecurity best practices\b/i,
-        ])
-    ) {
+    if (signals.hasProductUpdateQuotaSecurityEvidence) {
         confidence -= 0.5;
-        reasons.push("-0.50 Google Cloud quota/security signal");
+        reasons.push("-0.50 product update/quota/security signal");
     }
 
-    if (includesAny(subjectAndSnippet, [/\bterms of service updated\b/i])) {
-        confidence -= 0.35;
-        reasons.push("-0.35 terms of service update signal");
+    if (signals.hasAccountAdminUpdateEvidence) {
+        const penalty = hasRealActiveBillingEvidence(signals) ? 0.25 : 0.75;
+        confidence -= penalty;
+        reasons.push(`-${penalty.toFixed(2)} account/legal/admin update signal`);
+    }
+
+    if (signals.hasCollaborationInviteEvidence) {
+        confidence -= 0.75;
+        reasons.push("-0.75 collaboration/project invitation signal");
+    }
+
+    if (signals.hasReviewReplyEvidence) {
+        confidence -= 0.75;
+        reasons.push("-0.75 review reply signal");
+    }
+
+    if (
+        signals.hasPlanFeatureUpdateEvidence &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.65;
+        reasons.push("-0.65 plan feature/update without active billing evidence");
     }
 
     if (signals.hasNegatedSubscriptionEvidence) {
@@ -3200,6 +3377,18 @@ export function analyzeMessageForSubscription(
     const isBlockedOnboardingOnlyMessage =
         signals.hasOnboardingOnlyEvidence &&
         !hasExplicitActiveBillingEvidence(signals);
+    const isBlockedAccountAdminUpdateMessage =
+        signals.hasAccountAdminUpdateEvidence && !hasRealActiveBillingEvidence(signals);
+    const isBlockedCollaborationInviteMessage =
+        signals.hasCollaborationInviteEvidence && !hasRealActiveBillingEvidence(signals);
+    const isBlockedPlanFeatureUpdateMessage =
+        signals.hasPlanFeatureUpdateEvidence &&
+        !hasExplicitActiveBillingEvidence(signals);
+    const isBlockedReviewReplyMessage =
+        signals.hasReviewReplyEvidence && !hasRealActiveBillingEvidence(signals);
+    const isBlockedProductUpdateQuotaSecurityMessage =
+        signals.hasProductUpdateQuotaSecurityEvidence &&
+        !hasRealActiveBillingEvidence(signals);
 
     if (isBlockedAccountSecurityCodeMessage) {
         reasons.push("-blocked: account/security code message without billing signal");
@@ -3323,6 +3512,26 @@ export function analyzeMessageForSubscription(
         reasons.push("-blocked: onboarding-only message without billing evidence");
     }
 
+    if (isBlockedAccountAdminUpdateMessage) {
+        reasons.push("-blocked: account/legal/admin update without billing evidence");
+    }
+
+    if (isBlockedCollaborationInviteMessage) {
+        reasons.push("-blocked: collaboration/project invitation without billing evidence");
+    }
+
+    if (isBlockedPlanFeatureUpdateMessage) {
+        reasons.push("-blocked: plan feature/update without active billing evidence");
+    }
+
+    if (isBlockedReviewReplyMessage) {
+        reasons.push("-blocked: review reply without billing evidence");
+    }
+
+    if (isBlockedProductUpdateQuotaSecurityMessage) {
+        reasons.push("-blocked: product update/quota/security message without billing evidence");
+    }
+
     const candidateFromPositiveEvidence = isCandidateFromPositiveEvidence(signals);
     const candidateByDecisionPolicy = isCandidateByDecisionPolicy(
         signals,
@@ -3362,6 +3571,11 @@ export function analyzeMessageForSubscription(
             !isBlockedRawHeaderSnippetMessage &&
             !isBlockedPaymentProcessorWithoutMerchantMessage &&
             !isBlockedOnboardingOnlyMessage &&
+            !isBlockedAccountAdminUpdateMessage &&
+            !isBlockedCollaborationInviteMessage &&
+            !isBlockedPlanFeatureUpdateMessage &&
+            !isBlockedReviewReplyMessage &&
+            !isBlockedProductUpdateQuotaSecurityMessage &&
             candidateByDecisionPolicy,
         confidence: normalizedConfidence,
         reasons,

@@ -50,6 +50,136 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
         },
     },
     {
+        name: "Google One terms update EN",
+        input: {
+            id: "fixture-google-one-terms-update-en",
+            from: "Google One <googleone-noreply@google.com>",
+            subject: "We've updated our Google One Terms of Service",
+            snippet:
+                "We updated our terms and privacy information for Google One. Review the changes in your account settings.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.2,
+        },
+    },
+    {
+        name: "Google AI Pro storage update without billing EN",
+        input: {
+            id: "fixture-google-ai-pro-storage-update-en",
+            from: "Google <no-reply@google.com>",
+            subject: "Jakub, your Google AI Pro plan now has more storage",
+            snippet:
+                "Your Google AI Pro plan now includes more storage and new features. Review your benefits in account settings.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.2,
+        },
+    },
+    {
+        name: "Google AI Pro usage limit update without billing EN",
+        input: {
+            id: "fixture-google-ai-pro-usage-limit-update-en",
+            from: "Google <no-reply@google.com>",
+            subject: "Changes to your Google AI Pro subscription",
+            snippet:
+                "We updated usage limits and product features included with your plan. This notice is not a receipt or billing confirmation.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.2,
+        },
+    },
+    {
+        name: "GitHub repo invite with subscription keyword PL",
+        input: {
+            id: "fixture-github-repo-invite-subskrypcje-pl",
+            from: "GitHub <noreply@github.com>",
+            subject: "lukaszned invited you to lukaszned/subskrypcje",
+            snippet:
+                "You can accept or decline this repository invitation. The repository name is subskrypcje.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.1,
+        },
+    },
+    {
+        name: "OpenAI verification code EN",
+        input: {
+            id: "fixture-openai-verification-code-en",
+            from: "OpenAI <noreply@tm.openai.com>",
+            subject: "Your OpenAI code is 155962",
+            snippet:
+                "Use this code to verify your email address. This code expires soon.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.1,
+        },
+    },
+    {
+        name: "Google Play review reply EN",
+        input: {
+            id: "fixture-google-play-review-reply-en",
+            from: "Google Play <noreply@google.com>",
+            subject: "Play replied to your review on Google",
+            snippet:
+                "The developer replied to your review. View the reply in Google Play.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.2,
+        },
+    },
+    {
+        name: "Google account settings review EN",
+        input: {
+            id: "fixture-google-account-settings-review-en",
+            from: "Google <no-reply@accounts.google.com>",
+            subject: "Jakub, review your Google Account settings",
+            snippet:
+                "Review your security settings and devices, including your Apple device, to keep your account safe.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.1,
+        },
+    },
+    {
+        name: "Google Cloud quota security update EN",
+        input: {
+            id: "fixture-google-cloud-quota-security-update-en",
+            from: "Google Cloud <google-cloud-noreply@google.com>",
+            subject: "Action required: Review Google Cloud quota and security best practices",
+            snippet:
+                "Review quota limits, compute settings, and security best practices for your Google Cloud project.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0.1,
+        },
+    },
+    {
+        name: "Google Play trial receipt from month token EN",
+        input: {
+            id: "fixture-google-play-trial-receipt-month-token-en",
+            from: "Google Play <googleplay-noreply@google.com>",
+            subject: "Your Google Play Order Receipt from Nov 10, 2025",
+            snippet:
+                "You have signed up for a trial subscription for YouTube Premium on Google Play. Your trial will end on Dec 10, 2025. You will be automatically charged 25.99 PLN monthly unless canceled.",
+        },
+        expected: {
+            isCandidate: true,
+            provider: "YouTube",
+            name: "YouTube Premium",
+            isTrial: true,
+            billingCycle: "monthly",
+            minConfidence: 0.85,
+        },
+    },
+    {
         name: "Canva Pro trial EN",
         input: {
             id: "fixture-canva-pro-trial-en",
