@@ -717,6 +717,135 @@ function runProductionImapRetrievalStabilityCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runImapFrontendContractCase() {
+    const now = new Date("2026-05-24T12:00:00.000Z");
+    const result = buildProductionImapProductResultForTest(
+        [
+            makeProductionMessage({
+                id: "contract-review",
+                provider: "Contract Stream",
+                category: "streaming_video",
+                subject: "Subscription renewal confirmation",
+                date: "2025-01-01T10:00:00.000Z",
+                snippet: "Your subscription will renew monthly at 29.99 PLN monthly.",
+                messageType: "subscription_continuation",
+                detected: {
+                    provider: "Contract Stream",
+                    billingCycle: "monthly",
+                },
+            }),
+            makeProductionMessage({
+                id: "contract-price",
+                provider: "Contract Prime",
+                name: "Contract Prime Annual",
+                category: "ecommerce_membership",
+                subject: "Your plan price is changing",
+                date: "2026-01-01T10:00:00.000Z",
+                snippet: "Current price: 49.00 PLN/year. New price: 69.00 PLN/year.",
+                messageType: "active_price_change",
+                debug: {
+                    evidenceTiers: ["Tier C active price-change evidence"],
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "contract-bill",
+                provider: "Contract Utility",
+                category: "utilities_energy",
+                subject: "Invoice ready",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 123.45 PLN. Due date: 15.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "contract-promo",
+                provider: "Contract Promo",
+                name: "Contract Promo on Marketplace",
+                category: "streaming_video",
+                subject: "Special offer subscription confirmation",
+                date: "2025-03-01T10:00:00.000Z",
+                snippet: "Special offer at 4.00 PLN monthly for 1 month. After the promotional period, subscription will renew at 24.99 PLN monthly.",
+                messageType: "subscription_continuation",
+                debug: {
+                    billingChannel: "Marketplace",
+                } as ProductionImapScanMessage["debug"],
+            }),
+        ],
+        now
+    );
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const bucketNames = [
+        "currentSubscriptions",
+        "needsReviewSubscriptions",
+        "historicalSubscriptions",
+        "priceChanges",
+        "billsOrUtilities",
+    ] as const;
+
+    for (const bucket of bucketNames) {
+        assertField(`${bucket} is array`, true, Array.isArray(result[bucket]));
+    }
+
+    assertField(
+        "scanSummary has currentSubscriptions",
+        "number",
+        typeof result.scanSummary.currentSubscriptions
+    );
+    assertField(
+        "scanSummary has recommendedDefaultMode",
+        "string",
+        typeof result.scanSummary.recommendedDefaultMode
+    );
+    assertField(
+        "scanSummary has hasOnlyHistoricalEvidence",
+        "boolean",
+        typeof result.scanSummary.hasOnlyHistoricalEvidence
+    );
+
+    const allItems = bucketNames.flatMap((bucket) => result[bucket]);
+    const price = result.priceChanges.find(
+        (item) => item.displayName === "Contract Prime Annual"
+    );
+    const bill = result.billsOrUtilities.find(
+        (item) => item.displayName === "Contract Utility"
+    );
+    const promo = result.needsReviewSubscriptions.find(
+        (item) => item.displayName === "Contract Promo on Marketplace"
+    );
+
+    for (const item of allItems) {
+        assertField(`${item.displayName} productBucket`, "string", typeof item.productBucket);
+        assertField(`${item.displayName} primaryAction`, "string", typeof item.primaryAction);
+        assertField(`${item.displayName} userFacingReason`, "string", typeof item.userFacingReason);
+        assertField(
+            `${item.displayName} userFacingReason no double punctuation`,
+            false,
+            /[.!?]{2,}/.test(item.userFacingReason)
+        );
+    }
+
+    assertField("Price currentAmount", "49.00 PLN/year", price?.currentAmount);
+    assertField("Price futureAmount", "69.00 PLN/year", price?.futureAmount);
+    assertField("Bill dueAmount", "123.45 PLN", bill?.dueAmount);
+    assertField("Promo promoAmount", "4.00 PLN monthly", promo?.promoAmount);
+    assertField("Promo futureAmount", "24.99 PLN monthly", promo?.futureAmount);
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: IMAP frontend contract");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("IMAP frontend contract");
+    console.log("FAIL productResult: IMAP frontend contract");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
 function runPlannerCase(
     name: string,
     profile: "fast" | "balanced" | "deep" | "adaptive",
@@ -1105,6 +1234,7 @@ runProductResultContractCase();
 runProductionImapAggregationCase();
 runProductionImapAmountSemanticsCase();
 runProductionImapRetrievalStabilityCase();
+runImapFrontendContractCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);

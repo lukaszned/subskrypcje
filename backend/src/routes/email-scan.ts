@@ -13,11 +13,42 @@ import {
 } from "../controllers/email-scan.controller";
 import { requireAuth } from "../middlewares/auth.middleware";
 import {
+    ImapScanServiceErrorCode,
     ImapScanServiceError,
     scanImapSubscriptions,
 } from "../services/imap-scan.service";
 
 const router = Router();
+
+const imapErrorResponse: Record<
+    ImapScanServiceErrorCode,
+    { status: number; message: string }
+> = {
+    IMAP_AUTH_FAILED: {
+        status: 401,
+        message: "IMAP authentication failed. Check the username and password.",
+    },
+    IMAP_CONNECTION_TIMEOUT: {
+        status: 504,
+        message: "IMAP connection timed out. Try again or use a different scan profile.",
+    },
+    IMAP_MAILBOX_NOT_FOUND: {
+        status: 404,
+        message: "Requested IMAP mailbox was not found.",
+    },
+    IMAP_UNSUPPORTED: {
+        status: 422,
+        message: "This IMAP server does not support a required scan operation.",
+    },
+    IMAP_CONNECTION_FAILED: {
+        status: 502,
+        message: "Could not connect to the IMAP server.",
+    },
+    IMAP_SCAN_FAILED: {
+        status: 500,
+        message: "IMAP scan failed.",
+    },
+};
 
 const scanImapSchema = z
     .object({
@@ -63,8 +94,10 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
         }
 
         if (error instanceof ImapScanServiceError) {
-            return res.status(500).json({
-                message: "IMAP scan failed.",
+            const response = imapErrorResponse[error.code];
+
+            return res.status(response.status).json({
+                message: response.message,
                 code: error.code,
             });
         }

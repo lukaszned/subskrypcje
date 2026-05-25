@@ -197,6 +197,10 @@ export type ScanImapSubscriptionsResult = {
 
 export type ImapScanServiceErrorCode =
     | "IMAP_CONNECTION_FAILED"
+    | "IMAP_AUTH_FAILED"
+    | "IMAP_CONNECTION_TIMEOUT"
+    | "IMAP_MAILBOX_NOT_FOUND"
+    | "IMAP_UNSUPPORTED"
     | "IMAP_SCAN_FAILED";
 
 export class ImapScanServiceError extends Error {
@@ -207,6 +211,48 @@ export class ImapScanServiceError extends Error {
         super(message);
         this.name = "ImapScanServiceError";
     }
+}
+
+function classifyImapScanError(error: unknown): ImapScanServiceError {
+    const message = error instanceof Error ? error.message : "";
+    const normalized = normalizeAsciiText(message);
+
+    if (/auth|authentication|authenticate|login|credentials|invalid user|password/.test(normalized)) {
+        return new ImapScanServiceError(
+            "IMAP_AUTH_FAILED",
+            "IMAP authentication failed."
+        );
+    }
+
+    if (/timeout|timed out|etimedout/.test(normalized)) {
+        return new ImapScanServiceError(
+            "IMAP_CONNECTION_TIMEOUT",
+            "IMAP connection timed out."
+        );
+    }
+
+    if (/mailbox|folder|not found|no such/.test(normalized)) {
+        return new ImapScanServiceError(
+            "IMAP_MAILBOX_NOT_FOUND",
+            "Requested IMAP mailbox was not found."
+        );
+    }
+
+    if (/unsupported|not supported|capability|invalid command/.test(normalized)) {
+        return new ImapScanServiceError(
+            "IMAP_UNSUPPORTED",
+            "IMAP server does not support a required scan operation."
+        );
+    }
+
+    if (/connect|connection|econnrefused|enotfound|network|socket/.test(normalized)) {
+        return new ImapScanServiceError(
+            "IMAP_CONNECTION_FAILED",
+            "Could not connect to the IMAP server."
+        );
+    }
+
+    return new ImapScanServiceError("IMAP_SCAN_FAILED", "IMAP scan failed.");
 }
 
 type ScanProfileDefaults = {
@@ -2457,10 +2503,7 @@ export async function scanImapSubscriptions(
             throw error;
         }
 
-        throw new ImapScanServiceError(
-            "IMAP_SCAN_FAILED",
-            error instanceof Error ? error.message : "IMAP scan failed."
-        );
+        throw classifyImapScanError(error);
     } finally {
         try {
             await client.logout();
