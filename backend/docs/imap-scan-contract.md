@@ -64,6 +64,20 @@ Backend TODO, post-MVP or before unified UI:
 - Add a backward-compatible Gmail adapter that preserves existing Gmail response fields and adds `productResult` using the same bucket contract.
 - Add import-preview compatibility for Gmail product bucket items after that adapter exists.
 
+### Gmail Legacy Scan Error Codes
+
+`POST /email-scan/gmail/scan` uses safe, frontend-friendly error codes. Responses do not include access tokens, refresh tokens, decrypted credentials, raw Gmail payloads, or raw email bodies.
+
+| HTTP | Code | Frontend behavior |
+| --- | --- | --- |
+| 404 | `GMAIL_CONNECTION_NOT_FOUND` | Ask the user to connect Gmail first. |
+| 409 | `GMAIL_REAUTH_REQUIRED` | Ask the user to reconnect Gmail. |
+| 409 | `GMAIL_TOKEN_DECRYPT_FAILED` | Ask the user to reconnect Gmail; stored token data could not be read. |
+| 409 | `GMAIL_REFRESH_FAILED` | Ask the user to reconnect Gmail; token refresh failed or was revoked. |
+| 500 | `GMAIL_OAUTH_CONFIG_MISSING` | Internal/server setup problem; Gmail OAuth env config is missing. |
+| 502 | `GMAIL_API_FAILED` | Show a safe retry message; Gmail API/network/quota issue. |
+| 500 | `GMAIL_SCAN_FAILED` | Show a generic safe error and report to backend logs. |
+
 ## Request
 
 ```json

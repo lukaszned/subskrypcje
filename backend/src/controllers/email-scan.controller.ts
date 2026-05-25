@@ -107,6 +107,11 @@ function sendGmailOAuthError(res: Response, error: GmailOAuthServiceError) {
 
 function sendGmailScanError(res: Response, error: GmailScanServiceError) {
     switch (error.code) {
+        case "GMAIL_OAUTH_CONFIG_MISSING":
+            return res.status(500).json({
+                message: "Gmail OAuth is not configured on the server.",
+                code: "GMAIL_OAUTH_CONFIG_MISSING",
+            });
         case "GMAIL_CONNECTION_NOT_FOUND":
             return res.status(404).json({
                 message: "Gmail connection not found.",
@@ -117,6 +122,21 @@ function sendGmailScanError(res: Response, error: GmailScanServiceError) {
                 message: "Gmail connection requires reauthorization.",
                 code: "GMAIL_REAUTH_REQUIRED",
             });
+        case "GMAIL_TOKEN_DECRYPT_FAILED":
+            return res.status(409).json({
+                message: "Gmail connection requires reauthorization.",
+                code: "GMAIL_TOKEN_DECRYPT_FAILED",
+            });
+        case "GMAIL_REFRESH_FAILED":
+            return res.status(409).json({
+                message: "Gmail connection requires reauthorization.",
+                code: "GMAIL_REFRESH_FAILED",
+            });
+        case "GMAIL_API_FAILED":
+            return res.status(502).json({
+                message: "Gmail API request failed. Try again later.",
+                code: "GMAIL_API_FAILED",
+            });
         case "GMAIL_SCAN_FAILED":
         default:
             return res.status(500).json({
@@ -124,6 +144,25 @@ function sendGmailScanError(res: Response, error: GmailScanServiceError) {
                 code: "GMAIL_SCAN_FAILED",
             });
     }
+}
+
+function logGmailScanError(error: unknown) {
+    if (error instanceof GmailScanServiceError) {
+        console.error("Error scanning Gmail:", {
+            name: error.name,
+            code: error.code,
+            message: error.message,
+            causeStatus: error.safeCause?.status,
+            causeCode: error.safeCause?.code,
+            causeReason: error.safeCause?.reason,
+        });
+        return;
+    }
+
+    console.error("Error scanning Gmail:", {
+        name: error instanceof Error ? error.name : "UnknownError",
+        message: error instanceof Error ? error.message : "Unknown Gmail scan error",
+    });
 }
 
 export async function getGmailAuthUrlHandler(
@@ -217,7 +256,7 @@ export async function scanGmailHandler(
             message: "Gmail scan completed.",
         });
     } catch (error) {
-        console.error("Error scanning Gmail:", error);
+        logGmailScanError(error);
 
         if (error instanceof ZodError) {
             return sendValidationError(res, error);

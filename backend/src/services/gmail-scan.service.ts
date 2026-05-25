@@ -39,14 +39,25 @@ type GmailScanQuerySummary = {
 };
 
 export type GmailScanErrorCode =
+    | "GMAIL_OAUTH_CONFIG_MISSING"
     | "GMAIL_CONNECTION_NOT_FOUND"
     | "GMAIL_REAUTH_REQUIRED"
+    | "GMAIL_TOKEN_DECRYPT_FAILED"
+    | "GMAIL_REFRESH_FAILED"
+    | "GMAIL_API_FAILED"
     | "GMAIL_SCAN_FAILED";
+
+export type GmailScanSafeCause = {
+    status?: number;
+    code?: string;
+    reason?: string;
+};
 
 export class GmailScanServiceError extends Error {
     constructor(
         public code: GmailScanErrorCode,
-        message: string
+        message: string,
+        public safeCause?: GmailScanSafeCause
     ) {
         super(message);
         this.name = "GmailScanServiceError";
@@ -97,7 +108,7 @@ function getGoogleOAuthConfig() {
 
     if (!clientId || !clientSecret || !redirectUri) {
         throw new GmailScanServiceError(
-            "GMAIL_SCAN_FAILED",
+            "GMAIL_OAUTH_CONFIG_MISSING",
             "Missing Google OAuth configuration."
         );
     }
@@ -160,16 +171,144 @@ function createGmailClient(connection: {
         clientSecret,
         redirectUri
     );
+    let accessToken: string | undefined;
+    let refreshToken: string;
+
+    try {
+        accessToken = connection.accessTokenEncrypted
+            ? decryptString(connection.accessTokenEncrypted)
+            : undefined;
+        refreshToken = decryptString(connection.refreshTokenEncrypted);
+    } catch {
+        throw new GmailScanServiceError(
+            "GMAIL_TOKEN_DECRYPT_FAILED",
+            "Gmail connection requires reauthorization."
+        );
+    }
 
     oauthClient.setCredentials({
-        access_token: connection.accessTokenEncrypted
-            ? decryptString(connection.accessTokenEncrypted)
-            : undefined,
-        refresh_token: decryptString(connection.refreshTokenEncrypted),
+        access_token: accessToken,
+        refresh_token: refreshToken,
         scope: connection.scope || GMAIL_READONLY_SCOPE,
     });
 
     return google.gmail({ version: "v1", auth: oauthClient });
+}
+
+function normalizeErrorText(value: unknown) {
+    return String(value ?? "")
+        .toLowerCase()
+        .slice(0, 500);
+}
+
+function getSafeGoogleErrorInfo(error: unknown): GmailScanSafeCause {
+    const maybeError = error as {
+        code?: unknown;
+        status?: unknown;
+        message?: unknown;
+        response?: {
+            status?: unknown;
+            data?: {
+                error?: unknown;
+                error_description?: unknown;
+                errors?: Array<{ reason?: unknown; message?: unknown }>;
+            };
+        };
+        errors?: Array<{ reason?: unknown; message?: unknown }>;
+    };
+    const statusValue =
+        typeof maybeError.response?.status === "number"
+            ? maybeError.response.status
+            : typeof maybeError.status === "number"
+              ? maybeError.status
+              : typeof maybeError.code === "number"
+                ? maybeError.code
+                : undefined;
+    const firstError =
+        maybeError.response?.data?.errors?.[0] ?? maybeError.errors?.[0];
+    const codeValue =
+        typeof maybeError.response?.data?.error === "string"
+            ? maybeError.response.data.error
+            : typeof maybeError.code === "string"
+              ? maybeError.code
+              : undefined;
+    const reasonValue =
+        typeof firstError?.reason === "string"
+            ? firstError.reason
+            : typeof maybeError.response?.data?.error_description === "string"
+              ? maybeError.response.data.error_description
+              : undefined;
+
+    return {
+        ...(statusValue !== undefined ? { status: statusValue } : {}),
+        ...(codeValue ? { code: codeValue.slice(0, 80) } : {}),
+        ...(reasonValue ? { reason: reasonValue.slice(0, 120) } : {}),
+    };
+}
+
+function classifyGmailScanFailure(error: unknown): GmailScanServiceError {
+    if (error instanceof GmailScanServiceError) {
+        return error;
+    }
+
+    const safeCause = getSafeGoogleErrorInfo(error);
+    const text = normalizeErrorText(
+        [
+            error instanceof Error ? error.message : "",
+            safeCause.code,
+            safeCause.reason,
+        ].join(" ")
+    );
+
+    if (/invalid_grant|token.*expired|refresh.*token|invalid.*token/.test(text)) {
+        return new GmailScanServiceError(
+            "GMAIL_REFRESH_FAILED",
+            "Gmail connection requires reauthorization.",
+            safeCause
+        );
+    }
+
+    if (
+        safeCause.status === 401 ||
+        /unauthorized|invalid credentials|login required/.test(text)
+    ) {
+        return new GmailScanServiceError(
+            "GMAIL_REAUTH_REQUIRED",
+            "Gmail connection requires reauthorization.",
+            safeCause
+        );
+    }
+
+    if (
+        safeCause.status === 403 ||
+        /insufficient.*permission|insufficient.*scope|forbidden|access denied/.test(
+            text
+        )
+    ) {
+        return new GmailScanServiceError(
+            "GMAIL_REAUTH_REQUIRED",
+            "Gmail connection requires reauthorization.",
+            safeCause
+        );
+    }
+
+    if (
+        safeCause.status === 429 ||
+        (safeCause.status !== undefined && safeCause.status >= 500) ||
+        /rate.?limit|quota|timeout|network|econn|socket|api/.test(text)
+    ) {
+        return new GmailScanServiceError(
+            "GMAIL_API_FAILED",
+            "Gmail API request failed.",
+            safeCause
+        );
+    }
+
+    return new GmailScanServiceError(
+        "GMAIL_SCAN_FAILED",
+        "Gmail scan failed.",
+        safeCause
+    );
 }
 
 async function analyzeGmailMessage(
@@ -450,13 +589,6 @@ export async function scanGmailForUser(userId: string, params: ScanGmailParams) 
             debugMessages: buildDebugMessages(analyzedMessages),
         };
     } catch (error) {
-        if (error instanceof GmailScanServiceError) {
-            throw error;
-        }
-
-        throw new GmailScanServiceError(
-            "GMAIL_SCAN_FAILED",
-            "Gmail scan failed."
-        );
+        throw classifyGmailScanFailure(error);
     }
 }
