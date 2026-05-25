@@ -17,6 +17,7 @@ import {
     ImapScanServiceError,
     scanImapSubscriptions,
 } from "../services/imap-scan.service";
+import { buildImportPreview } from "../services/scan-result-import.service";
 
 const router = Router();
 
@@ -99,6 +100,27 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
             return res.status(response.status).json({
                 message: response.message,
                 code: error.code,
+            });
+        }
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+});
+router.post("/import-preview", requireAuth, async (req, res) => {
+    try {
+        return res.json(buildImportPreview(req.body ?? {}));
+    } catch (error) {
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                message: "Validation error",
+                code: "VALIDATION_ERROR",
+                errors: error.issues.map((issue) => ({
+                    field: issue.path.join("."),
+                    message: issue.message,
+                })),
             });
         }
 

@@ -213,3 +213,84 @@ IMAP errors are credential-safe and do not include raw server internals:
 - User confirmation/ignore/accept flows for IMAP product buckets are frontend/product work still to be wired.
 - Some providers have weak server-side IMAP search; adaptive/deep scans use metadata prepass and time-bucket fallback.
 - The scan intentionally avoids returning raw email bodies.
+
+## Import / Confirmation Flow
+
+Frontend should not create subscriptions directly from the scan response without user confirmation.
+
+Recommended flow:
+
+1. Call `POST /email-scan/imap/scan`.
+2. Render `productResult` buckets.
+3. User selects items to confirm/import.
+4. Call `POST /email-scan/import-preview` with selected product items.
+5. Show normalized drafts and warnings.
+6. Later, after explicit user confirmation, frontend can call the existing subscription creation endpoint with an edited draft.
+
+`POST /email-scan/import-preview` requires auth and does not write to the database.
+
+Request:
+
+```json
+{
+  "items": [
+    {
+      "id": "skyshowtime|prime_video|streaming_video",
+      "displayName": "SkyShowtime on Prime Video",
+      "provider": "SkyShowtime",
+      "billingChannel": "Prime Video",
+      "category": "streaming_video",
+      "status": "stale_needs_review",
+      "productBucket": "needsReviewSubscriptions",
+      "primaryAction": "confirm_still_active",
+      "displayAmount": "4,00 zł miesięcznie",
+      "promoAmount": "4,00 zł miesięcznie",
+      "futureAmount": "24,99 zł miesięcznie",
+      "regularAmount": "24,99 zł miesięcznie",
+      "billingCycle": "monthly",
+      "lastEvidenceDate": "2025-01-13T10:00:00.000Z"
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "drafts": [
+    {
+      "sourceItemId": "skyshowtime|prime_video|streaming_video",
+      "recommendedAction": "create_subscription",
+      "draft": {
+        "name": "SkyShowtime on Prime Video",
+        "provider": "SkyShowtime",
+        "amount": 24.99,
+        "currency": "PLN",
+        "category": "entertainment",
+        "billingCycle": "monthly",
+        "status": "pending",
+        "notes": "Imported from IMAP scan preview..."
+      },
+      "warnings": [
+        "User should confirm this historical subscription is still active."
+      ]
+    }
+  ]
+}
+```
+
+`recommendedAction` values:
+
+- `create_subscription`: can become a normal subscription draft after user confirmation.
+- `review_price_change`: do not create a new subscription automatically; user should apply the change to an existing record if relevant.
+- `review_bill`: bill-like item. It can be represented by the current subscription model using `isRecurringBill=true`, but should be reviewed first.
+- `skip`: historical or unsupported item.
+
+Mapping notes:
+
+- `displayName/provider` become `name/provider`.
+- `regularAmount` is preferred for subscription drafts when available.
+- `dueAmount` is preferred for bill drafts.
+- `billingChannel`, amount semantics, evidence dates, and source message count are preserved in `notes`.
+- The endpoint never stores raw email bodies, IMAP credentials, or debug message payloads.

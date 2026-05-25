@@ -16,6 +16,7 @@ import {
     classifyProductBucket,
     ProductBucketInput,
 } from "../services/subscription-product-buckets.service";
+import { buildImportPreview } from "../services/scan-result-import.service";
 
 type AssertionFailure = {
     field: string;
@@ -127,6 +128,9 @@ const failedBucketCases: string[] = [];
 let productResultPassed = 0;
 let productResultFailed = 0;
 const failedProductResultCases: string[] = [];
+let importPreviewPassed = 0;
+let importPreviewFailed = 0;
+const failedImportPreviewCases: string[] = [];
 
 function makeProductionMessage(
     input: Partial<ProductionImapScanMessage> & {
@@ -846,6 +850,117 @@ function runImapFrontendContractCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runImportPreviewCase() {
+    const payload = {
+        items: [
+            {
+                id: "stale-sub",
+                displayName: "Review Stream",
+                provider: "Review Stream",
+                category: "streaming_video",
+                status: "stale_needs_review",
+                productBucket: "needsReviewSubscriptions",
+                primaryAction: "confirm_still_active",
+                displayAmount: "29.99 PLN monthly",
+                regularAmount: "29.99 PLN monthly",
+                billingCycle: "monthly",
+                lastEvidenceDate: "2025-01-01T00:00:00.000Z",
+                lastSeen: "2025-01-01T00:00:00.000Z",
+                sourceMessagesCount: 2,
+            },
+            {
+                id: "promo-sub",
+                displayName: "Promo Stream",
+                provider: "Promo Stream",
+                billingChannel: "Marketplace",
+                category: "streaming_video",
+                status: "stale_needs_review",
+                productBucket: "needsReviewSubscriptions",
+                primaryAction: "confirm_still_active",
+                promoAmount: "4.00 PLN monthly",
+                futureAmount: "24.99 PLN monthly",
+                regularAmount: "24.99 PLN monthly",
+                displayAmount: "4.00 PLN monthly",
+                amountKind: "promo_price",
+                billingCycle: "monthly",
+                lastEvidenceDate: "2025-01-01T00:00:00.000Z",
+            },
+            {
+                id: "price-change",
+                displayName: "Annual Prime",
+                provider: "Annual Prime",
+                category: "ecommerce_membership",
+                status: "price_change",
+                productBucket: "priceChanges",
+                primaryAction: "review_price_change",
+                currentAmount: "49.00 PLN/year",
+                futureAmount: "69.00 PLN/year",
+            },
+            {
+                id: "bill",
+                displayName: "Utility Bill",
+                provider: "Utility Bill",
+                category: "utilities_energy",
+                status: "stale_needs_review",
+                productBucket: "billsOrUtilities",
+                primaryAction: "review_old_bill",
+                dueAmount: "123.45 PLN",
+                dueDateText: "15.04.2025",
+                billingCycle: "monthly",
+            },
+        ],
+    };
+    const preview = buildImportPreview(payload);
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const byId = (id: string) =>
+        preview.drafts.find((draft) => draft.sourceItemId === id);
+    const stale = byId("stale-sub");
+    const promo = byId("promo-sub");
+    const price = byId("price-change");
+    const bill = byId("bill");
+    let invalidRejected = false;
+
+    try {
+        buildImportPreview({ items: [{}] });
+    } catch {
+        invalidRejected = true;
+    }
+
+    assertField("Draft count", 4, preview.drafts.length);
+    assertField("Stale action", "create_subscription", stale?.recommendedAction);
+    assertField("Stale category", "entertainment", stale?.draft?.category);
+    assertField("Stale review warning", true, stale?.warnings.some((warning) => warning.includes("confirm")));
+    assertField("Promo action", "create_subscription", promo?.recommendedAction);
+    assertField("Promo regular amount parsed", 24.99, promo?.draft?.amount);
+    assertField("Promo future in notes", true, promo?.draft?.notes?.includes("Future amount: 24.99 PLN monthly"));
+    assertField("Promo channel in notes", true, promo?.draft?.notes?.includes("Billing channel: Marketplace"));
+    assertField("Price action", "review_price_change", price?.recommendedAction);
+    assertField("Price no draft", undefined, price?.draft);
+    assertField("Bill action", "review_bill", bill?.recommendedAction);
+    assertField("Bill category", "utilities", bill?.draft?.category);
+    assertField("Bill amount", 123.45, bill?.draft?.amount);
+    assertField("Bill nextPaymentDate", "2025-04-15T00:00:00.000Z", bill?.draft?.nextPaymentDate);
+    assertField("No debug in notes", false, /raw|snippet|password|credential|debug/i.test(JSON.stringify(preview)));
+    assertField("Invalid item rejected", true, invalidRejected);
+
+    if (failures.length === 0) {
+        importPreviewPassed += 1;
+        console.log("PASS importPreview: scan item mapping");
+        return;
+    }
+
+    importPreviewFailed += 1;
+    failedImportPreviewCases.push("scan item mapping");
+    console.log("FAIL importPreview: scan item mapping");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify(preview, null, 2));
+}
+
 function runPlannerCase(
     name: string,
     profile: "fast" | "balanced" | "deep" | "adaptive",
@@ -1235,6 +1350,7 @@ runProductionImapAggregationCase();
 runProductionImapAmountSemanticsCase();
 runProductionImapRetrievalStabilityCase();
 runImapFrontendContractCase();
+runImportPreviewCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);
@@ -1276,6 +1392,8 @@ console.log(`Bucket Passed: ${bucketPassed}`);
 console.log(`Bucket Failed: ${bucketFailed}`);
 console.log(`ProductResult Passed: ${productResultPassed}`);
 console.log(`ProductResult Failed: ${productResultFailed}`);
+console.log(`ImportPreview Passed: ${importPreviewPassed}`);
+console.log(`ImportPreview Failed: ${importPreviewFailed}`);
 
 if (passedCaseNames.length > 0) {
     console.log(`Passed cases: ${passedCaseNames.join(", ")}`);
@@ -1298,5 +1416,10 @@ if (failedBucketCases.length > 0) {
 
 if (failedProductResultCases.length > 0) {
     console.log(`Failed productResult cases: ${failedProductResultCases.join(", ")}`);
+    process.exitCode = 1;
+}
+
+if (failedImportPreviewCases.length > 0) {
+    console.log(`Failed importPreview cases: ${failedImportPreviewCases.join(", ")}`);
     process.exitCode = 1;
 }
