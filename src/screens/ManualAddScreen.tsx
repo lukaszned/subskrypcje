@@ -47,6 +47,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { formatInputDate, parseAppDate } from '../utils/date';
 import { isTimeoutLikeError } from '../utils/requestErrors';
 import { fetchEstimatedCost, type EstimatedCostPlan } from '../services/aiPricePredictor';
+import { buildSubscriptionNotesPayload, dateToSeasonInput, parseSubscriptionNotes } from '../utils/subscriptionNotes';
 
 const CATEGORIES: Array<{
   id: SubscriptionCategory;
@@ -200,6 +201,10 @@ export const ManualAddScreen = () => {
   const [showTrialPicker, setShowTrialPicker] = useState(false);
   const [notes, setNotes] = useState('');
   const [cancelUrl, setCancelUrl] = useState('');
+  const [isSeasonal, setIsSeasonal] = useState(false);
+  const [seasonEndDate, setSeasonEndDate] = useState(() => addMonthsClamped(new Date(), 3));
+  const [showSeasonPicker, setShowSeasonPicker] = useState(false);
+  const [seasonReason, setSeasonReason] = useState('');
 
   const [selectedService, setSelectedService] = useState<PopularSubscription | null>(null);
   const [isShared, setIsShared] = useState(false);
@@ -368,21 +373,19 @@ export const ManualAddScreen = () => {
       setIsTrial(existingSub.isTrial);
       setCancelUrl(existingSub.cancelUrl || '');
 
-      let parsedText = existingSub.notes || '';
-      try {
-        if (existingSub.notes?.startsWith('{')) {
-          const parsed = JSON.parse(existingSub.notes);
-          if (parsed.text !== undefined) parsedText = parsed.text;
-          if (parsed.isShared !== undefined) setIsShared(parsed.isShared);
-          if (parsed.peopleCount !== undefined) setPeopleCount(parsed.peopleCount);
-          if (parsed.includeInStats !== undefined) setIncludeInStats(parsed.includeInStats);
-          
-          if (parsed.isShared && parsed.peopleCount && existingSub.amount) {
-            setAmount((existingSub.amount * parsed.peopleCount).toString());
-          }
-        }
-      } catch (e) {
-        // Not a JSON string
+      const parsed = parseSubscriptionNotes(existingSub.notes);
+      let parsedText = parsed.text;
+      if (parsed.isShared !== undefined) setIsShared(parsed.isShared);
+      if (parsed.peopleCount !== undefined) setPeopleCount(parsed.peopleCount);
+      if (parsed.includeInStats !== undefined) setIncludeInStats(parsed.includeInStats);
+      if (parsed.isSeasonal !== undefined) setIsSeasonal(Boolean(parsed.isSeasonal));
+      if (parsed.seasonEndDate) {
+        setSeasonEndDate(parseAppDate(parsed.seasonEndDate) || addMonthsClamped(new Date(), 3));
+      }
+      if (parsed.seasonReason !== undefined) setSeasonReason(parsed.seasonReason);
+
+      if (parsed.isShared && parsed.peopleCount && existingSub.amount) {
+        setAmount((existingSub.amount * parsed.peopleCount).toString());
       }
       setNotes(parsedText);
       setCancelUrl(existingSub.cancelUrl || '');
@@ -407,6 +410,11 @@ export const ManualAddScreen = () => {
   const onTrialDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') setShowTrialPicker(false);
     if (selectedDate) setTrialEndDate(selectedDate);
+  };
+
+  const onSeasonDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
+    if (Platform.OS === 'android') setShowSeasonPicker(false);
+    if (selectedDate) setSeasonEndDate(selectedDate);
   };
 
   const formatDate = (d: Date) => {
@@ -476,11 +484,14 @@ export const ManualAddScreen = () => {
     setIsSubmitted(true);
     if (!isValid || createMutation.isPending || updateMutation.isPending) return;
 
-    const notesPayload = JSON.stringify({
+    const notesPayload = buildSubscriptionNotesPayload({
       text: notes.trim(),
       isShared,
-      peopleCount: isShared ? peopleCount : undefined,
+      peopleCount,
       includeInStats,
+      isSeasonal,
+      seasonEndDate: dateToSeasonInput(seasonEndDate),
+      seasonReason,
     });
 
     const payload = {
@@ -1101,6 +1112,50 @@ export const ManualAddScreen = () => {
                           Po wyłączeniu koszt tej usługi nie będzie doliczany do podsumowań i trendów subskrypcji.
                         </Text>
                       </View>
+
+                      <View style={styles.optionalGroup}>
+                        <View style={styles.rowBetween}>
+                          <View style={{ flex: 1, paddingRight: 14 }}>
+                            <Text style={styles.labelOptional}>Subskrypcja sezonowa</Text>
+                            <Text style={[styles.infoBoxText, { color: theme.colors.textMuted }]}>
+                              Oznacz usługi kupione tylko na sezon, np. sport, serial, wakacje albo kurs.
+                            </Text>
+                          </View>
+                          <TouchableOpacity
+                            onPress={() => setIsSeasonal(!isSeasonal)}
+                            style={[styles.toggle, isSeasonal && { backgroundColor: theme.colors.primary }]}
+                          >
+                            <View style={[styles.toggleDot, isSeasonal && styles.toggleDotActive]} />
+                          </TouchableOpacity>
+                        </View>
+
+                        {isSeasonal && (
+                          <View style={styles.seasonalBox}>
+                            <TouchableOpacity style={styles.dateButton} onPress={() => setShowSeasonPicker(true)}>
+                              <Calendar size={18} color={theme.colors.primary} />
+                              <View style={{ flex: 1 }}>
+                                <Text style={styles.dateButtonLabel}>Koniec sezonu</Text>
+                                <Text style={styles.dateButtonText}>{formatDate(seasonEndDate)}</Text>
+                              </View>
+                            </TouchableOpacity>
+                            {showSeasonPicker && (
+                              <DateTimePicker
+                                value={seasonEndDate}
+                                mode="date"
+                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                                onChange={onSeasonDateChange}
+                              />
+                            )}
+                            <TextInput
+                              style={[styles.textInput, { marginTop: 10 }]}
+                              value={seasonReason}
+                              onChangeText={setSeasonReason}
+                              placeholder="Np. tylko na wakacje, sezon sportowy, konkretny kurs..."
+                              placeholderTextColor={theme.colors.textSubtle}
+                            />
+                          </View>
+                        )}
+                      </View>
                     </>
                   )}
                 </View>
@@ -1327,6 +1382,8 @@ const styles = StyleSheet.create({
   pillText: { color: vibrantTheme.colors.textMuted, fontWeight: '700' },
   pillTextActive: { color: vibrantTheme.colors.primary },
   dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.09)', padding: 15, borderRadius: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  dateButtonLabel: { color: vibrantTheme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 2 },
+  dateButtonText: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
   dateText: { fontSize: 16, fontWeight: '700', color: vibrantTheme.colors.primary },
   dateHint: { marginTop: 8, fontSize: 12, fontWeight: '700', lineHeight: 16 },
   catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: vibrantTheme.colors.border },
@@ -1351,6 +1408,14 @@ const styles = StyleSheet.create({
     color: vibrantTheme.colors.primary,
     fontWeight: '500',
     lineHeight: 16,
+  },
+  seasonalBox: {
+    marginTop: 12,
+    borderRadius: 20,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
   saveButton: {
     backgroundColor: vibrantTheme.colors.primary,

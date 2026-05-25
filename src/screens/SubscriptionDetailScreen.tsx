@@ -43,6 +43,7 @@ import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
+import { getSeasonalStatus, parseSubscriptionNotes } from '../utils/subscriptionNotes';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
@@ -144,15 +145,8 @@ export const SubscriptionDetailScreen = () => {
   const nextDaysLeft = daysUntilDate(sub.nextPaymentDate);
   const trialDaysLeft = daysUntilDate(sub.trialEndDate);
 
-  let parsedNotes = { text: sub.notes || '', isShared: false, peopleCount: undefined as number | undefined };
-  try {
-    if (sub.notes?.startsWith('{')) {
-      const parsed = JSON.parse(sub.notes);
-      if (parsed.text !== undefined) parsedNotes.text = parsed.text;
-      if (parsed.isShared !== undefined) parsedNotes.isShared = parsed.isShared;
-      if (parsed.peopleCount !== undefined) parsedNotes.peopleCount = parsed.peopleCount;
-    }
-  } catch(e) {}
+  const parsedNotes = parseSubscriptionNotes(sub.notes);
+  const seasonalStatus = getSeasonalStatus(sub.notes);
 
   const statusConfig = (() => {
     if (sub.status === 'canceled') return { label: 'Anulowana', color: theme.colors.textMuted, bg: theme.colors.cardStrong };
@@ -306,6 +300,26 @@ export const SubscriptionDetailScreen = () => {
           </View>
           {sub.status !== 'canceled' && <ArrowRight size={18} color={theme.colors.textMuted} />}
         </TouchableOpacity>
+
+        {seasonalStatus.isSeasonal && (
+          <TouchableOpacity
+            style={[styles.seasonalCard, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}
+            activeOpacity={0.86}
+            onPress={() => navigation.navigate('AddSubscription', { subscriptionId: id })}
+          >
+            <View style={[styles.seasonalIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
+              <Calendar size={21} color={theme.colors.primary} />
+            </View>
+            <View style={styles.seasonalBody}>
+              <Text style={styles.seasonalTitle}>Subskrypcja sezonowa</Text>
+              <Text style={styles.seasonalDesc}>{seasonalStatus.hint}</Text>
+              {!!seasonalStatus.reason && (
+                <Text style={styles.seasonalReason}>Powód: {seasonalStatus.reason}</Text>
+              )}
+            </View>
+            <ArrowRight size={18} color={theme.colors.textMuted} />
+          </TouchableOpacity>
+        )}
 
         <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.infoRow}>
@@ -545,6 +559,12 @@ const styles = StyleSheet.create({
   readinessBody: { flex: 1 },
   readinessTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
   readinessDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '600', lineHeight: 18, marginTop: 4 },
+  seasonalCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
+  seasonalIcon: { width: 46, height: 46, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  seasonalBody: { flex: 1 },
+  seasonalTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
+  seasonalDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 18, marginTop: 4 },
+  seasonalReason: { color: vibrantTheme.colors.text, fontSize: 12, fontWeight: '800', lineHeight: 17, marginTop: 8 },
   infoCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 26, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   trialRow: { backgroundColor: 'rgba(251,191,36,0.12)', padding: 12, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)' },

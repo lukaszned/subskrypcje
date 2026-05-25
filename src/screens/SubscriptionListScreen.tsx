@@ -44,6 +44,7 @@ import { SkeletonList } from '../components/LoadingState';
 import { PressableScale } from '../components/PressableScale';
 import { GlassCard, MetricTile, SectionHeader } from '../components/ui/PremiumPrimitives';
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
+import { getSeasonalStatus } from '../utils/subscriptionNotes';
 
 const toMonthlyAmount = (subscription: Subscription) => {
   const amount = Number(subscription.amount || 0);
@@ -69,7 +70,7 @@ export const SubscriptionListScreen = () => {
   const { theme } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all'>('all');
+  const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all' | 'seasonal'>('all');
   const [sortOption, setSortOption] = useState<{ field: string, order: 'asc' | 'desc' }>({ field: 'nextPaymentDate', order: 'asc' });
 
   const { data: allSubscriptions = [], isLoading, isFetching, isRefetching, isError, error, refetch } = useSubscriptions();
@@ -92,12 +93,17 @@ export const SubscriptionListScreen = () => {
       }))
   ), [allSubscriptions]);
 
-  const subscriptions = useMemo(() => filterAndSortSubscriptions(normalizedSubscriptions, {
-    search: searchQuery,
-    status: activeStatus === 'all' ? undefined : activeStatus,
-    sortBy: sortOption.field,
-    sortOrder: sortOption.order,
-  }), [activeStatus, normalizedSubscriptions, searchQuery, sortOption.field, sortOption.order]);
+  const subscriptions = useMemo(() => {
+    const base = filterAndSortSubscriptions(normalizedSubscriptions, {
+      search: searchQuery,
+      status: activeStatus === 'all' || activeStatus === 'seasonal' ? undefined : activeStatus,
+      sortBy: sortOption.field,
+      sortOrder: sortOption.order,
+    });
+
+    if (activeStatus !== 'seasonal') return base;
+    return base.filter((item) => item.status !== 'canceled' && getSeasonalStatus(item.notes).isSeasonal);
+  }, [activeStatus, normalizedSubscriptions, searchQuery, sortOption.field, sortOption.order]);
 
   const portfolioStats = useMemo(() => {
     const counted = normalizedSubscriptions.filter((item) => item.status !== 'canceled' && item.includeInStats !== false);
@@ -207,6 +213,8 @@ export const SubscriptionListScreen = () => {
     </View>
   );
   const renderItem = ({ item }: { item: Subscription }) => {
+    const seasonalStatus = getSeasonalStatus(item.notes);
+
     return (
       <SubscriptionListItem
         item={{
@@ -223,6 +231,8 @@ export const SubscriptionListScreen = () => {
           cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle || 'Co miesiąc',
           status: item.status,
           isTrial: item.isTrial,
+          isSeasonal: seasonalStatus.isSeasonal,
+          seasonEndLabel: seasonalStatus.label,
         }}
         onDelete={(id) => handleCancel(id, item.name)}
         onPause={(id) => handlePay(id, item.name)}
@@ -298,6 +308,7 @@ export const SubscriptionListScreen = () => {
               { id: 'pending', label: 'Aktywne' },
               { id: 'paid', label: 'Opłacone' },
               { id: 'overdue', label: 'Zaległe' },
+              { id: 'seasonal', label: 'Sezonowe' },
               { id: 'canceled', label: 'Anulowane' },
             ].map(tab => (
               <PressableScale

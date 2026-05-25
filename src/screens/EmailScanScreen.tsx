@@ -141,6 +141,28 @@ const DEFAULT_IMAP_PRESET = IMAP_PROVIDER_PRESETS[0];
 
 type ProductBucket = 'current' | 'review' | 'history' | 'price' | 'bill';
 type ProductFilter = 'all' | ProductBucket;
+type EmailScanWizardStep = 'source' | 'scan' | 'review' | 'preview';
+
+type ProductSectionDefinition = {
+  bucket: ProductBucket;
+  label: string;
+  title: string;
+  caption: string;
+  icon: React.ComponentType<{ size?: number; color?: string }>;
+  items: EmailScanProductItem[];
+};
+
+const EMAIL_SCAN_WIZARD_STEPS: {
+  id: EmailScanWizardStep;
+  label: string;
+  caption: string;
+  icon: React.ComponentType<{ size?: number; color?: string }>;
+}[] = [
+  { id: 'source', label: 'Źródło', caption: 'Wybór skrzynki', icon: Mail },
+  { id: 'scan', label: 'Skan', caption: 'Bez zapisu', icon: Search },
+  { id: 'review', label: 'Review', caption: 'Buckety', icon: ShieldCheck },
+  { id: 'preview', label: 'Preview', caption: 'Drafty', icon: FileText },
+];
 
 type SelectedProductReview = {
   item: EmailScanProductItem;
@@ -400,6 +422,7 @@ export const EmailScanScreen = () => {
   const [selectedImportItems, setSelectedImportItems] = useState<Record<string, boolean>>({});
   const [selectedProductReview, setSelectedProductReview] = useState<SelectedProductReview>(null);
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
+  const [wizardStep, setWizardStep] = useState<EmailScanWizardStep>('source');
   const [renderReviewContent, setRenderReviewContent] = useState(false);
   const [scanSource, setScanSource] = useState<'gmail' | 'imap'>('gmail');
   const [imapHost, setImapHost] = useState(DEFAULT_IMAP_PRESET.host);
@@ -417,6 +440,18 @@ export const EmailScanScreen = () => {
   const isConnected = !!status?.gmailConnected;
   const shouldShowProductResult = !!lastScanProductResult;
   const isAnyScanPending = scanMutation.isPending || imapScanMutation.isPending;
+  const selectedImportCount = useMemo(
+    () => Object.values(selectedImportItems).filter(Boolean).length,
+    [selectedImportItems]
+  );
+  const productFindingCount = useMemo(() => {
+    if (!lastScanProductResult) return 0;
+    return lastScanProductResult.currentSubscriptions.length +
+      lastScanProductResult.needsReviewSubscriptions.length +
+      lastScanProductResult.historicalSubscriptions.length +
+      lastScanProductResult.priceChanges.length +
+      lastScanProductResult.billsOrUtilities.length;
+  }, [lastScanProductResult]);
   const canRunImapScan = imapHost.trim().length > 0 &&
     Number(imapPort) > 0 &&
     imapUsername.trim().length > 0 &&
@@ -455,6 +490,7 @@ export const EmailScanScreen = () => {
       onSuccess: async ({ authUrl }) => {
         try {
           await Linking.openURL(authUrl);
+          setWizardStep('scan');
           Alert.alert(
             'Połącz Gmaila',
             'Po autoryzacji wróć do aplikacji i odśwież status połączenia.'
@@ -471,6 +507,7 @@ export const EmailScanScreen = () => {
 
   const handleScan = (overrides: Partial<GmailScanRequest> = {}) => {
     setScanSource('gmail');
+    setWizardStep('scan');
     setDryRunResults(null);
     const payload: GmailScanRequest = {
       limit: 25,
@@ -489,6 +526,7 @@ export const EmailScanScreen = () => {
         setSelectedImportItems({});
         setImportPreviewResult(null);
         setProductFilter('all');
+        setWizardStep('review');
         if (payload.dryRun) {
           setDryRunResults(result.created || []);
           Alert.alert(
@@ -539,6 +577,7 @@ export const EmailScanScreen = () => {
     };
 
     setScanSource('imap');
+    setWizardStep('scan');
     setDryRunResults(null);
     imapScanMutation.mutate(payload, {
       onSuccess: (result: ImapScanResponse) => {
@@ -549,6 +588,7 @@ export const EmailScanScreen = () => {
         setSelectedImportItems({});
         setImportPreviewResult(null);
         setProductFilter(productResult?.scanSummary?.recommendedDefaultMode === 'review' ? 'review' : 'all');
+        setWizardStep('review');
         Alert.alert(
           'Skan IMAP zakończony',
           result.message || `Przeanalizowano ${result.scannedMessages ?? 0} wiadomości.`
@@ -583,6 +623,7 @@ export const EmailScanScreen = () => {
     }, {
       onSuccess: (result) => {
         setImportPreviewResult(result);
+        setWizardStep('preview');
       },
       onError: (error: any) => {
         Alert.alert(
@@ -608,6 +649,7 @@ export const EmailScanScreen = () => {
     setImportPreviewResult(null);
     setSelectedProductReview(null);
     setProductFilter('all');
+    setWizardStep('review');
   };
 
   const handleIgnore = (detection: DetectedSubscription) => {
@@ -1191,6 +1233,63 @@ export const EmailScanScreen = () => {
     );
   };
 
+  const getProductSections = (productResult: EmailScanProductResult): ProductSectionDefinition[] => [
+    {
+      bucket: 'current',
+      label: 'Aktywne',
+      title: 'Aktywne subskrypcje',
+      caption: 'Świeże dowody sugerują, że te usługi są obecnie aktywne.',
+      icon: CheckCircle,
+      items: productResult.currentSubscriptions,
+    },
+    {
+      bucket: 'review',
+      label: 'Do sprawdzenia',
+      title: 'Potwierdź, czy nadal aktywne',
+      caption: 'Mocne historyczne dowody, ale za stare, żeby udawać pewność.',
+      icon: History,
+      items: productResult.needsReviewSubscriptions,
+    },
+    {
+      bucket: 'price',
+      label: 'Ceny',
+      title: 'Zmiany cen',
+      caption: 'Alerty o nowych cenach, promocjach lub wzroście kosztu planu.',
+      icon: Tag,
+      items: productResult.priceChanges,
+    },
+    {
+      bucket: 'bill',
+      label: 'Rachunki',
+      title: 'Rachunki i usługi',
+      caption: 'Formalne rachunki i usługi pokazane osobno od subskrypcji.',
+      icon: FileText,
+      items: productResult.billsOrUtilities,
+    },
+    {
+      bucket: 'history',
+      label: 'Historia',
+      title: 'Historia',
+      caption: 'Archiwalne lub słabsze sygnały, które mogą pomóc w audycie.',
+      icon: Inbox,
+      items: productResult.historicalSubscriptions,
+    },
+  ];
+
+  const getImportEntries = (productResult: EmailScanProductResult): EmailScanImportSelection[] =>
+    getProductSections(productResult).flatMap((section) =>
+      section.items.map((item, index) => {
+        const key = getProductItemKey(item, section.bucket, index);
+
+        return {
+          key,
+          bucket: section.bucket,
+          item,
+          action: locallyReviewedProductItems[key] || getProductItemAction(item),
+        };
+      })
+    );
+
   const renderProductResult = () => {
     if (!lastScanProductResult) return null;
 
@@ -1221,48 +1320,7 @@ export const EmailScanScreen = () => {
       lastScanProductResult.priceChanges.length > 0 ||
       lastScanProductResult.billsOrUtilities.length > 0;
     const pendingCount = Math.max(0, reviewItems.length - reviewedCount);
-    const productSections = [
-      {
-        bucket: 'current' as ProductBucket,
-        label: 'Aktywne',
-        title: 'Aktywne subskrypcje',
-        caption: 'Świeże dowody sugerują, że te usługi są obecnie aktywne.',
-        icon: CheckCircle,
-        items: lastScanProductResult.currentSubscriptions,
-      },
-      {
-        bucket: 'review' as ProductBucket,
-        label: 'Do sprawdzenia',
-        title: 'Potwierdź, czy nadal aktywne',
-        caption: 'Mocne historyczne dowody, ale za stare, żeby udawać pewność.',
-        icon: History,
-        items: lastScanProductResult.needsReviewSubscriptions,
-      },
-      {
-        bucket: 'price' as ProductBucket,
-        label: 'Ceny',
-        title: 'Zmiany cen',
-        caption: 'Alerty o nowych cenach, promocjach lub wzroście kosztu planu.',
-        icon: Tag,
-        items: lastScanProductResult.priceChanges,
-      },
-      {
-        bucket: 'bill' as ProductBucket,
-        label: 'Rachunki',
-        title: 'Rachunki i usługi',
-        caption: 'Formalne rachunki i usługi pokazane osobno od subskrypcji.',
-        icon: FileText,
-        items: lastScanProductResult.billsOrUtilities,
-      },
-      {
-        bucket: 'history' as ProductBucket,
-        label: 'Historia',
-        title: 'Historia',
-        caption: 'Archiwalne lub słabsze sygnały, które mogą pomóc w audycie.',
-        icon: Inbox,
-        items: lastScanProductResult.historicalSubscriptions,
-      },
-    ];
+    const productSections = getProductSections(lastScanProductResult);
     const visibleSections = productFilter === 'all'
       ? productSections
       : productSections.filter((section) => section.bucket === productFilter);
@@ -1270,18 +1328,7 @@ export const EmailScanScreen = () => {
       { id: 'all' as ProductFilter, label: 'Wszystko', count: productSections.reduce((sum, section) => sum + section.items.length, 0) },
       ...productSections.map((section) => ({ id: section.bucket, label: section.label, count: section.items.length })),
     ].filter((item) => item.id === 'all' || item.count > 0);
-    const allImportEntries: EmailScanImportSelection[] = productSections.flatMap((section) =>
-      section.items.map((item, index) => {
-        const key = getProductItemKey(item, section.bucket, index);
-
-        return {
-          key,
-          bucket: section.bucket,
-          item,
-          action: locallyReviewedProductItems[key] || getProductItemAction(item),
-        };
-      })
-    );
+    const allImportEntries = getImportEntries(lastScanProductResult);
     const selectedImportCount = allImportEntries.filter((entry) => selectedImportItems[entry.key]).length;
 
     return (
@@ -1829,6 +1876,245 @@ export const EmailScanScreen = () => {
     </Modal>
   );
 
+  const renderWizardProgress = () => {
+    const currentIndex = EMAIL_SCAN_WIZARD_STEPS.findIndex((step) => step.id === wizardStep);
+
+    return (
+      <View style={styles.wizardCard}>
+        <View style={styles.wizardTop}>
+          <View>
+            <Text style={styles.wizardEyebrow}>Import flow</Text>
+            <Text style={styles.wizardTitle}>Od skrzynki do draftów</Text>
+          </View>
+          <Text style={[styles.wizardStepCounter, { color: theme.colors.primary }]}>
+            {Math.max(currentIndex + 1, 1)}/{EMAIL_SCAN_WIZARD_STEPS.length}
+          </Text>
+        </View>
+        <View style={styles.wizardStepsRow}>
+          {EMAIL_SCAN_WIZARD_STEPS.map((step, index) => {
+            const Icon = step.icon;
+            const isActive = wizardStep === step.id;
+            const isDone = index < currentIndex;
+
+            return (
+              <TouchableOpacity
+                key={step.id}
+                style={[
+                  styles.wizardStep,
+                  isActive && { backgroundColor: `${theme.colors.primary}20`, borderColor: theme.colors.primary },
+                  isDone && { borderColor: `${theme.colors.primary}55` },
+                ]}
+                onPress={() => setWizardStep(step.id)}
+                activeOpacity={0.84}
+              >
+                <View style={[
+                  styles.wizardStepIcon,
+                  (isActive || isDone) && { backgroundColor: theme.colors.primary },
+                ]}>
+                  <Icon size={15} color={isActive || isDone ? theme.colors.darkText : theme.colors.textMuted} />
+                </View>
+                <Text style={[styles.wizardStepLabel, isActive && { color: theme.colors.primary }]}>{step.label}</Text>
+                <Text style={styles.wizardStepCaption}>{step.caption}</Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    );
+  };
+
+  const renderScanStage = () => (
+    <View style={styles.wizardStageCard}>
+      <View style={styles.wizardStageHeader}>
+        <View style={[styles.wizardStageIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
+          <Search size={22} color={theme.colors.primary} />
+        </View>
+        <View style={styles.wizardStageCopy}>
+          <Text style={styles.wizardStageTitle}>Uruchom bezpieczny skan</Text>
+          <Text style={styles.wizardStageText}>
+            {scanSource === 'imap'
+              ? `Źródło: IMAP · ${imapHost || 'brak hosta'} · profil ${imapProfile}`
+              : 'Źródło: Gmail OAuth · metadata i snippet, bez pełnej treści maili'}
+          </Text>
+        </View>
+      </View>
+
+      {scanSource === 'imap' ? (
+        <>
+          <View style={styles.wizardScanSummary}>
+            <View style={styles.wizardScanMetric}>
+              <Text style={styles.wizardScanMetricValue}>{imapProfile}</Text>
+              <Text style={styles.wizardScanMetricLabel}>profil</Text>
+            </View>
+            <View style={styles.wizardScanMetric}>
+              <Text style={styles.wizardScanMetricValue}>{imapSecure ? 'SSL' : 'plain'}</Text>
+              <Text style={styles.wizardScanMetricLabel}>połączenie</Text>
+            </View>
+            <View style={styles.wizardScanMetric}>
+              <Text style={styles.wizardScanMetricValue}>{imapMailbox || 'INBOX'}</Text>
+              <Text style={styles.wizardScanMetricLabel}>mailbox</Text>
+            </View>
+          </View>
+          {imapScanMutation.isPending && (
+            <View style={[styles.scanningState, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
+              <View style={[styles.scanningIcon, { backgroundColor: theme.colors.cardStrong }]}>
+                <ActivityIndicator color={theme.colors.primary} />
+              </View>
+              <View style={styles.scanningCopy}>
+                <Text style={styles.scanningTitle}>Skanuję skrzynkę IMAP...</Text>
+                <Text style={styles.scanningText}>Wyniki trafią do bucketów: review, ceny, rachunki i historia.</Text>
+              </View>
+            </View>
+          )}
+          <TouchableOpacity
+            style={[styles.scanBtn, { backgroundColor: theme.colors.primary }, (!canRunImapScan || isAnyScanPending) && styles.acceptBtnDisabled]}
+            onPress={() => handleImapScan()}
+            disabled={!canRunImapScan || isAnyScanPending}
+          >
+            {imapScanMutation.isPending ? (
+              <ActivityIndicator color={theme.colors.darkText} />
+            ) : (
+              <>
+                <Search size={20} color={theme.colors.darkText} />
+                <Text style={styles.connectBtnText}>Skanuj IMAP</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          {!isConnected ? (
+            <View style={styles.wizardNotice}>
+              <Text style={styles.wizardNoticeTitle}>Najpierw połącz Gmaila</Text>
+              <Text style={styles.wizardNoticeText}>Po autoryzacji wrócisz do tego kroku i uruchomisz skan.</Text>
+            </View>
+          ) : scanMutation.isPending ? (
+            <View style={[styles.scanningState, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
+              <View style={[styles.scanningIcon, { backgroundColor: theme.colors.cardStrong }]}>
+                <ActivityIndicator color={theme.colors.primary} />
+              </View>
+              <View style={styles.scanningCopy}>
+                <Text style={styles.scanningTitle}>Szukam Twoich subskrypcji...</Text>
+                <Text style={styles.scanningText}>Analizuję tylko metadane i fragmenty wiadomości.</Text>
+              </View>
+            </View>
+          ) : null}
+          <TouchableOpacity
+            style={[styles.scanBtn, { backgroundColor: theme.colors.primary }, ((!isConnected && scanSource === 'gmail') || isAnyScanPending) && styles.acceptBtnDisabled]}
+            onPress={() => handleScan()}
+            disabled={!isConnected || isAnyScanPending}
+          >
+            {scanMutation.isPending ? (
+              <ActivityIndicator color={theme.colors.darkText} />
+            ) : (
+              <>
+                <Search size={20} color={theme.colors.darkText} />
+                <Text style={styles.connectBtnText}>Skanuj Gmaila</Text>
+              </>
+            )}
+          </TouchableOpacity>
+        </>
+      )}
+
+      <View style={styles.wizardStageActions}>
+        <TouchableOpacity style={styles.wizardSecondaryAction} onPress={() => setWizardStep('source')}>
+          <Text style={styles.wizardSecondaryActionText}>Zmień źródło</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.wizardSecondaryAction, !shouldShowProductResult && styles.acceptBtnDisabled]}
+          onPress={() => setWizardStep('review')}
+          disabled={!shouldShowProductResult}
+        >
+          <Text style={styles.wizardSecondaryActionText}>Zobacz wyniki</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderPreviewStage = () => {
+    if (!lastScanProductResult) {
+      return (
+        <View style={styles.emptyState}>
+          <FileText size={32} color={theme.colors.textMuted} />
+          <Text style={styles.emptyTitle}>Najpierw uruchom skan</Text>
+          <Text style={styles.emptyText}>Preview importu pojawi się po znalezieniu kandydatur i zaznaczeniu pozycji.</Text>
+          <TouchableOpacity style={[styles.importPreviewButton, { backgroundColor: theme.colors.primary, marginTop: 14 }]} onPress={() => setWizardStep('scan')}>
+            <Search size={17} color={theme.colors.darkText} />
+            <Text style={styles.importPreviewButtonText}>Przejdź do skanu</Text>
+          </TouchableOpacity>
+        </View>
+      );
+    }
+
+    const importEntries = getImportEntries(lastScanProductResult);
+    const selectedEntries = importEntries.filter((entry) => selectedImportItems[entry.key]);
+
+    return (
+      <View style={styles.wizardStageCard}>
+        <View style={styles.wizardStageHeader}>
+          <View style={[styles.wizardStageIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
+            <FileText size={22} color={theme.colors.primary} />
+          </View>
+          <View style={styles.wizardStageCopy}>
+            <Text style={styles.wizardStageTitle}>Preview przed finalnym zapisem</Text>
+            <Text style={styles.wizardStageText}>
+              {selectedEntries.length > 0
+                ? `${selectedEntries.length} wybranych pozycji czeka na drafty backendu.`
+                : 'Zaznacz pozycje w review, żeby przygotować drafty importu.'}
+            </Text>
+          </View>
+        </View>
+
+        {selectedEntries.length === 0 ? (
+          <View style={styles.wizardNotice}>
+            <Text style={styles.wizardNoticeTitle}>Nic nie jest zaznaczone</Text>
+            <Text style={styles.wizardNoticeText}>Wróć do review i użyj przycisku „Do preview” na kartach wyników.</Text>
+          </View>
+        ) : (
+          <View style={styles.previewSelectionList}>
+            {selectedEntries.slice(0, 4).map((entry) => (
+              <View key={entry.key} style={styles.previewSelectionItem}>
+                <View style={[styles.previewSelectionDot, { backgroundColor: theme.colors.primary }]} />
+                <View style={styles.previewSelectionCopy}>
+                  <Text style={styles.previewSelectionTitle} numberOfLines={1}>{getProductItemTitle(entry.item)}</Text>
+                  <Text style={styles.previewSelectionMeta}>{entry.bucket} · {getDecisionLabel(entry.action) || entry.action}</Text>
+                </View>
+              </View>
+            ))}
+            {selectedEntries.length > 4 && (
+              <Text style={styles.previewSelectionMore}>+{selectedEntries.length - 4} kolejnych pozycji</Text>
+            )}
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={[
+            styles.scanBtn,
+            { backgroundColor: theme.colors.primary },
+            (selectedEntries.length === 0 || importPreviewMutation.isPending) && styles.acceptBtnDisabled,
+          ]}
+          onPress={() => handleImportPreview(importEntries)}
+          disabled={selectedEntries.length === 0 || importPreviewMutation.isPending}
+        >
+          {importPreviewMutation.isPending ? (
+            <ActivityIndicator color={theme.colors.darkText} />
+          ) : (
+            <>
+              <FileText size={19} color={theme.colors.darkText} />
+              <Text style={styles.connectBtnText}>Przygotuj drafty</Text>
+            </>
+          )}
+        </TouchableOpacity>
+
+        <View style={styles.wizardStageActions}>
+          <TouchableOpacity style={styles.wizardSecondaryAction} onPress={() => setWizardStep('review')}>
+            <Text style={styles.wizardSecondaryActionText}>Wróć do review</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
@@ -1863,6 +2149,10 @@ export const EmailScanScreen = () => {
 
         {renderPrivacyCopy()}
 
+        {renderWizardProgress()}
+
+        {wizardStep === 'source' && (
+        <>
         <View style={styles.sourceSwitch}>
           <TouchableOpacity
             style={[styles.sourceSwitchButton, scanSource === 'gmail' && { backgroundColor: theme.colors.primary }]}
@@ -1957,7 +2247,13 @@ export const EmailScanScreen = () => {
         )}
 
         {(scanSource === 'imap' || isConnected) && renderAdvancedOptions()}
+        </>
+        )}
 
+        {wizardStep === 'scan' && renderScanStage()}
+
+        {wizardStep === 'review' && (
+        <>
         {renderReviewContent ? renderDryRunResults() : null}
 
         {renderReviewContent && shouldShowProductResult && renderProductResult()}
@@ -1993,6 +2289,10 @@ export const EmailScanScreen = () => {
             <Text style={styles.emptyText}>Najpierw ładujemy główne akcje, żeby ekran szybciej reagował na gesty.</Text>
           </View>
         )}
+        </>
+        )}
+
+        {wizardStep === 'preview' && renderPreviewStage()}
       </ScrollView>
 
       {renderReviewModal()}
@@ -2018,6 +2318,205 @@ const styles = StyleSheet.create({
   iconBtn: { width: 40, height: 40, alignItems: 'flex-end', justifyContent: 'center' },
   headerTitle: { fontSize: 19, fontWeight: '900', color: vibrantTheme.colors.text },
   content: { padding: 20, paddingBottom: 48 },
+  wizardCard: {
+    backgroundColor: vibrantTheme.colors.cardStrong,
+    borderRadius: 24,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.borderStrong,
+  },
+  wizardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  wizardEyebrow: {
+    color: vibrantTheme.colors.textSubtle,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginBottom: 3,
+  },
+  wizardTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  wizardStepCounter: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  wizardStepsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  wizardStep: {
+    flex: 1,
+    minHeight: 86,
+    borderRadius: 18,
+    padding: 9,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  wizardStepIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.09)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  wizardStepLabel: {
+    color: vibrantTheme.colors.text,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  wizardStepCaption: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 9,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  wizardStageCard: {
+    backgroundColor: vibrantTheme.colors.card,
+    borderRadius: 24,
+    padding: 18,
+    marginBottom: 24,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  wizardStageHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    marginBottom: 16,
+  },
+  wizardStageIcon: {
+    width: 46,
+    height: 46,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wizardStageCopy: { flex: 1 },
+  wizardStageTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  wizardStageText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  wizardScanSummary: {
+    flexDirection: 'row',
+    gap: 9,
+    marginBottom: 14,
+  },
+  wizardScanMetric: {
+    flex: 1,
+    minHeight: 64,
+    borderRadius: 16,
+    padding: 10,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    justifyContent: 'space-between',
+  },
+  wizardScanMetricValue: {
+    color: vibrantTheme.colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  wizardScanMetricLabel: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  wizardNotice: {
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 18,
+    padding: 14,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  wizardNoticeTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 14,
+    fontWeight: '900',
+    marginBottom: 4,
+  },
+  wizardNoticeText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 18,
+    fontWeight: '700',
+  },
+  wizardStageActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  wizardSecondaryAction: {
+    flex: 1,
+    minHeight: 42,
+    borderRadius: 14,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  wizardSecondaryActionText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  previewSelectionList: {
+    gap: 9,
+    marginBottom: 14,
+  },
+  previewSelectionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 16,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  previewSelectionDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 999,
+    marginRight: 10,
+  },
+  previewSelectionCopy: { flex: 1 },
+  previewSelectionTitle: {
+    color: vibrantTheme.colors.text,
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  previewSelectionMeta: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  previewSelectionMore: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
   sourceSwitch: {
     flexDirection: 'row',
     gap: 10,

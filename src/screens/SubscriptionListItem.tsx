@@ -33,6 +33,8 @@ export interface SubscriptionItem {
   cycle: string;
   status: 'pending' | 'paid' | 'overdue' | 'canceled';
   isTrial?: boolean;
+  isSeasonal?: boolean;
+  seasonEndLabel?: string | null;
 }
 
 interface Props {
@@ -74,6 +76,8 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
     cycle: item.cycle || 'Co miesiąc',
     status: item.status || 'pending',
     isTrial: Boolean(item.isTrial),
+    isSeasonal: Boolean(item.isSeasonal),
+    seasonEndLabel: item.seasonEndLabel || null,
   };
   const catStyle = getCategoryStyle(safeItem.category);
   const isCancelled = safeItem.status === 'canceled';
@@ -181,9 +185,18 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
                 {statusInfo.label}
               </Text>
             </View>
+            {safeItem.isSeasonal && (
+              <View style={[styles.seasonalBadge, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
+                <Text style={[styles.seasonalBadgeText, { color: theme.colors.primary }]}>Sezon</Text>
+              </View>
+            )}
           </View>
           <Text style={[styles.dateText, { color: theme.colors.textMuted }]} numberOfLines={1}>
-            {isCancelled ? 'Anulowana' : `Następna: ${safeItem.nextPaymentDate}`}
+            {isCancelled
+              ? 'Anulowana'
+              : safeItem.isSeasonal && safeItem.seasonEndLabel
+                ? `${safeItem.seasonEndLabel} · następna: ${safeItem.nextPaymentDate}`
+                : `Następna: ${safeItem.nextPaymentDate}`}
           </Text>
         </View>
 
@@ -327,7 +340,23 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   statusRow: {
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  seasonalBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    marginBottom: 5,
+    borderWidth: 1,
+  },
+  seasonalBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
 });
 
