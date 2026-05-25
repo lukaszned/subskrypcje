@@ -721,6 +721,229 @@ function runProductionImapRetrievalStabilityCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runProductionImapBillDedupeCase() {
+    const now = new Date("2026-05-24T12:00:00.000Z");
+    const utilityUnknownMessages = Array.from({ length: 25 }, (_, index) =>
+        makeProductionMessage({
+            id: `utility-unknown-${index}`,
+            provider: "Generic Utility SA",
+            category: "utilities_energy",
+            subject: `Generic Utility invoice archive ${index}`,
+            date: `2025-01-${String(Math.min(index + 1, 28)).padStart(2, "0")}T10:00:00.000Z`,
+            snippet: "Your invoice archive notification is available.",
+            messageType: "invoice",
+        })
+    );
+    const canonicalItems = buildProductionImapCanonicalItemsForTest(
+        [
+            makeProductionMessage({
+                id: "utility-due-old",
+                provider: "Generic Utility Sp. z o.o.",
+                category: "utilities_energy",
+                subject: "Generic Utility invoice April",
+                date: "2025-04-10T10:00:00.000Z",
+                snippet: "Amount due: 100.00 PLN. Due date: 20.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "utility-due-new",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Generic Utility invoice May",
+                date: "2025-05-10T10:00:00.000Z",
+                snippet: "Amount due: 120.00 PLN. Due date: 20.05.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "utility-payment-processor",
+                provider: "Generic Utility",
+                category: "utilities_energy",
+                subject: "Payment forwarded to service provider - Generic Utility",
+                date: "2025-05-21T10:00:00.000Z",
+                snippet: "Payment confirmation. We forwarded your payment to the service provider. Amount 120.00 PLN.",
+                messageType: "payment_confirmation",
+                debug: {
+                    billingChannel: "Payment Processor",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            ...utilityUnknownMessages,
+            makeProductionMessage({
+                id: "telecom-unknown",
+                provider: "Mobile Provider S.A.",
+                category: "telecom_mobile",
+                subject: "Mobile Provider invoice notice",
+                date: "2025-03-01T10:00:00.000Z",
+                snippet: "Your monthly bill is available.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "telecom-due",
+                provider: "Mobile Provider",
+                category: "telecom_mobile",
+                subject: "Mobile Provider amount due",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 55.50 PLN. Due date: 15.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "telecom-payment-processor",
+                provider: "Mobile Provider",
+                category: "telecom_mobile",
+                subject: "Payment forwarded to service provider - Mobile Provider",
+                date: "2025-04-16T10:00:00.000Z",
+                snippet: "Payment confirmation. Amount 55.50 PLN.",
+                messageType: "payment_confirmation",
+                debug: {
+                    billingChannel: "Payment Processor",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "utility-a",
+                provider: "Utility Alpha",
+                category: "utilities_energy",
+                subject: "Utility Alpha invoice",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 11.00 PLN. Due date: 10.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "utility-b",
+                provider: "Utility Beta",
+                category: "utilities_energy",
+                subject: "Utility Beta invoice",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 22.00 PLN. Due date: 10.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "channel-a",
+                provider: "Channel Provider",
+                category: "internet_isp",
+                subject: "Channel Provider direct service A",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 12.00 PLN. Due date: 10.04.2025.",
+                messageType: "invoice",
+                debug: {
+                    billingChannel: "Tenant A",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "channel-b",
+                provider: "Channel Provider",
+                category: "internet_isp",
+                subject: "Channel Provider direct service B",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 13.00 PLN. Due date: 10.04.2025.",
+                messageType: "invoice",
+                debug: {
+                    billingChannel: "Tenant B",
+                } as ProductionImapScanMessage["debug"],
+            }),
+            makeProductionMessage({
+                id: "shared-telecom",
+                provider: "Shared Provider",
+                category: "telecom_mobile",
+                subject: "Shared Provider mobile bill",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 33.00 PLN. Due date: 10.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "shared-insurance",
+                provider: "Shared Provider",
+                category: "finance_insurance",
+                subject: "Shared Provider insurance bill",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Amount due: 44.00 PLN. Due date: 10.04.2025.",
+                messageType: "invoice",
+            }),
+            makeProductionMessage({
+                id: "shared-membership",
+                provider: "Shared Provider",
+                category: "ecommerce_membership",
+                subject: "Shared Provider membership renewal",
+                date: "2025-04-01T10:00:00.000Z",
+                snippet: "Your membership subscription renews monthly at 9.99 PLN monthly.",
+                messageType: "subscription_continuation",
+                detected: {
+                    provider: "Shared Provider",
+                    billingCycle: "monthly",
+                },
+            }),
+        ],
+        now
+    );
+    const result = buildProductResult(canonicalItems);
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const utilityBills = result.billsOrUtilities.filter((item) =>
+        item.provider?.startsWith("Generic Utility")
+    );
+    const utility = utilityBills[0];
+    const telecomBills = result.billsOrUtilities.filter((item) =>
+        item.provider?.startsWith("Mobile Provider")
+    );
+    const telecom = telecomBills[0];
+    const differentUtilityProviders = result.billsOrUtilities.filter((item) =>
+        /^Utility (Alpha|Beta)$/.test(item.provider ?? "")
+    );
+    const channelProviderBills = result.billsOrUtilities.filter(
+        (item) => item.provider === "Channel Provider"
+    );
+    const sharedBills = result.billsOrUtilities.filter(
+        (item) => item.provider === "Shared Provider"
+    );
+    const sharedMembership = result.needsReviewSubscriptions.find(
+        (item) => item.provider === "Shared Provider"
+    );
+    const preview = utility
+        ? buildImportPreview({ items: [utility] })
+        : { drafts: [] };
+    const draft = preview.drafts[0];
+
+    assertField("Duplicate utility groups merged", 1, utilityBills.length);
+    assertField("Utility merged sourceMessagesCount", 28, utility?.sourceMessagesCount);
+    assertField("Utility amountKind", "due", utility?.amountKind);
+    assertField("Utility latest dueAmount", "120.00 PLN", utility?.dueAmount);
+    assertField("Utility bucket", "billsOrUtilities", utility?.productBucket);
+    assertField(
+        "Utility allAmounts merged",
+        true,
+        utility?.allAmounts?.includes("100.00 PLN") &&
+            utility?.allAmounts?.includes("120.00 PLN")
+    );
+    assertField("Duplicate telecom groups merged", 1, telecomBills.length);
+    assertField("Telecom sourceMessagesCount", 3, telecom?.sourceMessagesCount);
+    assertField("Telecom amountKind", "due", telecom?.amountKind);
+    assertField("Different bill providers remain separate", 2, differentUtilityProviders.length);
+    assertField("Different meaningful bill channels remain separate", 2, channelProviderBills.length);
+    assertField("Same provider different bill categories remain separate", 2, sharedBills.length);
+    assertField("Subscription-like same provider remains subscription bucket", "needsReviewSubscriptions", sharedMembership?.productBucket);
+    assertField("Import preview bill action", "review_bill", draft?.recommendedAction);
+    assertField("Import preview recurring bill", true, draft?.draft?.isRecurringBill);
+    assertField(
+        "Import preview source count in notes",
+        true,
+        draft?.draft?.notes?.includes("Source messages: 28")
+    );
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: production IMAP bill dedupe");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("production IMAP bill dedupe");
+    console.log("FAIL productResult: production IMAP bill dedupe");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify({ canonicalItems, result, preview }, null, 2));
+}
+
 function runImapFrontendContractCase() {
     const now = new Date("2026-05-24T12:00:00.000Z");
     const result = buildProductionImapProductResultForTest(
@@ -1349,6 +1572,7 @@ runProductResultContractCase();
 runProductionImapAggregationCase();
 runProductionImapAmountSemanticsCase();
 runProductionImapRetrievalStabilityCase();
+runProductionImapBillDedupeCase();
 runImapFrontendContractCase();
 runImportPreviewCase();
 

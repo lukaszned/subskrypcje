@@ -174,6 +174,11 @@ export type ImapScanSummary = {
     billLikeCandidatesFound?: number;
     billLikeCanonicalCount?: number;
     billLikeMessagesMerged?: number;
+    billCanonicalGroupsBeforeDedupe?: number;
+    billCanonicalGroupsAfterDedupe?: number;
+    billCanonicalGroupsMergedByDedupe?: number;
+    billCanonicalGroupsMergedAcrossPaymentChannel?: number;
+    billCanonicalDedupeSkippedDifferentMeaningfulChannel?: number;
     candidateMessagesAfterDedupe?: number;
     canonicalMergeGroups?: number;
     preservedHighSignalCandidates?: number;
@@ -1280,7 +1285,319 @@ function latestByDate(messages: ProductionImapScanMessage[]) {
     return [...messages].sort((a, b) => Date.parse(b.date) - Date.parse(a.date))[0];
 }
 
-function canonicalItemsFromCandidates(
+type BillCanonicalDedupeStats = {
+    billCanonicalGroupsBeforeDedupe: number;
+    billCanonicalGroupsAfterDedupe: number;
+    billCanonicalGroupsMergedByDedupe: number;
+    billCanonicalGroupsMergedAcrossPaymentChannel: number;
+    billCanonicalDedupeSkippedDifferentMeaningfulChannel: number;
+};
+
+function itemDateValue(item: {
+    selectedAmountSourceDate?: string;
+    lastBillingEvidenceDate?: string;
+    lastEvidenceDate?: string;
+    lastSeen?: string;
+}) {
+    const parsed = Date.parse(
+        item.selectedAmountSourceDate ??
+            item.lastBillingEvidenceDate ??
+            item.lastEvidenceDate ??
+            item.lastSeen ??
+            ""
+    );
+
+    return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function normalizeCanonicalIdentity(value: string | undefined) {
+    if (!value) return "";
+
+    return normalizeAsciiText(value)
+        .replace(/[^a-z0-9]+/g, " ")
+        .replace(/\b(spolka z ograniczona odpowiedzialnoscia|sp z o o|sp zoo|s a|sa|inc|llc|ltd|limited|gmbh)\b/g, " ")
+        .replace(/\b(billing|payments?|faktury|rachunki|invoice|invoices|noreply|no reply)\b/g, " ")
+        .trim()
+        .replace(/\s+/g, "_");
+}
+
+function isWeakBillProviderIdentity(value: string) {
+    return (
+        !value ||
+        /^(unknown|detected_subscription|subscription|bill|bills|invoice|invoices|faktura|faktury|rachunek|rachunki|payment|payments|platnosc|do_zaplaty|kwota_do_zaplaty)$/.test(
+            value
+        )
+    );
+}
+
+function isPaymentProcessorLikeChannel(value: string | undefined) {
+    const normalized = normalizeCanonicalIdentity(value);
+
+    return (
+        !normalized ||
+        /^(unknown|payment_processor|payment|payments|processor|payment_channel|platnosc|operator_platnosci|payu|przelewy24|p24|tpay|autopay|stripe|paypal)$/.test(
+            normalized
+        )
+    );
+}
+
+function billDedupeBaseKey(item: ImapProductCanonicalItem) {
+    if (!isBillLikeCategory(item.category)) return undefined;
+
+    const providerKey = normalizeCanonicalIdentity(
+        item.provider ?? item.displayName ?? item.name
+    );
+    const categoryKey = normalizeCanonicalIdentity(item.category);
+
+    if (isWeakBillProviderIdentity(providerKey) || !categoryKey) {
+        return undefined;
+    }
+
+    return [providerKey, categoryKey].join("|");
+}
+
+function billDedupeKey(item: ImapProductCanonicalItem) {
+    const baseKey = billDedupeBaseKey(item);
+    if (!baseKey) return undefined;
+
+    const channelKey = normalizeCanonicalIdentity(item.billingChannel);
+
+    return [
+        baseKey,
+        isPaymentProcessorLikeChannel(item.billingChannel) ? "" : channelKey,
+    ].join("|");
+}
+
+function uniqueStrings(values: Array<string | undefined>, limit = 20) {
+    return [...new Set(values.filter(Boolean) as string[])].slice(0, limit);
+}
+
+function pickLatestCanonicalItem(items: ImapProductCanonicalItem[]) {
+    return [...items].sort(
+        (left, right) =>
+            itemDateValue(right) - itemDateValue(left) ||
+            (right.confidence ?? 0) - (left.confidence ?? 0) ||
+            (left.displayName ?? "").localeCompare(right.displayName ?? "")
+    )[0];
+}
+
+function mergeBillCanonicalGroup(items: ImapProductCanonicalItem[]) {
+    if (items.length === 1) return items[0];
+
+    const sortedByFirstSeen = [...items].sort(
+        (a, b) => Date.parse(a.firstSeen) - Date.parse(b.firstSeen)
+    );
+    const sortedByLastSeen = [...items].sort(
+        (a, b) => Date.parse(a.lastSeen) - Date.parse(b.lastSeen)
+    );
+    const latest = sortedByLastSeen[sortedByLastSeen.length - 1];
+    const dueItems = items.filter(
+        (item) => item.amountKind === "due" || Boolean(item.dueAmount)
+    );
+    const selectedAmountItem =
+        dueItems.length > 0 ? pickLatestCanonicalItem(dueItems) : pickLatestCanonicalItem(items);
+    const allAmounts = uniqueStrings(
+        items.flatMap((item) => [
+            ...(item.allAmounts ?? []),
+            ...(item.amounts ?? []),
+            item.dueAmount,
+            item.displayAmount,
+            item.latestAmount,
+            item.amount,
+        ]),
+        30
+    );
+    const evidenceSummary = uniqueStrings(
+        items.flatMap((item) => item.evidenceSummary ?? []),
+        12
+    );
+    const riskSummary = uniqueStrings(
+        items.flatMap((item) => item.riskSummary ?? []),
+        12
+    );
+    const selectedDueAmount =
+        selectedAmountItem.dueAmount ??
+        (selectedAmountItem.amountKind === "due"
+            ? selectedAmountItem.displayAmount
+            : undefined);
+    const displayAmount =
+        selectedDueAmount ??
+        selectedAmountItem.displayAmount ??
+        selectedAmountItem.latestAmount;
+    const amountKind = selectedDueAmount ? "due" : selectedAmountItem.amountKind;
+    const sourceMessagesCount = items.reduce(
+        (sum, item) => sum + Math.max(0, item.sourceMessagesCount ?? 0),
+        0
+    );
+    const highestConfidence = Math.max(...items.map((item) => item.confidence ?? 0));
+    const id = billDedupeKey(selectedAmountItem) ?? selectedAmountItem.id;
+    const paymentChannel = items.find(
+        (item) => item.billingChannel && isPaymentProcessorLikeChannel(item.billingChannel)
+    )?.billingChannel;
+
+    return {
+        ...selectedAmountItem,
+        id: id.replace(/[^a-z0-9|_-]+/gi, "_"),
+        displayName: selectedAmountItem.displayName ?? latest.displayName,
+        provider: selectedAmountItem.provider ?? latest.provider,
+        billingChannel: selectedAmountItem.billingChannel ?? paymentChannel ?? latest.billingChannel,
+        category: selectedAmountItem.category ?? latest.category,
+        status: items.some((item) => item.status === "stale_needs_review")
+            ? "stale_needs_review"
+            : latest.status,
+        recencyStatus: items.some((item) => item.recencyStatus === "stale_needs_review")
+            ? "stale_needs_review"
+            : latest.recencyStatus,
+        confidence: Math.min(1, highestConfidence + Math.max(0, items.length - 1) * 0.03),
+        confidenceLevel: confidenceLevelFor(highestConfidence),
+        sourceMessagesCount,
+        firstSeen: sortedByFirstSeen[0].firstSeen,
+        lastSeen: latest.lastSeen,
+        latestSubject: latest.latestSubject,
+        sourceSubjects: uniqueStrings(
+            items.flatMap((item) => item.sourceSubjects ?? []),
+            20
+        ),
+        amount: displayAmount,
+        displayAmount,
+        amountKind,
+        dueAmount: selectedDueAmount ?? selectedAmountItem.dueAmount,
+        latestAmount: displayAmount ?? selectedAmountItem.latestAmount,
+        amounts: allAmounts.slice(0, 10),
+        allAmounts,
+        dueDateText: selectedAmountItem.dueDateText ?? latest.dueDateText,
+        selectedAmountSourceDate:
+            selectedAmountItem.selectedAmountSourceDate ??
+            selectedAmountItem.lastBillingEvidenceDate ??
+            selectedAmountItem.lastEvidenceDate,
+        selectedAmountSourceSubject:
+            selectedAmountItem.selectedAmountSourceSubject ??
+            selectedAmountItem.latestSubject,
+        evidenceTypes: uniqueStrings(
+            items.flatMap((item) => item.evidenceTypes ?? []),
+            20
+        ),
+        evidenceSummary,
+        riskSummary,
+        lastEvidenceDate: latest.lastEvidenceDate ?? latest.lastSeen,
+        lastBillingEvidenceDate:
+            selectedAmountItem.lastBillingEvidenceDate ??
+            selectedAmountItem.selectedAmountSourceDate ??
+            latest.lastBillingEvidenceDate,
+        lastActiveEvidenceDate: pickLatestCanonicalItem(
+            items.filter((item) => item.lastActiveEvidenceDate)
+        )?.lastActiveEvidenceDate,
+        evidenceAgeDays: selectedAmountItem.evidenceAgeDays ?? latest.evidenceAgeDays,
+        stalenessReason: selectedAmountItem.stalenessReason ?? latest.stalenessReason,
+        statusReason:
+            "Merged duplicate bill-like scan evidence for the same provider/category.",
+        needsReview: items.some((item) => item.needsReview),
+        reviewReason:
+            selectedAmountItem.reviewReason ??
+            latest.reviewReason ??
+            (items.some((item) => item.needsReview)
+                ? "Merged bill evidence should be reviewed before treating it as current."
+                : undefined),
+    };
+}
+
+function dedupeBillCanonicalItems(items: ImapProductCanonicalItem[]) {
+    const passthrough: ImapProductCanonicalItem[] = [];
+    const billBaseGroups = new Map<string, ImapProductCanonicalItem[]>();
+    let billItemsBefore = 0;
+    let skippedDifferentMeaningfulChannel = 0;
+
+    for (const item of items) {
+        if (isBillLikeCategory(item.category)) {
+            billItemsBefore += 1;
+        }
+
+        const key = billDedupeBaseKey(item);
+
+        if (!key) {
+            passthrough.push(item);
+            continue;
+        }
+
+        const group = billBaseGroups.get(key) ?? [];
+        group.push(item);
+        billBaseGroups.set(key, group);
+    }
+
+    const mergedBills: ImapProductCanonicalItem[] = [];
+    let mergedAcrossPaymentChannel = 0;
+
+    for (const group of billBaseGroups.values()) {
+        const channelGroups = new Map<string, ImapProductCanonicalItem[]>();
+        const paymentCompatibleItems: ImapProductCanonicalItem[] = [];
+
+        for (const item of group) {
+            if (isPaymentProcessorLikeChannel(item.billingChannel)) {
+                paymentCompatibleItems.push(item);
+                continue;
+            }
+
+            const channelKey = normalizeCanonicalIdentity(item.billingChannel);
+            const channelGroup = channelGroups.get(channelKey) ?? [];
+            channelGroup.push(item);
+            channelGroups.set(channelKey, channelGroup);
+        }
+
+        if (channelGroups.size === 0) {
+            mergedBills.push(mergeBillCanonicalGroup(paymentCompatibleItems));
+            if (
+                paymentCompatibleItems.some((item) => item.billingChannel) &&
+                paymentCompatibleItems.some((item) => !item.billingChannel)
+            ) {
+                mergedAcrossPaymentChannel += 1;
+            }
+            continue;
+        }
+
+        if (channelGroups.size === 1) {
+            const meaningfulGroup = [...channelGroups.values()][0];
+            const mergedGroup = [...meaningfulGroup, ...paymentCompatibleItems];
+            mergedBills.push(mergeBillCanonicalGroup(mergedGroup));
+            if (paymentCompatibleItems.length > 0 && meaningfulGroup.length > 0) {
+                mergedAcrossPaymentChannel += 1;
+            }
+            continue;
+        }
+
+        skippedDifferentMeaningfulChannel += group.length;
+
+        for (const channelGroup of channelGroups.values()) {
+            mergedBills.push(mergeBillCanonicalGroup(channelGroup));
+        }
+
+        if (paymentCompatibleItems.length > 0) {
+            mergedBills.push(mergeBillCanonicalGroup(paymentCompatibleItems));
+        }
+    }
+
+    const stats: BillCanonicalDedupeStats = {
+        billCanonicalGroupsBeforeDedupe: billItemsBefore,
+        billCanonicalGroupsAfterDedupe:
+            passthrough.filter((item) => isBillLikeCategory(item.category)).length +
+            mergedBills.length,
+        billCanonicalGroupsMergedByDedupe: Math.max(
+            0,
+            billItemsBefore -
+                (passthrough.filter((item) => isBillLikeCategory(item.category)).length +
+                    mergedBills.length)
+        ),
+        billCanonicalGroupsMergedAcrossPaymentChannel: mergedAcrossPaymentChannel,
+        billCanonicalDedupeSkippedDifferentMeaningfulChannel:
+            skippedDifferentMeaningfulChannel,
+    };
+
+    return {
+        items: [...passthrough, ...mergedBills],
+        stats,
+    };
+}
+
+function canonicalItemsFromCandidatesRaw(
     messages: ProductionImapScanMessage[],
     now: Date
 ): ImapProductCanonicalItem[] {
@@ -1408,6 +1725,26 @@ function canonicalItemsFromCandidates(
                       : undefined,
         };
     });
+}
+
+function canonicalItemsFromCandidatesWithStats(
+    messages: ProductionImapScanMessage[],
+    now: Date
+) {
+    const rawItems = canonicalItemsFromCandidatesRaw(messages, now);
+    const deduped = dedupeBillCanonicalItems(rawItems);
+
+    return {
+        items: deduped.items,
+        billDedupeStats: deduped.stats,
+    };
+}
+
+function canonicalItemsFromCandidates(
+    messages: ProductionImapScanMessage[],
+    now: Date
+): ImapProductCanonicalItem[] {
+    return canonicalItemsFromCandidatesWithStats(messages, now).items;
 }
 
 export function buildProductionImapCanonicalItemsForTest(
@@ -2330,7 +2667,8 @@ export async function scanImapSubscriptions(
                       stats: emptyCollectionStats(defaults),
                   };
         const candidates = messages.filter(isProductionBillLikeCandidate);
-        const canonicalItems = canonicalItemsFromCandidates(candidates, now);
+        const canonicalBuild = canonicalItemsFromCandidatesWithStats(candidates, now);
+        const canonicalItems = canonicalBuild.items;
         const productResult = buildProductResult(canonicalItems);
         const capabilityDiagnostics = buildScanCapabilityDiagnostics({
             fallbackUsed: stats.fallbackUsed,
@@ -2468,6 +2806,18 @@ export async function scanImapSubscriptions(
             billLikeMessagesMerged: canonicalItems
                 .filter((item) => isBillLikeCategory(item.category))
                 .reduce((sum, item) => sum + item.sourceMessagesCount, 0),
+            billCanonicalGroupsBeforeDedupe:
+                canonicalBuild.billDedupeStats.billCanonicalGroupsBeforeDedupe,
+            billCanonicalGroupsAfterDedupe:
+                canonicalBuild.billDedupeStats.billCanonicalGroupsAfterDedupe,
+            billCanonicalGroupsMergedByDedupe:
+                canonicalBuild.billDedupeStats.billCanonicalGroupsMergedByDedupe,
+            billCanonicalGroupsMergedAcrossPaymentChannel:
+                canonicalBuild.billDedupeStats
+                    .billCanonicalGroupsMergedAcrossPaymentChannel,
+            billCanonicalDedupeSkippedDifferentMeaningfulChannel:
+                canonicalBuild.billDedupeStats
+                    .billCanonicalDedupeSkippedDifferentMeaningfulChannel,
             candidateMessagesAfterDedupe: candidates.length,
             canonicalMergeGroups: canonicalItems.length,
             preservedHighSignalCandidates: stats.preservedHighSignalCandidates,
