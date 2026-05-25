@@ -31,7 +31,7 @@ type GmailScanMessage = {
     sourceQueryNames: string[];
 };
 
-type GmailScanQuerySummary = {
+export type GmailScanQuerySummary = {
     name: string;
     gmailResults: number;
     analyzed: number;
@@ -71,6 +71,18 @@ export type ScanGmailParams = {
     limit: number;
     sinceDays: number;
 };
+
+export function calculateGmailDuplicateQueryMatches(
+    querySummaries: Array<Pick<GmailScanQuerySummary, "analyzed">>,
+    uniqueMessagesAnalyzed: number
+) {
+    const totalQueryMatches = querySummaries.reduce(
+        (sum, summary) => sum + summary.analyzed,
+        0
+    );
+
+    return Math.max(0, totalQueryMatches - uniqueMessagesAnalyzed);
+}
 
 function buildGmailQueryVariants(sinceDays: number): GmailScanQueryVariant[] {
     return [
@@ -466,28 +478,49 @@ async function saveCandidates(params: {
             candidate.analysis.detected.provider ??
             "Detected subscription";
 
-        const detection = await prisma.detectedSubscription.create({
-            data: {
-                userId: params.userId,
-                emailConnectionId: params.emailConnectionId,
-                sourceProvider: EmailProvider.gmail,
-                sourceMessageId: candidate.id,
-                provider,
-                name,
-                amount,
-                currency,
-                billingCycle: candidate.analysis.detected.billingCycle ?? null,
-                nextPaymentDate: null,
-                trialEndDate: parseTrialEndDateText(
-                    candidate.analysis.detected.trialEndDateText
-                ),
-                isTrial: candidate.analysis.detected.isTrial ?? false,
-                category: null,
-                confidence: candidate.analysis.confidence,
-                status: DetectedSubscriptionStatus.pending,
-                evidenceSnippet: truncateEvidenceSnippet(candidate.snippet),
-            },
-        });
+        let detection: {
+            id: string;
+            provider: string | null;
+            name: string;
+            confidence: { toString(): string };
+        };
+
+        try {
+            detection = await prisma.detectedSubscription.create({
+                data: {
+                    userId: params.userId,
+                    emailConnectionId: params.emailConnectionId,
+                    sourceProvider: EmailProvider.gmail,
+                    sourceMessageId: candidate.id,
+                    provider,
+                    name,
+                    amount,
+                    currency,
+                    billingCycle: candidate.analysis.detected.billingCycle ?? null,
+                    nextPaymentDate: null,
+                    trialEndDate: parseTrialEndDateText(
+                        candidate.analysis.detected.trialEndDateText
+                    ),
+                    isTrial: candidate.analysis.detected.isTrial ?? false,
+                    category: null,
+                    confidence: candidate.analysis.confidence,
+                    status: DetectedSubscriptionStatus.pending,
+                    evidenceSnippet: truncateEvidenceSnippet(candidate.snippet),
+                },
+            });
+        } catch (error) {
+            if (
+                typeof error === "object" &&
+                error !== null &&
+                "code" in error &&
+                error.code === "P2002"
+            ) {
+                skippedExisting += 1;
+                continue;
+            }
+
+            throw error;
+        }
 
         created.push({
             id: detection.id,
@@ -571,14 +604,20 @@ export async function scanGmailForUser(userId: string, params: ScanGmailParams) 
         const result = {
             connection: scanResult.connection,
             scannedMessages: analyzedMessages.length,
+            uniqueMessagesAnalyzed: analyzedMessages.length,
+            duplicateQueryMatchesSuppressed: calculateGmailDuplicateQueryMatches(
+                querySummaries,
+                analyzedMessages.length
+            ),
             candidatesFound: candidates.length,
             createdDetections: scanResult.created.length,
             skippedExisting: scanResult.skippedExisting,
             rejectedMessages: analyzedMessages.length - candidates.length,
             querySummaries,
             created: scanResult.created,
+            dryRun: Boolean(params.dryRun),
         };
-        const response = params.dryRun ? { ...result, dryRun: true } : result;
+        const response = result;
 
         if (!params.debug) {
             return response;
