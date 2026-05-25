@@ -405,7 +405,7 @@ export interface NotificationPreviewResponse {
   items: NotificationPreviewItem[];
 }
 
-export type EmailScanProvider = 'gmail';
+export type EmailScanProvider = 'gmail' | 'imap';
 export type DetectedSubscriptionStatus = 'pending' | 'accepted' | 'ignored' | 'duplicate';
 
 export interface EmailScanStatusResponse {
@@ -466,6 +466,72 @@ export interface GmailScanResponse {
   message: string;
 }
 
+export type EmailScanProfile = 'fast' | 'adaptive' | 'balanced' | 'deep';
+
+export interface ImapScanRequest {
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  password: string;
+  mailbox?: string;
+  profile?: EmailScanProfile;
+  limit?: number;
+  sinceDays?: number;
+  debug?: boolean;
+  includeDebug?: boolean;
+}
+
+export interface ImapScanResponse {
+  connection?: {
+    id?: string;
+    email?: string;
+    provider?: EmailScanProvider | string;
+    lastScanAt?: string | null;
+    mailbox?: string | null;
+  };
+  scannedMessages?: number;
+  candidatesFound?: number;
+  createdDetections?: number;
+  skippedExisting?: number;
+  rejectedMessages?: number;
+  productResult?: EmailScanProductResult;
+  scanProfile?: string;
+  effectiveScanMode?: string;
+  effectiveWindowDays?: number;
+  scanReliabilityLevel?: 'low' | 'medium' | 'high' | string;
+  scanReliabilityReasons?: string[];
+  deepScanAvailable?: boolean;
+  deepScanRecommended?: boolean;
+  deepScanReason?: string | null;
+  quickScanLikelyIncomplete?: boolean;
+  userFacingCoverageNote?: string | null;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface EmailScanImportSelection {
+  key: string;
+  bucket: 'current' | 'review' | 'history' | 'price' | 'bill' | string;
+  action?: string;
+  item: EmailScanProductItem;
+}
+
+export interface EmailScanImportPreviewRequest {
+  sourceProvider?: EmailScanProvider | string;
+  selections: EmailScanImportSelection[];
+}
+
+export interface EmailScanImportPreviewResponse {
+  count?: number;
+  items?: unknown[];
+  drafts?: unknown[];
+  subscriptions?: unknown[];
+  warnings?: string[];
+  message?: string;
+  [key: string]: unknown;
+}
+
 export type EmailScanPrimaryAction =
   | 'confirm_still_active'
   | 'review_price_change'
@@ -510,6 +576,11 @@ export interface EmailScanProductResult {
     hasOnlyHistoricalEvidence?: boolean;
     hasPriceChanges?: boolean;
     hasBillsOrUtilities?: boolean;
+    scanReliabilityLevel?: 'low' | 'medium' | 'high' | string;
+    deepScanRecommended?: boolean;
+    quickScanLikelyIncomplete?: boolean;
+    userFacingCoverageNote?: string | null;
+    deepScanReason?: string | null;
   };
 }
 

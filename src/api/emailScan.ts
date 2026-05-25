@@ -3,11 +3,15 @@ import {
   AcceptDetectedSubscriptionPayload,
   AcceptDetectedSubscriptionResponse,
   EmailDetectionsResponse,
+  EmailScanImportPreviewRequest,
+  EmailScanImportPreviewResponse,
   EmailScanStatusResponse,
   GetEmailDetectionsParams,
   GmailAuthUrlResponse,
   GmailScanRequest,
   GmailScanResponse,
+  ImapScanRequest,
+  ImapScanResponse,
 } from '../types/api';
 
 export async function getEmailScanStatus(): Promise<EmailScanStatusResponse> {
@@ -20,6 +24,16 @@ export async function getGmailAuthUrl(): Promise<GmailAuthUrlResponse> {
 
 export async function runGmailScan(payload: GmailScanRequest = {}): Promise<GmailScanResponse> {
   return apiPostWithTimeout<GmailScanResponse>('/email-scan/gmail/scan', payload, 60000);
+}
+
+export async function runImapScan(payload: ImapScanRequest): Promise<ImapScanResponse> {
+  return apiPostWithTimeout<ImapScanResponse>('/email-scan/imap/scan', payload, 90000);
+}
+
+export async function getEmailScanImportPreview(
+  payload: EmailScanImportPreviewRequest
+): Promise<EmailScanImportPreviewResponse> {
+  return apiPostWithTimeout<EmailScanImportPreviewResponse>('/email-scan/import-preview', payload, 45000);
 }
 
 export async function getEmailDetections(

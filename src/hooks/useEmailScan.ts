@@ -1,17 +1,21 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   acceptDetectedSubscription,
+  getEmailScanImportPreview,
   getEmailDetections,
   getEmailScanStatus,
   getGmailAuthUrl,
   ignoreDetectedSubscription,
   runGmailScan,
+  runImapScan,
 } from '../api/emailScan';
 import {
   AcceptDetectedSubscriptionPayload,
   DetectedSubscriptionStatus,
+  EmailScanImportPreviewRequest,
   GetEmailDetectionsParams,
   GmailScanRequest,
+  ImapScanRequest,
 } from '../types/api';
 import { SUBSCRIPTIONS_KEY } from './useSubscriptions';
 
@@ -55,6 +59,23 @@ export function useRunGmailScan() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-scan'] });
     },
+  });
+}
+
+export function useRunImapScan() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: ImapScanRequest) => runImapScan(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['email-scan'] });
+    },
+  });
+}
+
+export function useEmailScanImportPreview() {
+  return useMutation({
+    mutationFn: (payload: EmailScanImportPreviewRequest) => getEmailScanImportPreview(payload),
   });
 }
 
