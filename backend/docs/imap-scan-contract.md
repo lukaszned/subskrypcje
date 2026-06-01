@@ -673,6 +673,47 @@ Send the selected product items as returned by the scan response:
 | 504 | `IMAP_CONNECTION_TIMEOUT` | Show timeout state and retry option. |
 | 500 | `IMAP_SCAN_FAILED` | Show a generic safe failure message. |
 
+## Backend Email Scan Diagnostics
+
+The backend logs safe request/response diagnostics for all `/email-scan/*` routes to help mobile integration testing.
+
+Logged:
+
+- method, path, status code, duration, IP, user agent
+- whether an Authorization header is present
+- auth header type only, for example `Bearer present`
+- authenticated user id/email after auth succeeds
+- request body keys only
+- for `/email-scan/imap/scan`, sanitized shape only:
+  - host present
+  - port
+  - secure
+  - username present
+  - password present
+  - mailbox
+  - profile
+  - includeDebug
+- response `code`, safe `message`, and validation error fields/messages
+- Gmail auth URL redirect URI and whether it uses localhost
+
+Never logged:
+
+- IMAP password
+- full Authorization token
+- Gmail access/refresh tokens
+- OAuth state/code query values
+- raw email bodies
+- full debug scan payloads
+
+If mobile requests fail, compare backend logs for:
+
+- wrong path or missing `/email-scan` prefix
+- missing or non-Bearer Authorization header
+- invalid Supabase token returning `AUTH_REQUIRED` or `UNAUTHORIZED`
+- validation body shape mismatch
+- CORS/preflight reaching the backend
+- Gmail redirect URI still pointing at localhost during mobile testing
+
 ## Security And Privacy Notes
 
 - IMAP password or app password is sent only to the backend scan endpoint.

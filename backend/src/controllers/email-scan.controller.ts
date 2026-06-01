@@ -178,6 +178,13 @@ export async function getGmailAuthUrlHandler(
         }
 
         const authUrl = getGmailAuthUrl(req.appUser.id);
+        const redirectUri = new URL(authUrl).searchParams.get("redirect_uri") ?? "";
+
+        console.info("[email-scan] gmail auth-url", {
+            userId: req.appUser.id,
+            redirectUri,
+            redirectUriUsesLocalhost: /localhost|127\.0\.0\.1/i.test(redirectUri),
+        });
 
         return res.json({ authUrl });
     } catch (error) {

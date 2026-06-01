@@ -23,9 +23,10 @@ export async function requireAuth(
         const authHeader = req.headers.authorization;
 
         if (!authHeader || !authHeader.startsWith("Bearer ")) {
-            return res
-                .status(401)
-                .json({ message: "Missing or invalid authorization header" });
+            return res.status(401).json({
+                message: "Missing or invalid authorization header",
+                code: "AUTH_REQUIRED",
+            });
         }
 
         const token = authHeader.replace("Bearer ", "").trim();
@@ -33,7 +34,10 @@ export async function requireAuth(
         const { data, error } = await supabase.auth.getUser(token);
 
         if (error || !data.user) {
-            return res.status(401).json({ message: "Unauthorized" });
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
         }
 
         req.authUser = {
@@ -42,9 +46,10 @@ export async function requireAuth(
         };
 
         if (!data.user.email) {
-            return res
-                .status(400)
-                .json({ message: "Authenticated user has no email" });
+            return res.status(400).json({
+                message: "Authenticated user has no email",
+                code: "AUTH_EMAIL_MISSING",
+            });
         }
 
         let appUser = await prisma.user.findUnique({
@@ -69,6 +74,9 @@ export async function requireAuth(
         next();
     } catch (error) {
         console.error("Auth middleware error:", error);
-        return res.status(500).json({ message: "Internal server error" });
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
     }
 }
