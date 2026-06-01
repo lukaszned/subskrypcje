@@ -5,6 +5,7 @@
 // =============================================================
 
 import Constants from 'expo-constants';
+import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { reportRequestFailure, reportRequestStart, reportRequestSuccess } from './networkStatus';
 import { supabase } from './supabase';
@@ -31,19 +32,6 @@ function getExpoHost(): string | null {
   );
 }
 
-function isLocalOrLanHost(host: string | null): boolean {
-  if (!host) return false;
-
-  return (
-    host === 'localhost' ||
-    host === '127.0.0.1' ||
-    host === '0.0.0.0' ||
-    /^10\./.test(host) ||
-    /^192\.168\./.test(host) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-  );
-}
-
 function uniqueUrls(urls: Array<string | undefined | null>): string[] {
   return Array.from(new Set(
     urls
@@ -66,12 +54,10 @@ function resolveApiBaseUrls(): string[] {
     : undefined;
   const androidEmulatorUrl = Platform.OS === 'android' ? 'http://10.0.2.2:3000' : undefined;
   const localUrl = Platform.OS === 'android' ? undefined : 'http://127.0.0.1:3000';
-  const envHost = extractHost(envUrl);
+  const isAndroidEmulator = Platform.OS === 'android' && !Device.isDevice;
 
-  // On a physical phone the LAN IP in .env can get stale. In dev, prefer the
-  // current Expo host when .env points to a different local/LAN address.
-  if (envUrl && expoUrl && envHost !== expoHost && isLocalOrLanHost(envHost)) {
-    return uniqueUrls([expoUrl, envUrl, androidEmulatorUrl, localUrl]);
+  if (isAndroidEmulator) {
+    return uniqueUrls([androidEmulatorUrl, expoUrl, envUrl]);
   }
 
   return uniqueUrls([envUrl, expoUrl, androidEmulatorUrl, localUrl]);
@@ -80,6 +66,11 @@ function resolveApiBaseUrls(): string[] {
 const API_BASE_URLS = resolveApiBaseUrls();
 const READ_TIMEOUT_MS = 12000;
 const WRITE_TIMEOUT_MS = 45000;
+const AUTH_FAILURE_COOLDOWN_MS = 10000;
+
+let accessTokenPromise: Promise<string> | null = null;
+let authFailureUntil = 0;
+let lastAuthFailure: ApiError | null = null;
 
 if (API_BASE_URLS.length === 0) {
   throw new Error(
@@ -90,8 +81,12 @@ if (API_BASE_URLS.length === 0) {
 
 console.log(`[apiClient] API base URLs: ${API_BASE_URLS.join(', ')}`);
 
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error || '');
+}
+
 function isRetriableConnectionError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error || '');
+  const message = getErrorMessage(error);
   return /timeout|abort|network request failed|failed to fetch|internet|offline|load failed/i.test(message);
 }
 
@@ -111,12 +106,76 @@ export class ApiError extends Error {
   }
 }
 
-async function getAccessToken(): Promise<string> {
-  const { data: { session }, error } = await supabase.auth.getSession();
-  if (error || !session?.access_token) {
-    throw new ApiError(401, 'Brak aktywnej sesji. Zaloguj sie ponownie.');
+function createAuthNetworkError(error: unknown) {
+  return new ApiError(
+    0,
+    'Nie mozna polaczyc z Supabase Auth. Sprawdz EXPO_PUBLIC_SUPABASE_URL oraz internet telefonu.',
+    { originalMessage: getErrorMessage(error) }
+  );
+}
+
+async function readAccessToken(): Promise<string> {
+  try {
+    const { data: { session }, error } = await supabase.auth.getSession();
+
+    if (error) {
+      if (isRetriableConnectionError(error)) {
+        const authError = createAuthNetworkError(error);
+        reportRequestFailure(authError);
+        throw authError;
+      }
+
+      throw new ApiError(401, 'Brak aktywnej sesji. Zaloguj sie ponownie.', {
+        originalMessage: getErrorMessage(error),
+      });
+    }
+
+    if (!session?.access_token) {
+      throw new ApiError(401, 'Brak aktywnej sesji. Zaloguj sie ponownie.');
+    }
+
+    return session.access_token;
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    if (isRetriableConnectionError(error)) {
+      const authError = createAuthNetworkError(error);
+      reportRequestFailure(authError);
+      throw authError;
+    }
+
+    throw error;
   }
-  return session.access_token;
+}
+
+async function getAccessToken(): Promise<string> {
+  if (lastAuthFailure && Date.now() < authFailureUntil) {
+    throw lastAuthFailure;
+  }
+
+  if (!accessTokenPromise) {
+    accessTokenPromise = readAccessToken()
+      .then((token) => {
+        lastAuthFailure = null;
+        authFailureUntil = 0;
+        return token;
+      })
+      .catch((error) => {
+        if (error instanceof ApiError && error.status === 0) {
+          lastAuthFailure = error;
+          authFailureUntil = Date.now() + AUTH_FAILURE_COOLDOWN_MS;
+        }
+
+        throw error;
+      })
+      .finally(() => {
+        accessTokenPromise = null;
+      });
+  }
+
+  return accessTokenPromise;
 }
 
 async function request<T>(
@@ -198,7 +257,9 @@ async function request<T>(
         (method === 'GET' || !isTimeoutError(normalizedError));
 
       if (canTryNextHost) {
-        console.warn(`[API Request] ${method} ${url} failed, trying next API host.`, normalizedError);
+        console.warn(
+          `[API Request] ${method} ${url} failed, trying next API host: ${getErrorMessage(normalizedError)}`
+        );
         continue;
       }
 

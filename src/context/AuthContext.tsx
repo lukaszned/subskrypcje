@@ -29,6 +29,28 @@ import React, {
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
+let hasLoggedSessionRestoreIssue = false;
+
+function getAuthErrorMessage(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || '');
+
+  if (/network request failed|failed to fetch|internet|offline|load failed/i.test(message)) {
+    return 'Nie mozna polaczyc z Supabase Auth. Sprawdz EXPO_PUBLIC_SUPABASE_URL oraz internet telefonu.';
+  }
+
+  return message || 'Nie udalo sie wykonac operacji autoryzacji.';
+}
+
+function logSessionRestoreIssue(error: unknown) {
+  if (!__DEV__ || hasLoggedSessionRestoreIssue) return;
+
+  hasLoggedSessionRestoreIssue = true;
+  console.info(
+    `[Auth] Session restore skipped: ${getAuthErrorMessage(error)} ` +
+    `URL: ${process.env.EXPO_PUBLIC_SUPABASE_URL || 'missing'}`
+  );
+}
+
 // ─────────────────────────────────────────────────────────────
 // Typ kontekstu
 // ─────────────────────────────────────────────────────────────
@@ -68,40 +90,67 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [isLoading, setIsLoading] = useState(true); // true na start
 
   useEffect(() => {
+    let isMounted = true;
+
+    const applySession = (nextSession: Session | null) => {
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
+    };
     // 1. Pobierz istniejącą sesję (z AsyncStorage — persystentna)
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setIsLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (!isMounted) return;
+
+        if (error) {
+          logSessionRestoreIssue(error);
+        }
+
+        applySession(error ? null : session);
+      })
+      .catch((error) => {
+        if (!isMounted) return;
+
+        logSessionRestoreIssue(error);
+        applySession(null);
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      });
 
     // 2. Nasłuchuj zmian sesji (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
+        if (!isMounted) return;
+
         setSession(session);
         setUser(session?.user ?? null);
         setIsLoading(false);
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   // ── Metody auth ─────────────────────────────────────────────
 
   const signIn = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error; // Obsługa błędu w komponencie (LoginScreen)
+    if (error) throw new Error(getAuthErrorMessage(error));
   }, []);
 
   const signUp = useCallback(async (email: string, password: string) => {
     const { error } = await supabase.auth.signUp({ email, password });
-    if (error) throw error; // Obsługa błędu w komponencie (RegisterScreen)
+    if (error) throw new Error(getAuthErrorMessage(error));
   }, []);
 
   const signOut = useCallback(async () => {
     const { error } = await supabase.auth.signOut();
-    if (error) throw error;
+    if (error) throw new Error(getAuthErrorMessage(error));
   }, []);
 
   // ── Wartość kontekstu ────────────────────────────────────────

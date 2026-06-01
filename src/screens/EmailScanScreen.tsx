@@ -311,6 +311,26 @@ function getScanDiagnosticsFromScan(scanResult: unknown): ScanDiagnostics {
   };
 }
 
+function getAuthUrlParam(authUrl: string, paramName: string) {
+  const escapedName = paramName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = authUrl.match(new RegExp(`[?&]${escapedName}=([^&]+)`));
+
+  if (!match?.[1]) return null;
+
+  try {
+    return decodeURIComponent(match[1].replace(/\+/g, ' '));
+  } catch {
+    return match[1];
+  }
+}
+
+function hasNativeLocalRedirect(authUrl: string) {
+  if (Platform.OS === 'web') return false;
+
+  const redirectUri = getAuthUrlParam(authUrl, 'redirect_uri');
+  return !!redirectUri && /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0)(?::|\/|$)/i.test(redirectUri);
+}
+
 const ONET_PRODUCT_RESULT_DEMO: EmailScanProductResult = {
   currentSubscriptions: [],
   needsReviewSubscriptions: [
@@ -492,6 +512,19 @@ export const EmailScanScreen = () => {
 
     authUrlMutation.mutate(undefined, {
       onSuccess: async ({ authUrl }) => {
+        if (!authUrl) {
+          Alert.alert('Blad konfiguracji', 'Backend nie zwrocil adresu autoryzacji Gmaila.');
+          return;
+        }
+
+        if (hasNativeLocalRedirect(authUrl)) {
+          Alert.alert(
+            'Niepoprawny redirect Gmaila',
+            'Backend zwrocil redirect_uri na localhost. Na telefonie uzyj LAN IP albo ngrok i dodaj ten redirect URI w Google Cloud Console.'
+          );
+          return;
+        }
+
         try {
           await Linking.openURL(authUrl);
           setWizardStep('scan');
@@ -511,6 +544,14 @@ export const EmailScanScreen = () => {
 
   const handleScan = (overrides: Partial<GmailScanRequest> = {}) => {
     if (isAnyScanPending) return;
+
+    if (!isConnected) {
+      Alert.alert(
+        'Najpierw polacz Gmaila',
+        'Skan Gmaila mozna uruchomic dopiero po poprawnym OAuth i odswiezeniu statusu polaczenia.'
+      );
+      return;
+    }
 
     setScanSource('gmail');
     setWizardStep('scan');
@@ -781,9 +822,9 @@ export const EmailScanScreen = () => {
 
           {scanSource === 'gmail' && (
             <TouchableOpacity
-              style={styles.testBtn}
+              style={[styles.testBtn, (!isConnected || isAnyScanPending) && styles.acceptBtnDisabled]}
               onPress={() => handleScan({ dryRun: true })}
-              disabled={isAnyScanPending}
+              disabled={!isConnected || isAnyScanPending}
             >
               <FlaskConical size={18} color={theme.colors.primary} />
               <Text style={styles.testBtnText}>Uruchom testowy skan bez zapisu</Text>
@@ -1092,7 +1133,11 @@ export const EmailScanScreen = () => {
 
               handleScan({ scanProfile: 'adaptive', dryRun: isDryRun });
             }}
-            disabled={isAnyScanPending || (scanSource === 'imap' && !canRunImapScan)}
+            disabled={
+              isAnyScanPending ||
+              (scanSource === 'imap' && !canRunImapScan) ||
+              (scanSource === 'gmail' && !isConnected)
+            }
           >
             <Search size={17} color={theme.colors.darkText} />
             <Text style={styles.deepScanBtnText}>Uruchom dokładniejszy skan</Text>

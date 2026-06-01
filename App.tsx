@@ -57,6 +57,7 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       retry: (failureCount, error: any) => {
+        if (error?.status === 0) return false;
         if (error?.status === 401 || error?.status === 403) return false;
         const message = error?.message || '';
         const isConnectivityIssue = /timeout|network request failed|failed to fetch|offline|load failed/i.test(message);

@@ -61,7 +61,7 @@ export function reportRequestSuccess(latencyMs: number) {
 export function reportRequestFailure(error: unknown, latencyMs?: number) {
   const message = error instanceof Error ? error.message : String(error || '');
   const isTimeout = /timeout|abort/i.test(message);
-  const isNetwork = /network request failed|failed to fetch|internet|offline|load failed/i.test(message);
+  const isNetwork = /network request failed|failed to fetch|internet|offline|load failed|brak polaczenia|nie mozna polaczyc/i.test(message);
 
   setSnapshot({
     status: isTimeout ? 'slow' : isNetwork ? 'offline' : snapshot.status,

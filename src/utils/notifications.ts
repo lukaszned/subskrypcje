@@ -2,30 +2,83 @@
 // src/utils/notifications.ts
 // =============================================================
 
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import * as Device from 'expo-device';
 import { Platform } from 'react-native';
 import { parseAppDate } from './date';
 
-// Konfiguracja zachowania powiadomień, gdy apka jest otwarta
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: true,
-  }),
-});
+type ExpoNotifications = typeof import('expo-notifications');
 
-/**
- * Prosi o uprawnienia do powiadomień.
- */
+type ReminderItem = {
+  id: string;
+  name: string;
+  remindAt: string;
+  nextPaymentDate: string;
+};
+
+let notificationsPromise: Promise<ExpoNotifications | null> | null = null;
+let notificationHandlerConfigured = false;
+let unsupportedExpoGoLogged = false;
+
+function isAndroidExpoGo() {
+  return Platform.OS === 'android' && Constants.appOwnership === 'expo';
+}
+
+function canUseNotifications() {
+  return Platform.OS !== 'web' && !isAndroidExpoGo();
+}
+
+function logUnsupportedExpoGoOnce() {
+  if (!__DEV__ || !isAndroidExpoGo() || unsupportedExpoGoLogged) return;
+
+  unsupportedExpoGoLogged = true;
+  console.info(
+    '[Notifications] Android Expo Go does not support push notifications in recent Expo SDKs. ' +
+    'Notification scheduling is skipped in Expo Go; use a development build to test it.'
+  );
+}
+
+async function getNotifications(): Promise<ExpoNotifications | null> {
+  if (!canUseNotifications()) {
+    logUnsupportedExpoGoOnce();
+    return null;
+  }
+
+  if (!notificationsPromise) {
+    notificationsPromise = import('expo-notifications')
+      .then((Notifications) => {
+        if (!notificationHandlerConfigured) {
+          Notifications.setNotificationHandler({
+            handleNotification: async () => ({
+              shouldShowAlert: true,
+              shouldShowBanner: true,
+              shouldShowList: true,
+              shouldPlaySound: true,
+              shouldSetBadge: true,
+            }),
+          });
+          notificationHandlerConfigured = true;
+        }
+
+        return Notifications;
+      })
+      .catch((error) => {
+        console.warn('[Notifications] Failed to load expo-notifications:', error);
+        return null;
+      });
+  }
+
+  return notificationsPromise;
+}
+
 export async function requestNotificationPermissions() {
   if (!Device.isDevice) {
-    console.log('Powiadomienia wymagają fizycznego urządzenia (nie działają w pełni na symulatorze/web).');
+    console.log('Notifications require a physical device for full support.');
     return false;
   }
+
+  const Notifications = await getNotifications();
+  if (!Notifications) return false;
 
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
   let finalStatus = existingStatus;
@@ -36,32 +89,21 @@ export async function requestNotificationPermissions() {
   }
 
   if (finalStatus !== 'granted') {
-    console.log('Brak uprawnień do powiadomień.');
+    console.log('Notification permissions were not granted.');
     return false;
   }
 
   if (Platform.OS === 'android') {
-    Notifications.setNotificationChannelAsync('default', {
+    await Notifications.setNotificationChannelAsync('default', {
       name: 'default',
       importance: Notifications.AndroidImportance.MAX,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#0B6B3A',
     });
   }
 
   return true;
 }
 
-/**
- * Planuje powiadomienie dla subskrypcji.
- * 
- * @param id Unikalne ID subskrypcji (użyte jako identyfikator powiadomienia)
- * @param name Nazwa subskrypcji
- * @param amount Kwota
- * @param currency Waluta
- * @param nextPaymentDate Data płatności (string ISO)
- * @param daysBefore Ile dni przed przypomnieć
- */
 export async function scheduleSubscriptionReminder(
   id: string,
   name: string,
@@ -70,107 +112,111 @@ export async function scheduleSubscriptionReminder(
   nextPaymentDate: string,
   daysBefore: number = 1
 ) {
-  // Najpierw usuwamy stare powiadomienie dla tego ID (jeśli istnieje)
-  await cancelSubscriptionReminder(id);
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
 
   const paymentDate = parseAppDate(nextPaymentDate);
   if (!paymentDate) return null;
 
   const triggerDate = new Date(paymentDate);
-  
-  // Ustawiamy godzinę przypomnienia np. na 10:00 rano
   triggerDate.setDate(paymentDate.getDate() - daysBefore);
   triggerDate.setHours(10, 0, 0, 0);
 
   const now = new Date();
   if (triggerDate <= now) {
-    // Jeśli data przypomnienia już minęła, planujemy na "zaraz" (za 5 sekund) dla testu
-    // lub po prostu nie planujemy wcale w produkcji. Tu: tylko jeśli data płatności jest w przyszłości.
     if (paymentDate > now) {
-      triggerDate.setTime(now.getTime() + 1000 * 60 * 5); // 5 minut od teraz
+      triggerDate.setTime(now.getTime() + 1000 * 60 * 5);
     } else {
       return null;
     }
   }
 
-  if (Platform.OS === 'web') return null;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(id);
 
-  const notificationId = await Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Nadchodząca płatność! 💸',
-      body: `Pamiętaj o subskrypcji ${name}: ${amount.toFixed(2)} ${currency} już za ${daysBefore} dni.`,
-      data: { subscriptionId: id },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: triggerDate,
-    },
-    identifier: id, // Używamy ID subskrypcji jako identyfikatora
-  });
-
-  return notificationId;
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Nadchodzaca platnosc',
+        body: `Pamietaj o subskrypcji ${name}: ${amount.toFixed(2)} ${currency} za ${daysBefore} dni.`,
+        data: { subscriptionId: id },
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: triggerDate,
+      },
+      identifier: id,
+    });
+  } catch (error) {
+    console.warn('[Notifications] Failed to schedule subscription reminder:', error);
+    return null;
+  }
 }
 
-/**
- * Anuluje powiadomienie dla danej subskrypcji.
- */
 export async function cancelSubscriptionReminder(id: string) {
-  if (Platform.OS === 'web') return;
-  await Notifications.cancelScheduledNotificationAsync(id);
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.cancelScheduledNotificationAsync(id);
+  } catch (error) {
+    console.warn('[Notifications] Failed to cancel subscription reminder:', error);
+  }
 }
 
-/**
- * Anuluje wszystkie powiadomienia.
- */
 export async function cancelAllReminders() {
-  if (Platform.OS === 'web') return;
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
+
+  try {
+    await Notifications.cancelAllScheduledNotificationsAsync();
+  } catch (error) {
+    console.warn('[Notifications] Failed to cancel all reminders:', error);
+  }
 }
 
-/**
- * Planuje pojedyncze przypomnienie na podstawie obiektu ReminderItem.
- */
-export async function scheduleReminderItem(item: any) {
-  if (Platform.OS === 'web') return null;
+export async function scheduleReminderItem(item: ReminderItem) {
+  const Notifications = await getNotifications();
+  if (!Notifications) return null;
+
   const triggerDate = new Date(item.remindAt);
   const now = new Date();
 
   if (triggerDate <= now) return null;
 
-  return Notifications.scheduleNotificationAsync({
-    content: {
-      title: 'Nadchodząca płatność! 💸',
-      body: `Pamiętaj o subskrypcji ${item.name}. Płatność: ${new Date(item.nextPaymentDate).toLocaleDateString('pl-PL')}`,
-      data: { subscriptionId: item.id },
-      sound: true,
-    },
-    trigger: {
-      type: Notifications.SchedulableTriggerInputTypes.DATE,
-      date: triggerDate,
-    },
-    identifier: item.id,
-  });
+  try {
+    return await Notifications.scheduleNotificationAsync({
+      content: {
+        title: 'Nadchodzaca platnosc',
+        body: `Pamietaj o subskrypcji ${item.name}. Platnosc: ${new Date(item.nextPaymentDate).toLocaleDateString('pl-PL')}`,
+        data: { subscriptionId: item.id },
+        sound: true,
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DATE,
+        date: triggerDate,
+      },
+      identifier: item.id,
+    });
+  } catch (error) {
+    console.warn('[Notifications] Failed to schedule reminder item:', error);
+    return null;
+  }
 }
 
-/**
- * Czyści wszystkie zaplanowane powiadomienia i planuje je na nowo na podstawie listy z backendu.
- */
-export async function syncReminders(reminders: any[]) {
-  if (Platform.OS === 'web' || !reminders || !Array.isArray(reminders)) return;
-  
+export async function syncReminders(reminders: ReminderItem[]) {
+  if (!Array.isArray(reminders) || reminders.length === 0) return;
+
+  const Notifications = await getNotifications();
+  if (!Notifications) return;
+
   try {
-    // Czyścimy wszystko przed synchronizacją, żeby nie dublować
-    await cancelAllReminders(); 
-    
+    await Notifications.cancelAllScheduledNotificationsAsync();
+
     for (const reminder of reminders) {
-      try {
-        await scheduleReminderItem(reminder);
-      } catch (err) {
-        console.warn('[Notifications] Błąd przy planowaniu pojedynczego przypomnienia:', err);
-      }
+      await scheduleReminderItem(reminder);
     }
   } catch (error) {
-    console.error('[Notifications] Błąd podczas synchronizacji przypomnień:', error);
+    console.error('[Notifications] Failed to sync reminders:', error);
   }
 }
