@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
   KeyboardAvoidingView,
   InteractionManager,
   Linking,
@@ -71,6 +72,7 @@ import {
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { formatInputDate, parseAppDate } from '../utils/date';
+import { goBackOrDashboard } from '../utils/navigation';
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
@@ -486,6 +488,8 @@ export const EmailScanScreen = () => {
   };
 
   const handleConnect = () => {
+    if (authUrlMutation.isPending) return;
+
     authUrlMutation.mutate(undefined, {
       onSuccess: async ({ authUrl }) => {
         try {
@@ -506,6 +510,8 @@ export const EmailScanScreen = () => {
   };
 
   const handleScan = (overrides: Partial<GmailScanRequest> = {}) => {
+    if (isAnyScanPending) return;
+
     setScanSource('gmail');
     setWizardStep('scan');
     setDryRunResults(null);
@@ -557,6 +563,8 @@ export const EmailScanScreen = () => {
   };
 
   const handleImapScan = (profileOverride?: EmailScanProfile) => {
+    if (isAnyScanPending) return;
+
     if (!canRunImapScan) {
       Alert.alert(
         'Uzupełnij dane IMAP',
@@ -611,6 +619,8 @@ export const EmailScanScreen = () => {
   };
 
   const handleImportPreview = (entries: EmailScanImportSelection[]) => {
+    if (importPreviewMutation.isPending) return;
+
     const selections = entries.filter((entry) => selectedImportItems[entry.key]);
     if (selections.length === 0) {
       Alert.alert('Wybierz pozycje', 'Zaznacz co najmniej jedną pozycję, żeby zobaczyć podgląd importu.');
@@ -675,6 +685,7 @@ export const EmailScanScreen = () => {
 
   const handleAccept = () => {
     setSubmitted(true);
+    Keyboard.dismiss();
     if (!selectedDetection || !canAccept) return;
 
     acceptMutation.mutate({
@@ -1510,7 +1521,7 @@ export const EmailScanScreen = () => {
     const isReviewBucket = bucket === 'review';
 
     return (
-      <Modal visible transparent animationType="slide">
+      <Modal visible transparent animationType="slide" onRequestClose={() => setSelectedProductReview(null)}>
         <View style={styles.productModalOverlay}>
           <View style={styles.productModal}>
             <View style={styles.productModalHandle} />
@@ -1522,7 +1533,7 @@ export const EmailScanScreen = () => {
                 <Text style={styles.productModalTitle}>{title}</Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedProductReview(null)}>
-                <X size={21} color={vibrantTheme.colors.textMuted} />
+                <X size={21} color={theme.colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -1634,7 +1645,7 @@ export const EmailScanScreen = () => {
     const warnings = Array.isArray(importPreviewResult.warnings) ? importPreviewResult.warnings : [];
 
     return (
-      <Modal visible transparent animationType="slide">
+      <Modal visible transparent animationType="slide" onRequestClose={() => setImportPreviewResult(null)}>
         <View style={styles.productModalOverlay}>
           <View style={styles.productModal}>
             <View style={styles.productModalHandle} />
@@ -1644,7 +1655,7 @@ export const EmailScanScreen = () => {
                 <Text style={styles.productModalTitle}>Drafty przed zapisem</Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setImportPreviewResult(null)}>
-                <X size={21} color={vibrantTheme.colors.textMuted} />
+                <X size={21} color={theme.colors.textMuted} />
               </TouchableOpacity>
             </View>
 
@@ -1734,7 +1745,7 @@ export const EmailScanScreen = () => {
   };
 
   const renderReviewModal = () => (
-    <Modal visible={!!selectedDetection} transparent animationType="slide">
+    <Modal visible={!!selectedDetection} transparent animationType="slide" onRequestClose={() => setSelectedDetection(null)}>
       <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
@@ -1743,7 +1754,7 @@ export const EmailScanScreen = () => {
               <Text style={styles.modalSubtitle}>{selectedDetection?.name || selectedDetection?.provider}</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedDetection(null)}>
-              <X size={22} color="#64748B" />
+              <X size={22} color={theme.colors.textMuted} />
             </TouchableOpacity>
           </View>
 
@@ -1857,9 +1868,14 @@ export const EmailScanScreen = () => {
             </View>
 
             <TouchableOpacity
-              style={[styles.acceptBtn, { backgroundColor: theme.colors.primary }, (!canAccept || acceptMutation.isPending) && styles.acceptBtnDisabled]}
+              style={[
+                styles.acceptBtn,
+                { backgroundColor: theme.colors.primary },
+                (!canAccept || acceptMutation.isPending) && { backgroundColor: theme.colors.cardStrong, opacity: 0.58 },
+              ]}
               onPress={handleAccept}
-              disabled={acceptMutation.isPending}
+              disabled={!canAccept || acceptMutation.isPending}
+              accessibilityState={{ disabled: !canAccept || acceptMutation.isPending, busy: acceptMutation.isPending }}
             >
               {acceptMutation.isPending ? (
                 <ActivityIndicator color={theme.colors.darkText} />
@@ -2118,7 +2134,7 @@ export const EmailScanScreen = () => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <View style={[styles.header, { borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBackOrDashboard(navigation)} style={styles.backBtn} accessibilityLabel="Wstecz">
           <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Email Scan</Text>
@@ -2139,7 +2155,7 @@ export const EmailScanScreen = () => {
       >
         <View style={[styles.heroCard, { backgroundColor: theme.colors.cardStrong, borderColor: theme.colors.borderStrong, shadowColor: theme.colors.primary }]}>
           <View style={[styles.heroIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
-            <Mail size={26} color="#FFFFFF" />
+            <Mail size={26} color={theme.colors.text} />
           </View>
           <Text style={styles.heroTitle}>Email Scan</Text>
           <Text style={styles.heroText}>
@@ -2208,10 +2224,10 @@ export const EmailScanScreen = () => {
           {!isConnected ? (
             <TouchableOpacity style={[styles.connectBtn, { backgroundColor: theme.colors.primary }]} onPress={handleConnect} disabled={authUrlMutation.isPending}>
               {authUrlMutation.isPending ? (
-                <ActivityIndicator color="#FFFFFF" />
+                <ActivityIndicator color={theme.colors.darkText} />
               ) : (
                 <>
-                  <ExternalLink size={20} color="#FFFFFF" />
+                  <ExternalLink size={20} color={theme.colors.darkText} />
                   <Text style={styles.connectBtnText}>Połącz Gmaila</Text>
                 </>
               )}
@@ -2231,10 +2247,10 @@ export const EmailScanScreen = () => {
               )}
               <TouchableOpacity style={[styles.scanBtn, { backgroundColor: theme.colors.primary }]} onPress={() => handleScan()} disabled={isAnyScanPending}>
                 {scanMutation.isPending ? (
-                  <ActivityIndicator color="#FFFFFF" />
+                  <ActivityIndicator color={theme.colors.darkText} />
                 ) : (
                   <>
-                    <Search size={20} color="#FFFFFF" />
+                    <Search size={20} color={theme.colors.darkText} />
                     <Text style={styles.connectBtnText}>Skanuj Gmaila</Text>
                   </>
                 )}

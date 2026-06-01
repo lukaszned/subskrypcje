@@ -45,6 +45,7 @@ import { PressableScale } from '../components/PressableScale';
 import { GlassCard, MetricTile, SectionHeader } from '../components/ui/PremiumPrimitives';
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 import { getSeasonalStatus } from '../utils/subscriptionNotes';
+import { goBackOrDashboard } from '../utils/navigation';
 
 const toMonthlyAmount = (subscription: Subscription) => {
   const amount = Number(subscription.amount || 0);
@@ -68,6 +69,7 @@ const showActionError = (error: unknown, fallback: string) => {
 export const SubscriptionListScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useTheme();
+  const canGoBack = navigation.canGoBack();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all' | 'seasonal'>('all');
@@ -272,7 +274,13 @@ export const SubscriptionListScreen = () => {
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.header}>
-          <PressableScale onPress={() => navigation.goBack()}><ArrowLeft size={24} color={theme.colors.text} /></PressableScale>
+          {canGoBack ? (
+            <PressableScale onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz">
+              <ArrowLeft size={24} color={theme.colors.text} />
+            </PressableScale>
+          ) : (
+            <View style={styles.headerSpacer} />
+          )}
           <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
             <Search size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
             <TextInput
@@ -350,6 +358,7 @@ const styles = StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
   container: { flex: 1 },
   header: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, alignItems: 'center', gap: 12 },
+  headerSpacer: { width: 24, height: 24 },
   searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: vibrantTheme.colors.card, borderRadius: 20, paddingHorizontal: 16, height: 50, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, height: '100%', fontSize: 16, color: vibrantTheme.colors.text, fontWeight: '700' },

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -11,8 +11,9 @@ import {
 } from 'react-native';
 import { X, ExternalLink, Clock, AlertTriangle, CheckCircle, ShieldAlert, AlertCircle } from 'lucide-react-native';
 import { useCancelGuide } from '../hooks/useCancelGuide';
-import { vibrantTheme } from '../theme/vibrantTheme';
+import type { AppTheme } from '../theme/ThemeContext';
 import { useTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 
 interface Props {
   isVisible: boolean;
@@ -22,6 +23,7 @@ interface Props {
   subscriptionName: string;
   onRequestGuide?: () => void;
   isRequestingGuide?: boolean;
+  isConfirmingCancel?: boolean;
 }
 
 export const CancelAssistantModal: React.FC<Props> = ({
@@ -32,8 +34,10 @@ export const CancelAssistantModal: React.FC<Props> = ({
   subscriptionName,
   onRequestGuide,
   isRequestingGuide = false,
+  isConfirmingCancel = false,
 }) => {
   const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const { data: guide, isLoading } = useCancelGuide(subscriptionId);
   const [step, setStep] = useState<'info' | 'confirm'>('info');
 
@@ -56,11 +60,11 @@ export const CancelAssistantModal: React.FC<Props> = ({
   const hasInstructions = !!guide?.instructions?.length;
 
   return (
-    <Modal visible={isVisible} transparent animationType="slide">
-      <View style={styles.overlay}>
-        <View style={styles.container}>
+    <Modal visible={isVisible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={[styles.overlay, { backgroundColor: withAlpha(theme.colors.bg, 0.72) }]}>
+        <View style={[styles.container, { backgroundColor: theme.colors.bg2 }]}>
           <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
-            <X size={24} color="#64748B" />
+            <X size={24} color={theme.colors.textMuted} />
           </TouchableOpacity>
 
           {isLoading ? (
@@ -70,7 +74,7 @@ export const CancelAssistantModal: React.FC<Props> = ({
             </View>
           ) : !guide || !hasInstructions ? (
             <View style={styles.center}>
-              <AlertTriangle size={48} color="#F59E0B" style={styles.iconSpaced} />
+              <AlertTriangle size={48} color={theme.colors.warning} style={styles.iconSpaced} />
               <Text style={styles.title}>Brak instrukcji anulowania</Text>
               <Text style={styles.desc}>
                 Nie znaleźliśmy jeszcze gotowego poradnika dla {subscriptionName}. Możesz zgłosić brak instrukcji, a subskrypcję anulować samodzielnie u dostawcy.
@@ -90,9 +94,11 @@ export const CancelAssistantModal: React.FC<Props> = ({
                 </TouchableOpacity>
               )}
               <TouchableOpacity
-                style={[styles.btn, styles.dangerBtn]}
+                style={[styles.btn, { backgroundColor: theme.colors.danger }, isConfirmingCancel && styles.btnDisabled]}
                 onPress={() => { onConfirmCancel(); onClose(); }}
+                disabled={isConfirmingCancel}
               >
+                {isConfirmingCancel ? <ActivityIndicator size="small" color={theme.colors.darkText} /> : null}
                 <Text style={styles.btnText}>Oznacz jako anulowaną</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.outlineBtn} onPress={onClose}>
@@ -114,7 +120,7 @@ export const CancelAssistantModal: React.FC<Props> = ({
                   </Text>
                 </View>
                 <View style={styles.badge}>
-                  <Clock size={14} color="#64748B" />
+                  <Clock size={14} color={theme.colors.textMuted} />
                   <Text style={styles.badgeText}>~{estimatedTimeMinutes} min</Text>
                 </View>
               </View>
@@ -132,7 +138,7 @@ export const CancelAssistantModal: React.FC<Props> = ({
 
               {guide.notes && (
                 <View style={styles.notes}>
-                  <ShieldAlert size={20} color="#D97706" />
+                  <ShieldAlert size={20} color={theme.colors.warning} />
                   <Text style={styles.notesText}>{guide.notes}</Text>
                 </View>
               )}
@@ -157,9 +163,11 @@ export const CancelAssistantModal: React.FC<Props> = ({
                 Jeśli potwierdzisz, oznaczymy subskrypcję w aplikacji jako "Anulowana". Pamiętaj, że to nie zwalnia Cię z obowiązku faktycznego wypowiedzenia umowy u dostawcy.
               </Text>
               <TouchableOpacity 
-                style={[styles.btn, { backgroundColor: '#EF4444' }]} 
+                style={[styles.btn, { backgroundColor: theme.colors.danger }, isConfirmingCancel && styles.btnDisabled]} 
                 onPress={() => { onConfirmCancel(); onClose(); }}
+                disabled={isConfirmingCancel}
               >
+                {isConfirmingCancel ? <ActivityIndicator size="small" color={theme.colors.darkText} /> : null}
                 <Text style={styles.btnText}>Tak, oznacz jako anulowaną</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.outlineBtn} onPress={onClose}>
@@ -173,14 +181,14 @@ export const CancelAssistantModal: React.FC<Props> = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    backgroundColor: withAlpha(theme.colors.bg, 0.72),
     justifyContent: 'flex-end',
   },
   container: {
-    backgroundColor: vibrantTheme.colors.bg2,
+    backgroundColor: theme.colors.bg2,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingTop: 32,
@@ -197,7 +205,7 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: vibrantTheme.colors.card,
+    backgroundColor: theme.colors.card,
     borderRadius: 20,
     zIndex: 10,
   },
@@ -209,7 +217,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 16,
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 16,
     fontWeight: '600',
   },
@@ -219,13 +227,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
     marginBottom: 12,
     textAlign: 'center',
   },
   desc: {
     fontSize: 15,
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     textAlign: 'center',
     lineHeight: 22,
     marginBottom: 32,
@@ -243,7 +251,7 @@ const styles = StyleSheet.create({
   badge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: vibrantTheme.colors.card,
+    backgroundColor: theme.colors.card,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
@@ -252,14 +260,14 @@ const styles = StyleSheet.create({
   badgeText: {
     fontSize: 13,
     fontWeight: '700',
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
   },
-  easy: { backgroundColor: '#F8FAFC' },
-  easyText: { color: '#334155' },
-  medium: { backgroundColor: '#FFFBEB' },
-  mediumText: { color: '#F59E0B' },
-  hard: { backgroundColor: '#FEF2F2' },
-  hardText: { color: '#EF4444' },
+  easy: { backgroundColor: withAlpha(theme.colors.success, 0.14) },
+  easyText: { color: theme.colors.success },
+  medium: { backgroundColor: withAlpha(theme.colors.warning, 0.14) },
+  mediumText: { color: theme.colors.warning },
+  hard: { backgroundColor: withAlpha(theme.colors.danger, 0.14) },
+  hardText: { color: theme.colors.danger },
   instructions: {
     marginTop: 20,
     gap: 16,
@@ -273,25 +281,25 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: withAlpha(theme.colors.text, 0.14),
     justifyContent: 'center',
     alignItems: 'center',
     marginTop: 2,
   },
   stepNumber: {
-    color: vibrantTheme.colors.primary,
+    color: theme.colors.primary,
     fontWeight: '800',
     fontSize: 14,
   },
   instructionText: {
     flex: 1,
     fontSize: 16,
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
     lineHeight: 24,
   },
   notes: {
     flexDirection: 'row',
-    backgroundColor: '#FFFBEB',
+    backgroundColor: withAlpha(theme.colors.warning, 0.14),
     padding: 16,
     borderRadius: 16,
     marginTop: 24,
@@ -299,14 +307,14 @@ const styles = StyleSheet.create({
   },
   notesText: {
     flex: 1,
-    color: '#D97706',
+    color: theme.colors.warning,
     fontSize: 14,
     fontWeight: '500',
     lineHeight: 20,
   },
   btn: {
     flexDirection: 'row',
-    backgroundColor: vibrantTheme.colors.primary,
+    backgroundColor: theme.colors.primary,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
@@ -315,11 +323,14 @@ const styles = StyleSheet.create({
     marginTop: 32,
   },
   dangerBtn: {
-    backgroundColor: '#EF4444',
+    backgroundColor: theme.colors.danger,
     marginTop: 12,
   },
+  btnDisabled: {
+    opacity: 0.58,
+  },
   btnText: {
-    color: vibrantTheme.colors.darkText,
+    color: theme.colors.darkText,
     fontWeight: '700',
     fontSize: 16,
   },
@@ -331,7 +342,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   outlineBtnText: {
-    color: '#64748B',
+    color: theme.colors.textMuted,
     fontWeight: '600',
     fontSize: 16,
   },

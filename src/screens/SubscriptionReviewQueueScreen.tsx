@@ -35,6 +35,7 @@ import { useTheme } from '../theme/ThemeContext';
 import type { Subscription } from '../types/api';
 import type { AppStackParamList } from '../types/navigation';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
+import { goBackOrDashboard } from '../utils/navigation';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -304,7 +305,7 @@ export function SubscriptionReviewQueueScreen() {
         <View style={styles.header}>
           <PressableScale
             style={[styles.backButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-            onPress={() => navigation.goBack()}
+            onPress={() => goBackOrDashboard(navigation)}
           >
             <ArrowLeft size={22} color={theme.colors.text} />
           </PressableScale>

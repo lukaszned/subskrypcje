@@ -8,6 +8,7 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Animated, StyleSheet, ViewStyle } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 
 interface SkeletonProps {
   width: ViewStyle['width'];
@@ -43,8 +44,8 @@ export const Skeleton: React.FC<SkeletonProps> = ({
     ).start();
   }, [opacity, translateX]);
 
-  const backgroundColor = isDark ? theme.colors.cardStrong : `${theme.colors.primary}16`;
-  const shimmerColor = isDark ? 'rgba(255,255,255,0.14)' : `${theme.colors.primary}22`;
+  const backgroundColor = isDark ? theme.colors.cardStrong : withAlpha(theme.colors.primary, 0.09);
+  const shimmerColor = isDark ? withAlpha(theme.colors.text, 0.14) : withAlpha(theme.colors.primary, 0.14);
   const shimmerTranslate = translateX.interpolate({
     inputRange: [-1, 1],
     outputRange: [-80, 120],
@@ -72,20 +73,24 @@ export const Skeleton: React.FC<SkeletonProps> = ({
 
 // ─── Preset: lista wierszy ────────────────────────────────────
 
-export const SkeletonList: React.FC<{ rows?: number, isDark?: boolean }> = ({ rows = 4, isDark }) => (
-  <View style={styles.listContainer}>
-    {Array.from({ length: rows }).map((_, i) => (
-      <View key={i} style={[styles.row, isDark && { borderBottomColor: '#1E293B' }]}>
-        <Skeleton width={48} height={48} borderRadius={24} style={styles.avatar} isDark={isDark} />
-        <View style={styles.rowContent}>
-          <Skeleton width={140} height={16} style={styles.mb8} isDark={isDark} />
-          <Skeleton width={90} height={12} isDark={isDark} />
+export const SkeletonList: React.FC<{ rows?: number, isDark?: boolean }> = ({ rows = 4, isDark }) => {
+  const { theme } = useTheme();
+
+  return (
+    <View style={styles.listContainer}>
+      {Array.from({ length: rows }).map((_, i) => (
+        <View key={i} style={[styles.row, { borderBottomColor: isDark ? theme.colors.borderStrong : theme.colors.border }]}>
+          <Skeleton width={48} height={48} borderRadius={24} style={styles.avatar} isDark={isDark} />
+          <View style={styles.rowContent}>
+            <Skeleton width={140} height={16} style={styles.mb8} isDark={isDark} />
+            <Skeleton width={90} height={12} isDark={isDark} />
+          </View>
+          <Skeleton width={70} height={20} borderRadius={6} isDark={isDark} />
         </View>
-        <Skeleton width={70} height={20} borderRadius={6} isDark={isDark} />
-      </View>
-    ))}
-  </View>
-);
+      ))}
+    </View>
+  );
+};
 
 // ─── Preset: karty poziome ────────────────────────────────────
 
@@ -105,7 +110,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#F8FAFC',
   },
   avatar: { marginRight: 16 },
   rowContent: { flex: 1, marginRight: 12 },

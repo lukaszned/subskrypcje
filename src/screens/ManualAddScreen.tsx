@@ -42,29 +42,29 @@ import { useSubscriptionPlans } from '../hooks/useSubscriptionPlans';
 import type { PopularSubscription } from '../data/subscriptionPlans';
 import { SubscriptionCategory, BillingCycle } from '../types/api';
 import { ApiError } from '../lib/apiClient';
-import { vibrantTheme } from '../theme/vibrantTheme';
+import type { AppTheme } from '../theme/ThemeContext';
 import { useTheme } from '../theme/ThemeContext';
+import { getCategoryTone, withAlpha } from '../theme/themeUtils';
 import { formatInputDate, parseAppDate } from '../utils/date';
 import { isTimeoutLikeError } from '../utils/requestErrors';
 import { fetchEstimatedCost, type EstimatedCostPlan } from '../services/aiPricePredictor';
 import { buildSubscriptionNotesPayload, dateToSeasonInput, parseSubscriptionNotes } from '../utils/subscriptionNotes';
+import { goBackOrDashboard } from '../utils/navigation';
 
 const CATEGORIES: Array<{
   id: SubscriptionCategory;
   label: string;
-  color: string;
-  textColor: string;
   icon: any;
 }> = [
-  { id: 'entertainment', label: 'Rozrywka',      color: '#F1F5F9', textColor: '#334155', icon: Film },
-  { id: 'utilities',     label: 'Narzędzia',     color: '#DBEAFE', textColor: '#2563EB', icon: Wifi },
-  { id: 'health',        label: 'Zdrowie',        color: '#F1F5F9', textColor: '#334155', icon: Heart },
-  { id: 'education',     label: 'Edukacja',       color: '#FEF9C3', textColor: '#CA8A04', icon: GraduationCap },
-  { id: 'productivity',  label: 'Produktywność',  color: '#FCE7F3', textColor: '#BE185D', icon: Briefcase },
-  { id: 'shopping',      label: 'Zakupy',         color: '#FEF3C7', textColor: '#D97706', icon: ShoppingBag },
-  { id: 'finance',       label: 'Finanse',        color: '#F8FAFC', textColor: '#334155', icon: PiggyBank },
-  { id: 'transport',     label: 'Transport',      color: '#F0F9FF', textColor: '#0284C7', icon: Truck },
-  { id: 'other',         label: 'Inne',           color: '#F1F5F9', textColor: '#64748B', icon: Globe },
+  { id: 'entertainment', label: 'Rozrywka',      icon: Film },
+  { id: 'utilities',     label: 'Narzędzia',     icon: Wifi },
+  { id: 'health',        label: 'Zdrowie',        icon: Heart },
+  { id: 'education',     label: 'Edukacja',       icon: GraduationCap },
+  { id: 'productivity',  label: 'Produktywność',  icon: Briefcase },
+  { id: 'shopping',      label: 'Zakupy',         icon: ShoppingBag },
+  { id: 'finance',       label: 'Finanse',        icon: PiggyBank },
+  { id: 'transport',     label: 'Transport',      icon: Truck },
+  { id: 'other',         label: 'Inne',           icon: Globe },
 ];
 
 const CYCLES: Array<{ id: BillingCycle; label: string }> = [
@@ -112,13 +112,13 @@ const CATEGORY_LABELS_LOCAL: Record<SubscriptionCategory, string> = {
   other: 'Inne',
 };
 
-const GENERATED_BRAND_PALETTES: Array<[string, string]> = [
-  ['#20F6B5', '#22D3EE'],
-  ['#A78BFA', '#F472B6'],
-  ['#FBBF24', '#FB7185'],
-  ['#60A5FA', '#34D399'],
-  ['#F97316', '#F43F5E'],
-  ['#E879F9', '#38BDF8'],
+const getGeneratedBrandPalettes = (theme: AppTheme): Array<[string, string]> => [
+  [theme.colors.primary, theme.colors.cyan],
+  [theme.colors.violet, theme.colors.pink],
+  [theme.colors.warning, theme.colors.danger],
+  [theme.colors.cyan, theme.colors.success],
+  [theme.colors.primary, theme.colors.warning],
+  [theme.colors.pink, theme.colors.cyan],
 ];
 
 const CATEGORY_KEYWORDS: Array<{ category: SubscriptionCategory; terms: string[] }> = [
@@ -158,9 +158,10 @@ const inferCategoryFromName = (value: string): SubscriptionCategory => {
   return match?.category ?? 'other';
 };
 
-const buildGeneratedIdentity = (value: string) => {
+const buildGeneratedIdentity = (value: string, theme: AppTheme) => {
   const hash = hashString(value);
-  const gradient = GENERATED_BRAND_PALETTES[hash % GENERATED_BRAND_PALETTES.length];
+  const palettes = getGeneratedBrandPalettes(theme);
+  const gradient = palettes[hash % palettes.length];
   const suggestedCategory = inferCategoryFromName(value);
 
   return {
@@ -175,6 +176,7 @@ export const ManualAddScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'AddSubscription'>>();
   const route = useRoute<RouteProp<AppStackParamList, 'AddSubscription'>>();
   const { theme } = useTheme();
+  const styles = useMemo(() => createStyles(theme), [theme]);
   const subscriptionId = route.params?.subscriptionId;
 
   const amountInputRef = useRef<TextInput>(null);
@@ -292,7 +294,7 @@ export const ManualAddScreen = () => {
     [normalizedName, subscriptionPlans]
   );
   const isCustomServiceMode = normalizedName.length >= 3 && !selectedService && !hasExactPopularMatch;
-  const generatedIdentity = useMemo(() => buildGeneratedIdentity(name), [name]);
+  const generatedIdentity = useMemo(() => buildGeneratedIdentity(name, theme), [name, theme]);
   const aiButtonGlow = aiPulseAnim.interpolate({
     inputRange: [0, 1],
     outputRange: [0.5, 1],
@@ -482,6 +484,7 @@ export const ManualAddScreen = () => {
 
   const handleSave = async () => {
     setIsSubmitted(true);
+    Keyboard.dismiss();
     if (!isValid || createMutation.isPending || updateMutation.isPending) return;
 
     const notesPayload = buildSubscriptionNotesPayload({
@@ -514,7 +517,7 @@ export const ManualAddScreen = () => {
       updateMutation.mutate({ id: subscriptionId, payload }, {
         onSuccess: () => {
           Alert.alert('Sukces', 'Subskrypcja została zaktualizowana.');
-          navigation.goBack();
+          goBackOrDashboard(navigation);
         },
         onError: handleApiError,
       });
@@ -522,7 +525,7 @@ export const ManualAddScreen = () => {
       createMutation.mutate(payload as any, {
         onSuccess: () => {
           Alert.alert('Sukces', 'Dodano nową subskrypcję!');
-          navigation.goBack();
+          goBackOrDashboard(navigation);
         },
         onError: handleApiError,
       });
@@ -575,16 +578,25 @@ export const ManualAddScreen = () => {
         scrollViewRef.current.scrollTo({ y: 150, animated: true });
       }
     };
+
+    const handleClose = () => {
+      Keyboard.dismiss();
+      goBackOrDashboard(navigation);
+    };
   
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
         <View style={[styles.appGlowTop, { backgroundColor: `${theme.colors.primary}29` }]} />
         <View style={[styles.appGlowBottom, { backgroundColor: `${theme.colors.cyan}24` }]} />
-        <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          style={styles.container}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
+        >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.inner}>
               <View style={styles.header}>
-                <TouchableOpacity style={styles.headerIconButton} onPress={() => navigation.goBack()}>
+                <TouchableOpacity style={styles.headerIconButton} onPress={handleClose} accessibilityLabel="Zamknij formularz">
                   <X size={22} color={theme.colors.text} />
                 </TouchableOpacity>
                 <View style={styles.headerCenter}>
@@ -602,6 +614,7 @@ export const ManualAddScreen = () => {
                 contentContainerStyle={styles.scrollContent}
                 keyboardShouldPersistTaps="handled"
                 keyboardDismissMode="on-drag"
+                automaticallyAdjustKeyboardInsets
                 nestedScrollEnabled
                 scrollEventThrottle={16}
                 decelerationRate="fast"
@@ -700,6 +713,7 @@ export const ManualAddScreen = () => {
                 ) : (
                   <View style={styles.amountRow}>
                     <TextInput
+                      ref={amountInputRef}
                       style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: theme.colors.danger }]}
                       value={amount}
                       onChangeText={(value) => {
@@ -708,7 +722,9 @@ export const ManualAddScreen = () => {
                       }}
                       keyboardType="decimal-pad"
                       placeholder="0.00"
-                      placeholderTextColor="rgba(255,255,255,0.4)"
+                      placeholderTextColor={withAlpha(theme.colors.text, 0.45)}
+                      returnKeyType="done"
+                      onSubmitEditing={Keyboard.dismiss}
                     />
                     <Text style={styles.currencyLabel}>{currency}</Text>
                   </View>
@@ -798,6 +814,8 @@ export const ManualAddScreen = () => {
                     }}
                     placeholder="np. Netflix" 
                     placeholderTextColor={theme.colors.textSubtle}
+                    returnKeyType="next"
+                    onSubmitEditing={() => amountInputRef.current?.focus()}
                   />
 
                   {isCustomServiceMode && (
@@ -828,11 +846,20 @@ export const ManualAddScreen = () => {
                       <Animated.View style={[styles.aiGlowLayer, { opacity: aiButtonGlow, transform: [{ scale: aiButtonScale }], backgroundColor: `${theme.colors.primary}26` }]} />
                       <TouchableOpacity
                         activeOpacity={0.86}
-                        style={[styles.aiPredictButton, { borderColor: `${theme.colors.primary}55`, shadowColor: theme.colors.primary }]}
+                        style={[
+                          styles.aiPredictButton,
+                          { borderColor: withAlpha(theme.colors.primary, 0.34), shadowColor: theme.colors.primary },
+                          aiStatus === 'loading' && styles.aiPredictButtonDisabled,
+                        ]}
                         onPress={handleFetchAiEstimate}
                         disabled={aiStatus === 'loading'}
+                        accessibilityState={{ busy: aiStatus === 'loading', disabled: aiStatus === 'loading' }}
                       >
-                        <Sparkles size={18} color={theme.colors.darkText} />
+                        {aiStatus === 'loading' ? (
+                          <ActivityIndicator size="small" color={theme.colors.darkText} />
+                        ) : (
+                          <Sparkles size={18} color={theme.colors.darkText} />
+                        )}
                         <Text style={[styles.aiPredictButtonText, { color: theme.colors.darkText }]}>
                           {aiStatus === 'loading' ? 'Szukam orientacyjnych cen...' : '✨ Poszukaj cen w sieci / Zapytaj AI'}
                         </Text>
@@ -958,19 +985,28 @@ export const ManualAddScreen = () => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Kategoria</Text>
                   <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                    {CATEGORIES.map(cat => (
-                      <TouchableOpacity 
-                        key={cat.id} 
-                        style={[styles.catPill, category === cat.id && { borderColor: cat.textColor, borderWidth: 2 }]}
-                        onPress={() => {
-                          setCategory(cat.id);
-                          setHasManualCategory(true);
-                        }}
-                      >
-                        <cat.icon size={16} color={cat.textColor} />
-                        <Text style={[styles.catText, { color: cat.textColor }]}>{cat.label}</Text>
-                      </TouchableOpacity>
-                    ))}
+                    {CATEGORIES.map(cat => {
+                      const tone = getCategoryTone(theme, cat.id);
+                      const isActiveCategory = category === cat.id;
+
+                      return (
+                        <TouchableOpacity
+                          key={cat.id}
+                          style={[
+                            styles.catPill,
+                            { backgroundColor: tone.background, borderColor: isActiveCategory ? tone.accent : tone.border },
+                            isActiveCategory && styles.catPillActive,
+                          ]}
+                          onPress={() => {
+                            setCategory(cat.id);
+                            setHasManualCategory(true);
+                          }}
+                        >
+                          <cat.icon size={16} color={tone.accent} />
+                          <Text style={[styles.catText, { color: tone.text }]}>{cat.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
                   </ScrollView>
                 </View>
 
@@ -1019,16 +1055,16 @@ export const ManualAddScreen = () => {
                   </View>
                   
                   {isShared && (
-                    <View style={{ marginTop: 16, backgroundColor: 'rgba(255,255,255,0.07)', padding: 16, borderRadius: 16, borderWidth: 1, borderColor: theme.colors.border }}>
+                    <View style={styles.sharedPeopleBox}>
                       <Text style={[styles.labelOptional, { marginBottom: 12 }]}>Liczba osób</Text>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+                      <View style={styles.stepperRow}>
                         <TouchableOpacity 
                           style={styles.stepperBtn}
                           onPress={() => setPeopleCount(Math.max(2, peopleCount - 1))}
                         >
                           <Text style={styles.stepperBtnText}>-</Text>
                         </TouchableOpacity>
-                        <Text style={{ fontSize: 24, fontWeight: '700', color: theme.colors.text, minWidth: 40, textAlign: 'center' }}>{peopleCount}</Text>
+                        <Text style={styles.stepperValue}>{peopleCount}</Text>
                         <TouchableOpacity 
                           style={styles.stepperBtn}
                           onPress={() => setPeopleCount(peopleCount + 1)}
@@ -1040,8 +1076,8 @@ export const ManualAddScreen = () => {
                   )}
                   
                   {isShared && parsedAmount > 0 && (
-                    <View style={{ marginTop: 12, alignItems: 'center' }}>
-                      <Text style={{ fontSize: 16, fontWeight: '800', color: theme.colors.primary }}>
+                    <View style={styles.sharedCostBox}>
+                      <Text style={styles.sharedCostText}>
                         Twój koszt: {finalCalculatedCost.toFixed(2)} {currency}
                       </Text>
                     </View>
@@ -1178,10 +1214,16 @@ export const ManualAddScreen = () => {
                 </View>
 
                 <TouchableOpacity
-                  style={[styles.saveButton, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }, isLoading && styles.saveButtonLoading]}
+                  style={[
+                    styles.saveButton,
+                    { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary },
+                    (!isValid || isLoading) && styles.saveButtonDisabled,
+                    isLoading && styles.saveButtonLoading,
+                  ]}
                   onPress={handleSave}
                   disabled={isLoading || !isValid}
                   activeOpacity={0.8}
+                  accessibilityState={{ disabled: isLoading || !isValid, busy: isLoading }}
                 >
                   {isLoading ? (
                     <>
@@ -1215,8 +1257,8 @@ export const ManualAddScreen = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: { flex: 1, backgroundColor: vibrantTheme.colors.bg },
+const createStyles = (theme: AppTheme) => StyleSheet.create({
+  safeArea: { flex: 1, backgroundColor: theme.colors.bg },
   container: { flex: 1 },
   inner: { flex: 1 },
   appGlowTop: {
@@ -1226,7 +1268,7 @@ const styles = StyleSheet.create({
     width: 300,
     height: 300,
     borderRadius: 150,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: withAlpha(theme.colors.text, 0.16),
   },
   appGlowBottom: {
     position: 'absolute',
@@ -1235,15 +1277,15 @@ const styles = StyleSheet.create({
     width: 280,
     height: 280,
     borderRadius: 140,
-    backgroundColor: 'rgba(139,92,246,0.14)',
+    backgroundColor: withAlpha(theme.colors.violet, 0.14),
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, alignItems: 'center', gap: 12 },
-  headerIconButton: { width: 46, height: 46, borderRadius: 18, backgroundColor: vibrantTheme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  headerIconButton: { width: 46, height: 46, borderRadius: 18, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border },
   headerCenter: { flex: 1 },
-  headerEyebrow: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
-  headerTitle: { fontSize: 23, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 2 },
-  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: 'rgba(255,255,255,0.14)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.28)', alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
-  headerStepText: { color: vibrantTheme.colors.primary, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  headerEyebrow: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
+  headerTitle: { fontSize: 23, fontWeight: '900', color: theme.colors.text, marginTop: 2 },
+  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: withAlpha(theme.colors.text, 0.14), borderWidth: 1, borderColor: withAlpha(theme.colors.text, 0.28), alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  headerStepText: { color: theme.colors.primary, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   scrollContent: { paddingBottom: 44, flexGrow: 1, paddingHorizontal: 16 },
   amountHeader: {
     paddingTop: 22,
@@ -1252,17 +1294,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 28,
     marginBottom: 16,
-    shadowColor: vibrantTheme.colors.primary,
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 14 },
     shadowOpacity: 0.32,
     shadowRadius: 28,
     elevation: 8,
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.borderStrong,
+    borderColor: theme.colors.borderStrong,
     overflow: 'hidden',
   },
   amountLabel: {
-    color: 'rgba(255,255,255,0.7)',
+    color: withAlpha(theme.colors.text, 0.7),
     fontSize: 13,
     fontWeight: '700',
     textTransform: 'uppercase',
@@ -1274,24 +1316,24 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   amountInput: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 48,
     fontWeight: '800',
     textAlign: 'right',
     minWidth: 100,
   },
   currencyLabel: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 24,
     fontWeight: '700',
     marginLeft: 8,
     opacity: 0.8,
   },
   currencyPills: { flexDirection: 'row', gap: 8, marginTop: 20 },
-  currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.2)' },
-  currencyPillActive: { backgroundColor: vibrantTheme.colors.primary },
-  currencyPillText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.7)' },
-  currencyPillTextActive: { color: vibrantTheme.colors.darkText },
+  currencyPill: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, backgroundColor: withAlpha(theme.colors.text, 0.2) },
+  currencyPillActive: { backgroundColor: theme.colors.primary },
+  currencyPillText: { fontSize: 12, fontWeight: '700', color: withAlpha(theme.colors.text, 0.7) },
+  currencyPillTextActive: { color: theme.colors.darkText },
   costPreviewRow: {
     width: '100%',
     flexDirection: 'row',
@@ -1300,38 +1342,38 @@ const styles = StyleSheet.create({
   },
   costPreviewPill: {
     flex: 1,
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: withAlpha(theme.colors.text, 0.14),
     borderRadius: 17,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
+    borderColor: withAlpha(theme.colors.text, 0.2),
   },
   costPreviewLabel: {
-    color: 'rgba(255,255,255,0.66)',
+    color: withAlpha(theme.colors.text, 0.66),
     fontSize: 11,
     fontWeight: '800',
     textTransform: 'uppercase',
   },
   costPreviewValue: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 15,
     fontWeight: '900',
     marginTop: 4,
   },
   formSection: { margin: 0 },
   formCard: {
-    backgroundColor: vibrantTheme.colors.card,
+    backgroundColor: theme.colors.card,
     borderRadius: 28,
     padding: 20,
     marginBottom: 18,
-    shadowColor: '#000000',
+    shadowColor: theme.colors.bg,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.18,
     shadowRadius: 22,
     elevation: 5,
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    borderColor: theme.colors.border,
   },
   inputGroup: {
     marginBottom: 14,
@@ -1366,46 +1408,47 @@ const styles = StyleSheet.create({
   sectionHeaderTitle: {
     fontSize: 18,
     fontWeight: '900',
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
   },
   sectionHeaderHint: {
     marginTop: 3,
     fontSize: 12,
-    color: '#94A3B8',
+    color: theme.colors.textMuted,
     fontWeight: '600',
   },
-  label: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
-  labelOptional: { fontSize: 12, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
-  textInput: { fontSize: 16, backgroundColor: 'rgba(255,255,255,0.09)', borderRadius: 18, paddingHorizontal: 15, paddingVertical: 14, color: vibrantTheme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.07)', marginRight: 8, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  pillActive: { backgroundColor: 'rgba(255,255,255,0.16)', borderColor: vibrantTheme.colors.primary },
-  pillText: { color: vibrantTheme.colors.textMuted, fontWeight: '700' },
-  pillTextActive: { color: vibrantTheme.colors.primary },
-  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.09)', padding: 15, borderRadius: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  dateButtonLabel: { color: vibrantTheme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 2 },
-  dateButtonText: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
-  dateText: { fontSize: 16, fontWeight: '700', color: vibrantTheme.colors.primary },
+  label: { fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
+  labelOptional: { fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
+  textInput: { fontSize: 16, backgroundColor: withAlpha(theme.colors.text, 0.09), borderRadius: 18, paddingHorizontal: 15, paddingVertical: 14, color: theme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: theme.colors.border },
+  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: withAlpha(theme.colors.text, 0.07), marginRight: 8, borderWidth: 1, borderColor: theme.colors.border },
+  pillActive: { backgroundColor: withAlpha(theme.colors.text, 0.16), borderColor: theme.colors.primary },
+  pillText: { color: theme.colors.textMuted, fontWeight: '700' },
+  pillTextActive: { color: theme.colors.primary },
+  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: withAlpha(theme.colors.text, 0.09), padding: 15, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border },
+  dateButtonLabel: { color: theme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 2 },
+  dateButtonText: { color: theme.colors.text, fontSize: 15, fontWeight: '900' },
+  dateText: { fontSize: 16, fontWeight: '700', color: theme.colors.primary },
   dateHint: { marginTop: 8, fontSize: 12, fontWeight: '700', lineHeight: 16 },
-  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, backgroundColor: 'rgba(255,255,255,0.07)', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, borderWidth: 1 },
+  catPillActive: { borderWidth: 2 },
   catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.16)', padding: 3 },
-  toggleActive: { backgroundColor: vibrantTheme.colors.primary },
-  toggleDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: '#FFFFFF' },
+  toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: withAlpha(theme.colors.text, 0.16), padding: 3 },
+  toggleActive: { backgroundColor: theme.colors.primary },
+  toggleDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: theme.colors.text },
   toggleDotActive: { transform: [{ translateX: 22 }] },
   infoBox: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(255,255,255,0.13)',
+    backgroundColor: withAlpha(theme.colors.text, 0.13),
     padding: 12,
     borderRadius: 18,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.24)',
+    borderColor: withAlpha(theme.colors.text, 0.24),
   },
   infoBoxText: {
     flex: 1,
     fontSize: 12,
-    color: vibrantTheme.colors.primary,
+    color: theme.colors.primary,
     fontWeight: '500',
     lineHeight: 16,
   },
@@ -1413,12 +1456,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
     borderRadius: 20,
     padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: withAlpha(theme.colors.text, 0.06),
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    borderColor: theme.colors.border,
   },
   saveButton: {
-    backgroundColor: vibrantTheme.colors.primary,
+    backgroundColor: theme.colors.primary,
     borderRadius: 22,
     paddingVertical: 18,
     flexDirection: 'row',
@@ -1426,7 +1469,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 12,
     marginTop: 20,
-    shadowColor: vibrantTheme.colors.primary,
+    shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.35,
     shadowRadius: 24,
@@ -1437,28 +1480,28 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: withAlpha(theme.colors.text, 0.08),
     borderRadius: 24,
     padding: 16,
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    borderColor: theme.colors.border,
     marginTop: 4,
   },
   saveSummaryLabel: {
-    color: vibrantTheme.colors.textSubtle,
+    color: theme.colors.textSubtle,
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
   },
   saveSummaryTitle: {
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: '900',
     marginTop: 4,
     maxWidth: 190,
   },
   saveSummaryMeta: {
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: '700',
     marginTop: 3,
@@ -1468,12 +1511,12 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
   },
   saveSummaryAmount: {
-    color: vibrantTheme.colors.primary,
+    color: theme.colors.primary,
     fontSize: 22,
     fontWeight: '900',
   },
   saveSummaryCurrency: {
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: '800',
     marginTop: 2,
@@ -1481,8 +1524,14 @@ const styles = StyleSheet.create({
   saveButtonLoading: {
     opacity: 0.7,
   },
+  saveButtonDisabled: {
+    opacity: 0.48,
+    backgroundColor: theme.colors.cardStrong,
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   saveButtonText: {
-    color: vibrantTheme.colors.darkText,
+    color: theme.colors.darkText,
     fontSize: 17,
     fontWeight: '800',
   },
@@ -1511,13 +1560,13 @@ const styles = StyleSheet.create({
   suggestionChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: withAlpha(theme.colors.text, 0.09),
     paddingHorizontal: 11,
     paddingVertical: 8,
     borderRadius: 16,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    borderColor: theme.colors.border,
   },
   suggestionIcon: {
     width: 24,
@@ -1528,14 +1577,14 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   suggestionIconText: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 10,
     fontWeight: '800',
   },
   suggestionText: {
     fontSize: 13,
     fontWeight: '800',
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
   },
   customIdentityCard: {
     flexDirection: 'row',
@@ -1544,7 +1593,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: withAlpha(theme.colors.text, 0.07),
     borderWidth: 1,
   },
   generatedBrandMark: {
@@ -1553,14 +1602,14 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000000',
+    shadowColor: theme.colors.bg,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.22,
     shadowRadius: 14,
     elevation: 5,
   },
   generatedBrandInitials: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 16,
     fontWeight: '900',
     letterSpacing: 0.5,
@@ -1611,11 +1660,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 9,
-    backgroundColor: vibrantTheme.colors.primary,
+    backgroundColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 10 },
     shadowOpacity: 0.28,
     shadowRadius: 22,
     elevation: 8,
+  },
+  aiPredictButtonDisabled: {
+    opacity: 0.68,
   },
   aiPredictButtonText: {
     flexShrink: 1,
@@ -1627,7 +1679,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     minHeight: 112,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.07)',
+    backgroundColor: withAlpha(theme.colors.text, 0.07),
     borderWidth: 1,
     padding: 14,
     overflow: 'hidden',
@@ -1637,21 +1689,21 @@ const styles = StyleSheet.create({
     top: 0,
     bottom: 0,
     width: 90,
-    backgroundColor: 'rgba(255,255,255,0.16)',
+    backgroundColor: withAlpha(theme.colors.text, 0.16),
     transform: [{ rotate: '12deg' }],
   },
   aiSkeletonLineWide: {
     width: '78%',
     height: 13,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: withAlpha(theme.colors.text, 0.12),
     marginBottom: 10,
   },
   aiSkeletonLine: {
     width: '52%',
     height: 11,
     borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(theme.colors.text, 0.1),
     marginBottom: 16,
   },
   aiSkeletonPlans: {
@@ -1662,7 +1714,7 @@ const styles = StyleSheet.create({
     flex: 1,
     height: 42,
     borderRadius: 16,
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(theme.colors.text, 0.1),
   },
   aiMessageCard: {
     flexDirection: 'row',
@@ -1671,7 +1723,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     padding: 12,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: withAlpha(theme.colors.text, 0.06),
     borderWidth: 1,
   },
   aiMessageText: {
@@ -1697,31 +1749,31 @@ const styles = StyleSheet.create({
     minWidth: 128,
     padding: 14,
     borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: withAlpha(theme.colors.text, 0.08),
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    borderColor: theme.colors.border,
     alignItems: 'center',
   },
   aiPlanName: {
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     fontWeight: '900',
     maxWidth: 104,
     marginBottom: 8,
   },
   aiPlanPrice: {
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
     fontSize: 22,
     fontWeight: '900',
   },
   aiPlanCurrency: {
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 11,
     fontWeight: '800',
     marginLeft: 3,
   },
   aiPlanCycle: {
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 10,
     fontWeight: '800',
     textTransform: 'uppercase',
@@ -1739,18 +1791,18 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   planSelectionTitle: {
-    color: 'rgba(255,255,255,0.8)',
+    color: withAlpha(theme.colors.text, 0.8),
     fontSize: 12,
     fontWeight: '600',
   },
   planBackButton: {
-    backgroundColor: 'rgba(255,255,255,0.18)',
+    backgroundColor: withAlpha(theme.colors.text, 0.18),
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
   },
   planBackButtonText: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 10,
     fontWeight: '700',
   },
@@ -1760,28 +1812,28 @@ const styles = StyleSheet.create({
     paddingBottom: 10,
   },
   planCard: {
-    backgroundColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: withAlpha(theme.colors.text, 0.14),
     padding: 16,
     borderRadius: 22,
     minWidth: 122,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: withAlpha(theme.colors.text, 0.18),
     alignItems: 'center',
   },
   planCardActive: {
-    backgroundColor: 'rgba(255,255,255,0.94)',
-    borderColor: '#FFFFFF',
+    backgroundColor: withAlpha(theme.colors.text, 0.94),
+    borderColor: theme.colors.text,
     transform: [{ scale: 1.05 }],
   },
   planCardName: {
-    color: 'rgba(255,255,255,0.78)',
+    color: withAlpha(theme.colors.text, 0.78),
     fontSize: 12,
     fontWeight: '800',
     marginBottom: 8,
     maxWidth: 100,
   },
   planCardNameActive: {
-    color: '#334155',
+    color: theme.colors.darkText,
   },
   planCardPriceRow: {
     flexDirection: 'row',
@@ -1789,50 +1841,50 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   planCardPrice: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 22,
     fontWeight: '800',
   },
   planCardPriceActive: {
-    color: '#334155',
+    color: theme.colors.darkText,
   },
   planCardCurrency: {
-    color: 'rgba(255,255,255,0.8)',
+    color: withAlpha(theme.colors.text, 0.8),
     fontSize: 12,
     fontWeight: '600',
     marginLeft: 2,
   },
   planCardCurrencyActive: {
-    color: '#334155',
+    color: theme.colors.darkText,
     opacity: 0.7,
   },
   planCardCycle: {
-    color: 'rgba(255,255,255,0.6)',
+    color: withAlpha(theme.colors.text, 0.6),
     fontSize: 10,
     fontWeight: '700',
     textTransform: 'uppercase',
   },
   planCardCycleActive: {
-    color: '#64748B',
+    color: theme.colors.textMuted,
   },
   planConfirmButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: 'rgba(255,255,255,0.94)',
+    backgroundColor: withAlpha(theme.colors.text, 0.94),
     marginHorizontal: 40,
     marginTop: 20,
     paddingVertical: 12,
     borderRadius: 16,
     gap: 8,
-    shadowColor: '#000',
+    shadowColor: theme.colors.bg,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
     elevation: 5,
   },
   planConfirmButtonText: {
-    color: vibrantTheme.colors.darkText,
+    color: theme.colors.darkText,
     fontSize: 14,
     fontWeight: '900',
   },
@@ -1840,9 +1892,9 @@ const styles = StyleSheet.create({
     marginHorizontal: 24,
     marginTop: 16,
     borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.16)',
+    backgroundColor: withAlpha(theme.colors.bg, 0.16),
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
+    borderColor: withAlpha(theme.colors.text, 0.18),
     padding: 12,
     gap: 10,
   },
@@ -1855,17 +1907,17 @@ const styles = StyleSheet.create({
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#FFFFFF',
+    backgroundColor: theme.colors.text,
     marginTop: 6,
   },
   planInsightCopy: { flex: 1 },
   planInsightTitle: {
-    color: '#FFFFFF',
+    color: theme.colors.text,
     fontSize: 12,
     fontWeight: '900',
   },
   planInsightDesc: {
-    color: 'rgba(255,255,255,0.74)',
+    color: withAlpha(theme.colors.text, 0.74),
     fontSize: 11,
     lineHeight: 16,
     marginTop: 2,
@@ -1875,20 +1927,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 12,
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: withAlpha(theme.colors.text, 0.1),
     borderRadius: 18,
     padding: 14,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+    borderColor: withAlpha(theme.colors.text, 0.22),
   },
   cancelAssistantHintTitle: {
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
     fontSize: 14,
     fontWeight: '900',
     marginBottom: 4,
   },
   cancelAssistantHintText: {
-    color: vibrantTheme.colors.textMuted,
+    color: theme.colors.textMuted,
     fontSize: 12,
     lineHeight: 18,
     fontWeight: '600',
@@ -1897,16 +1949,46 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: withAlpha(theme.colors.text, 0.12),
     borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
+    borderColor: theme.colors.border,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  sharedPeopleBox: {
+    marginTop: 16,
+    backgroundColor: withAlpha(theme.colors.text, 0.07),
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+  },
+  stepperRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 20,
+  },
+  stepperValue: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: theme.colors.text,
+    minWidth: 40,
+    textAlign: 'center',
+  },
+  sharedCostBox: {
+    marginTop: 12,
+    alignItems: 'center',
+  },
+  sharedCostText: {
+    fontSize: 16,
+    fontWeight: '800',
+    color: theme.colors.primary,
   },
   stepperBtnText: {
     fontSize: 24,
     fontWeight: '600',
-    color: vibrantTheme.colors.text,
+    color: theme.colors.text,
     lineHeight: 28,
   },
 });

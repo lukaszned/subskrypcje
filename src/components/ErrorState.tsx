@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Platform, StyleSheet, Text, View } from 'react-native';
 import { AlertCircle, RefreshCw, ShieldCheck } from 'lucide-react-native';
-import { vibrantTheme } from '../theme/vibrantTheme';
+import type { AppTheme } from '../theme/ThemeContext';
 import { useTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 import { PressableScale } from './PressableScale';
 
 interface ErrorStateProps {
@@ -21,13 +22,14 @@ export const ErrorState = ({
   isDark,
 }: ErrorStateProps) => {
   const { theme: appTheme } = useTheme();
+  const styles = useMemo(() => createStyles(appTheme), [appTheme]);
   const resolvedDark = isDark ?? true;
   const localTheme = {
-    bg: resolvedDark ? appTheme.colors.bg : '#F8FAFC',
-    text: resolvedDark ? appTheme.colors.text : '#0F172A',
-    textDim: resolvedDark ? appTheme.colors.textMuted : '#64748B',
-    card: resolvedDark ? appTheme.colors.card : '#FFFFFF',
-    border: resolvedDark ? appTheme.colors.border : '#E2E8F0',
+    bg: appTheme.colors.bg,
+    text: appTheme.colors.text,
+    textDim: appTheme.colors.textMuted,
+    card: resolvedDark ? appTheme.colors.card : appTheme.colors.cardStrong,
+    border: appTheme.colors.border,
   };
 
   return (
@@ -47,7 +49,7 @@ export const ErrorState = ({
         </View>
 
         {details && (
-          <View style={[styles.detailsContainer, { backgroundColor: resolvedDark ? 'rgba(255,255,255,0.05)' : '#F1F5F9' }]}>
+          <View style={[styles.detailsContainer, { backgroundColor: withAlpha(appTheme.colors.text, resolvedDark ? 0.05 : 0.08) }]}>
             <Text style={[styles.detailsText, { color: localTheme.textDim }]}>{details}</Text>
           </View>
         )}
@@ -77,7 +79,7 @@ export const ErrorState = ({
   );
 };
 
-const styles = StyleSheet.create({
+const createStyles = (theme: AppTheme) => StyleSheet.create({
   container: {
     padding: 20,
     alignItems: 'center',
@@ -88,7 +90,7 @@ const styles = StyleSheet.create({
     padding: 28,
     borderRadius: 26,
     alignItems: 'center',
-    shadowColor: '#000000',
+    shadowColor: theme.colors.bg,
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.14,
     shadowRadius: 22,
@@ -128,7 +130,7 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'flex-start',
     marginBottom: 18,
-    backgroundColor: 'rgba(255,255,255,0.04)',
+    backgroundColor: withAlpha(theme.colors.text, 0.04),
   },
   cacheHintText: {
     flex: 1,
@@ -138,7 +140,6 @@ const styles = StyleSheet.create({
   },
   button: {
     flexDirection: 'row',
-    backgroundColor: vibrantTheme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 24,
     borderRadius: 16,

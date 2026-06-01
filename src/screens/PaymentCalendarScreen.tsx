@@ -24,6 +24,7 @@ import type { Subscription } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
+import { goBackOrDashboard } from '../utils/navigation';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
@@ -229,7 +230,7 @@ export const PaymentCalendarScreen = () => {
       <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}20` }]} />
 
       <View style={styles.header}>
-        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz">
           <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>

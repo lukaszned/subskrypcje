@@ -60,8 +60,8 @@ import {
   SubscriptionCategory,
   DashboardActivityItem
 } from '../types/api';
-import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
+import { getCategoryTone, getStatusTone, withAlpha } from '../theme/themeUtils';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
 
 const { width } = Dimensions.get('window');
@@ -78,26 +78,35 @@ type BrandToken = {
   weight?: '700' | '800' | '900';
 };
 
-const getBrandToken = (name?: string | null, provider?: string | null): BrandToken => {
+const getBrandToken = (theme: ReturnType<typeof useTheme>['theme'], name?: string | null, provider?: string | null): BrandToken => {
   const source = `${name || ''} ${provider || ''}`.toLowerCase();
+  const accent =
+    source.includes('netflix') || source.includes('youtube') ? theme.colors.danger :
+    source.includes('spotify') || source.includes('chatgpt') || source.includes('openai') ? theme.colors.success :
+    source.includes('hbo') || source.includes('max') || source.includes('disney') ? theme.colors.violet :
+    source.includes('amazon') || source.includes('prime') || source.includes('allegro') ? theme.colors.warning :
+    source.includes('google') || source.includes('canva') ? theme.colors.cyan :
+    source.includes('apple') || source.includes('icloud') ? theme.colors.text :
+    source.includes('xbox') || source.includes('strava') ? theme.colors.primary :
+    theme.colors.textMuted;
 
-  if (source.includes('netflix')) return { bg: '#050505', fg: '#E50914', label: 'N', weight: '900' };
-  if (source.includes('spotify')) return { bg: '#1DB954', fg: '#FFFFFF', label: 'S', weight: '900' };
-  if (source.includes('hbo') || source.includes('max')) return { bg: '#1B0B3B', fg: '#FFFFFF', label: 'max', weight: '900' };
-  if (source.includes('youtube')) return { bg: '#FF0000', fg: '#FFFFFF', label: 'YT', weight: '900' };
-  if (source.includes('disney')) return { bg: '#123C69', fg: '#FFFFFF', label: 'D+', weight: '900' };
-  if (source.includes('amazon') || source.includes('prime')) return { bg: '#0F172A', fg: '#FF9900', label: 'a', weight: '900' };
-  if (source.includes('apple') || source.includes('icloud')) return { bg: '#111827', fg: '#FFFFFF', label: 'A', weight: '900' };
-  if (source.includes('chatgpt') || source.includes('openai')) return { bg: '#10A37F', fg: '#FFFFFF', label: 'AI', weight: '900' };
-  if (source.includes('google') || source.includes('play')) return { bg: '#FFFFFF', fg: '#4285F4', label: 'G', weight: '900' };
-  if (source.includes('canva')) return { bg: '#00C4CC', fg: '#FFFFFF', label: 'C', weight: '900' };
-  if (source.includes('xbox')) return { bg: '#107C10', fg: '#FFFFFF', label: 'X', weight: '900' };
-  if (source.includes('allegro')) return { bg: '#FF5A00', fg: '#FFFFFF', label: 'A', weight: '900' };
-  if (source.includes('strava')) return { bg: '#FC4C02', fg: '#FFFFFF', label: 'S', weight: '900' };
+  if (source.includes('netflix')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'N', weight: '900' };
+  if (source.includes('spotify')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'S', weight: '900' };
+  if (source.includes('hbo') || source.includes('max')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'max', weight: '900' };
+  if (source.includes('youtube')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'YT', weight: '900' };
+  if (source.includes('disney')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'D+', weight: '900' };
+  if (source.includes('amazon') || source.includes('prime')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'a', weight: '900' };
+  if (source.includes('apple') || source.includes('icloud')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'A', weight: '900' };
+  if (source.includes('chatgpt') || source.includes('openai')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'AI', weight: '900' };
+  if (source.includes('google') || source.includes('play')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'G', weight: '900' };
+  if (source.includes('canva')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'C', weight: '900' };
+  if (source.includes('xbox')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'X', weight: '900' };
+  if (source.includes('allegro')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'A', weight: '900' };
+  if (source.includes('strava')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'S', weight: '900' };
 
   return {
-    bg: '#F1F5F9',
-    fg: '#334155',
+    bg: withAlpha(accent, 0.14),
+    fg: accent,
     label: (name || provider || '?').charAt(0).toUpperCase(),
     weight: '900',
   };
@@ -112,7 +121,8 @@ const BrandMark = React.memo(({
   provider?: string | null;
   size?: number;
 }) => {
-  const brand = getBrandToken(name, provider);
+  const { theme } = useTheme();
+  const brand = getBrandToken(theme, name, provider);
 
   return (
     <View
@@ -123,8 +133,8 @@ const BrandMark = React.memo(({
         backgroundColor: brand.bg,
         alignItems: 'center',
         justifyContent: 'center',
-        borderWidth: brand.bg === '#FFFFFF' ? 1 : 0,
-        borderColor: '#E2E8F0',
+        borderWidth: 1,
+        borderColor: theme.colors.border,
       }}
     >
       <Text
@@ -213,16 +223,7 @@ export const DashboardScreen = () => {
     if (!breakdownData?.items) return [];
     return breakdownData.items.map(item => ({
       ...item,
-      color: (() => {
-        switch (item.category) {
-          case 'entertainment': return '#6366F1';
-          case 'productivity': return appTheme.colors.primary;
-          case 'utilities': return '#3B82F6';
-          case 'finance': return '#F59E0B';
-          case 'health': return '#EF4444';
-          default: return '#64748B';
-        }
-      })(),
+      color: getCategoryTone(appTheme, item.category).accent,
       label: (() => {
         switch (item.category) {
           case 'entertainment': return 'Rozrywka';
@@ -335,7 +336,7 @@ export const DashboardScreen = () => {
       width: width * 0.75,
       height: width * 0.75,
       borderRadius: width,
-      backgroundColor: 'rgba(139,92,246,0.14)',
+      backgroundColor: withAlpha(theme.primary, 0.14),
       top: 260,
       left: -140,
     },
@@ -351,8 +352,8 @@ export const DashboardScreen = () => {
       gap: 10,
     },
     dashboardNoticeError: {
-      backgroundColor: '#FEF2F2',
-      borderColor: '#FECACA',
+      backgroundColor: withAlpha(theme.error, 0.14),
+      borderColor: withAlpha(theme.error, 0.32),
     },
     dashboardNoticeText: {
       flex: 1,
@@ -368,14 +369,14 @@ export const DashboardScreen = () => {
       marginBottom: 24,
     },
     shadow: {
-      shadowColor: '#6366F1',
+      shadowColor: theme.primary,
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.1,
       shadowRadius: 20,
       elevation: 5,
     },
     shadowSm: {
-      shadowColor: '#000',
+      shadowColor: theme.background,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
       shadowRadius: 8,
@@ -445,12 +446,12 @@ export const DashboardScreen = () => {
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      backgroundColor: isDark ? '#1E293B' : '#EEF2FF',
+      backgroundColor: isDark ? theme.card : withAlpha(theme.primary, 0.12),
       borderRadius: 16,
       padding: 16,
       marginTop: 20,
       borderWidth: 1,
-      borderColor: isDark ? '#334155' : '#E0E7FF',
+      borderColor: isDark ? theme.border : withAlpha(theme.primary, 0.22),
     },
     mySubscriptionsBtnContent: {
       flexDirection: 'row',
@@ -551,7 +552,7 @@ export const DashboardScreen = () => {
     },
     upcomingCardWarning: {
       borderColor: theme.error,
-      backgroundColor: isDark ? '#451a1a' : '#FEF2F2',
+      backgroundColor: withAlpha(theme.error, isDark ? 0.2 : 0.14),
     },
     upcomingTop: {
       flexDirection: 'row',
@@ -723,23 +724,23 @@ export const DashboardScreen = () => {
     overdueBanner: {
       flexDirection: 'row',
       alignItems: 'center',
-      backgroundColor: '#FEF2F2',
+      backgroundColor: withAlpha(theme.error, 0.14),
       paddingHorizontal: 12,
       paddingVertical: 8,
       borderRadius: 10,
       borderWidth: 1,
-      borderColor: '#FEE2E2',
+      borderColor: withAlpha(theme.error, 0.26),
     },
     overdueBannerText: {
       flex: 1,
       fontSize: 13,
       fontWeight: '600',
-      color: '#DC2626',
+      color: theme.error,
     },
     overdueActionText: {
       fontSize: 13,
       fontWeight: '700',
-      color: '#DC2626',
+      color: theme.error,
       textDecorationLine: 'underline',
     },
     infoBox: {
@@ -807,7 +808,7 @@ export const DashboardScreen = () => {
       borderRadius: 20,
       padding: 16,
       borderLeftWidth: 4,
-      shadowColor: '#000',
+      shadowColor: theme.background,
       shadowOffset: { width: 0, height: 2 },
       shadowOpacity: 0.05,
       shadowRadius: 8,
@@ -948,7 +949,7 @@ export const DashboardScreen = () => {
       backgroundColor: theme.card,
       alignItems: 'center',
       justifyContent: 'center',
-      shadowColor: '#0F2A1B',
+      shadowColor: theme.background,
       shadowOffset: { width: 0, height: 8 },
       shadowOpacity: 0.06,
       shadowRadius: 16,
@@ -971,10 +972,10 @@ export const DashboardScreen = () => {
       elevation: 9,
       overflow: 'hidden',
       borderWidth: 1,
-      borderColor: 'rgba(255,255,255,0.22)',
+      borderColor: withAlpha(appTheme.colors.text, 0.22),
     },
     heroEyebrow: {
-      color: 'rgba(255,255,255,0.74)',
+      color: withAlpha(appTheme.colors.text, 0.74),
       fontSize: 13,
       fontWeight: '700',
       marginBottom: 8,
@@ -984,13 +985,13 @@ export const DashboardScreen = () => {
       alignItems: 'baseline',
     },
     heroAmount: {
-      color: '#FFFFFF',
+      color: appTheme.colors.text,
       fontSize: 42,
       fontWeight: '900',
       letterSpacing: 0,
     },
     heroCurrency: {
-      color: '#D8F5E5',
+      color: withAlpha(appTheme.colors.text, 0.84),
       fontSize: 16,
       fontWeight: '800',
       marginLeft: 8,
@@ -1002,17 +1003,17 @@ export const DashboardScreen = () => {
     },
     heroMetaPill: {
       flex: 1,
-      backgroundColor: 'rgba(255,255,255,0.12)',
+      backgroundColor: withAlpha(appTheme.colors.text, 0.12),
       borderRadius: 16,
       padding: 12,
     },
     heroMetaValue: {
-      color: '#FFFFFF',
+      color: appTheme.colors.text,
       fontSize: 16,
       fontWeight: '800',
     },
     heroMetaLabel: {
-      color: 'rgba(255,255,255,0.72)',
+      color: withAlpha(appTheme.colors.text, 0.72),
       fontSize: 11,
       fontWeight: '700',
       marginTop: 3,
@@ -1027,7 +1028,7 @@ export const DashboardScreen = () => {
       backgroundColor: theme.card,
       borderRadius: 22,
       padding: 18,
-      shadowColor: '#000000',
+      shadowColor: theme.background,
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.18,
       shadowRadius: 18,
@@ -1132,7 +1133,7 @@ export const DashboardScreen = () => {
       borderRadius: 22,
       padding: 18,
       marginBottom: 18,
-      shadowColor: '#1C3025',
+      shadowColor: theme.background,
       shadowOffset: { width: 0, height: 10 },
       shadowOpacity: 0.06,
       shadowRadius: 18,
@@ -1324,13 +1325,7 @@ export const DashboardScreen = () => {
     const { score, label, status, summary } = healthData;
     
     const getStatusColor = () => {
-      switch (status) {
-        case 'excellent': return theme.primary;
-        case 'good': return theme.primary;
-        case 'needs_attention': return '#F59E0B';
-        case 'risky': return '#EF4444';
-        default: return theme.primary;
-      }
+      return getStatusTone(appTheme, status).accent;
     };
 
     return (
@@ -1348,7 +1343,7 @@ export const DashboardScreen = () => {
               <Text style={[dynamicStyles.healthLabel, { color: getStatusColor() }]}>{label}</Text>
               <Text style={dynamicStyles.healthSummary}>{summary}</Text>
             </View>
-            <ChevronRight size={20} color="#CBD5E1" />
+            <ChevronRight size={20} color={theme.textDim} />
           </View>
         </TouchableOpacity>
       </View>
@@ -1397,8 +1392,8 @@ export const DashboardScreen = () => {
         <View style={[dynamicStyles.activityCard, dynamicStyles.shadowSm]}>
           {activityData.items.slice(0, 5).map((item, idx) => (
             <View key={item.id} style={[dynamicStyles.activityItem, idx === 0 && { borderTopWidth: 0 }]}>
-              <View style={[dynamicStyles.activityIcon, { backgroundColor: item.type === 'paid' ? `${theme.primary}20` : item.type === 'canceled' ? '#FEF2F2' : theme.border }]}>
-                <History size={16} color={item.type === 'paid' ? theme.primary : item.type === 'canceled' ? '#EF4444' : theme.textDim} />
+              <View style={[dynamicStyles.activityIcon, { backgroundColor: item.type === 'paid' ? withAlpha(theme.primary, 0.13) : item.type === 'canceled' ? withAlpha(theme.error, 0.14) : theme.border }]}>
+                <History size={16} color={item.type === 'paid' ? theme.primary : item.type === 'canceled' ? theme.error : theme.textDim} />
               </View>
               <View style={dynamicStyles.activityContent}>
                 <Text style={dynamicStyles.activityMessage} numberOfLines={1}>
@@ -1472,15 +1467,15 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.statLabel}>Aktywne</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: '#D97706' }]}>{summaryData?.trialsCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: theme.warning }]}>{summaryData?.trialsCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Triale</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: '#DC2626' }]}>{summaryData?.overdueCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: theme.error }]}>{summaryData?.overdueCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Zaległe</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: '#4F46E5' }]}>{summaryData?.upcomingPaymentsCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: theme.primary }]}>{summaryData?.upcomingPaymentsCount ?? 0}</Text>
             <Text style={dynamicStyles.statLabel}>Wkrótce</Text>
           </View>
         </View>
@@ -1492,7 +1487,7 @@ export const DashboardScreen = () => {
         >
           <View style={dynamicStyles.mySubscriptionsBtnContent}>
             <View style={dynamicStyles.mySubscriptionsBtnIcon}>
-              <List size={20} color="#FFFFFF" />
+              <List size={20} color={appTheme.colors.darkText} />
             </View>
             <Text style={dynamicStyles.mySubscriptionsBtnText}>Moje subskrypcje</Text>
           </View>
@@ -1500,9 +1495,9 @@ export const DashboardScreen = () => {
         </TouchableOpacity>
 
         {notifPermission !== 'granted' && (
-          <View style={[dynamicStyles.infoBox, { marginTop: 16, backgroundColor: '#FEF3C7' }]}>
-            <Bell size={16} color="#D97706" />
-            <Text style={[dynamicStyles.infoBoxText, { color: '#92400E' }]}>
+          <View style={[dynamicStyles.infoBox, { marginTop: 16, backgroundColor: withAlpha(theme.warning, 0.16) }]}>
+            <Bell size={16} color={theme.warning} />
+            <Text style={[dynamicStyles.infoBoxText, { color: theme.warning }]}>
               Powiadomienia są wyłączone. Włącz je w ustawieniach, aby nie przegapić płatności.
             </Text>
           </View>
@@ -1511,7 +1506,7 @@ export const DashboardScreen = () => {
         {overdueCount > 0 && (
           <View style={dynamicStyles.overdueSection}>
             <View style={dynamicStyles.overdueBanner}>
-              <AlertCircle size={14} color="#EF4444" style={{ marginRight: 6 }} />
+              <AlertCircle size={14} color={theme.error} style={{ marginRight: 6 }} />
               <Text style={dynamicStyles.overdueBannerText}>
                 Masz {overdueCount} {overdueCount === 1 ? 'zaległą płatność' : 'zaległe płatności'}!
               </Text>
@@ -1590,19 +1585,19 @@ export const DashboardScreen = () => {
       >
         <View style={[
           dynamicStyles.upcomingCard, 
-          isEndingSoon && { borderColor: '#D97706', backgroundColor: isDark ? '#3d2b10' : '#FFFBEB' },
+          isEndingSoon && { borderColor: theme.warning, backgroundColor: withAlpha(theme.warning, isDark ? 0.2 : 0.14) },
           dynamicStyles.shadowSm
         ]}>
           <View style={dynamicStyles.upcomingTop}>
             <View style={[
               dynamicStyles.upcomingIconPlaceholder, 
-              { backgroundColor: '#F59E0B20' }
+              { backgroundColor: withAlpha(theme.warning, 0.13) }
             ]}>
-              <Clock size={16} color="#D97706" />
+              <Clock size={16} color={theme.warning} />
             </View>
             <Text style={[
               dynamicStyles.upcomingDate, 
-              { color: '#D97706' }
+              { color: theme.warning }
             ]}>
               {daysLeft} d.
             </Text>
@@ -1660,7 +1655,7 @@ export const DashboardScreen = () => {
         <View style={[dynamicStyles.breakdownCard, dynamicStyles.shadowSm, { marginTop: 8, borderColor: `${theme.primary}44`, backgroundColor: `${theme.primary}14` }]}>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
             <View style={{ backgroundColor: theme.primary, padding: 10, borderRadius: 12 }}>
-              <Lightbulb size={24} color="#FFFFFF" />
+              <Lightbulb size={24} color={appTheme.colors.darkText} />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={{ fontSize: 16, fontWeight: '700', color: theme.text, marginBottom: 4 }}>
@@ -1817,7 +1812,7 @@ export const DashboardScreen = () => {
         <View style={dynamicStyles.widgetIcon}>
           <List size={20} color={theme.primary} />
         </View>
-        <ChevronRight size={18} color="#B6C4BA" />
+        <ChevronRight size={18} color={theme.textDim} />
       </View>
       <Text style={dynamicStyles.widgetTitle}>Twoje Subskrypcje</Text>
       <Text style={dynamicStyles.subscriptionMetric}>{summaryData?.activeSubscriptionsCount ?? 0}</Text>
@@ -2156,7 +2151,7 @@ export const DashboardScreen = () => {
         style={dynamicStyles.fab}
         onPress={() => navigation.navigate('AddSubscription')}
       >
-        <Plus size={30} color="#FFFFFF" />
+        <Plus size={30} color={appTheme.colors.darkText} />
       </TouchableOpacity>
     </SafeAreaView>
   );

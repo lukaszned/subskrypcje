@@ -185,16 +185,16 @@ export default function App() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ErrorBoundary>
-        <ThemeProvider>
+      <ThemeProvider>
+        <ErrorBoundary>
           <AuthProvider>
             <QueryClientProvider client={queryClient}>
               <AppCacheWarmup />
               <RootNavigator />
             </QueryClientProvider>
           </AuthProvider>
-        </ThemeProvider>
-      </ErrorBoundary>
+        </ErrorBoundary>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }

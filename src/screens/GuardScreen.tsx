@@ -31,6 +31,7 @@ import { LOCAL_SUBSCRIPTION_PLANS, PopularSubscription, SubscriptionPlanVariant 
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
+import { goBackOrDashboard } from '../utils/navigation';
 
 type GuardIssue = {
   id: string;
@@ -284,7 +285,7 @@ export const GuardScreen = () => {
       <View style={[styles.glowBottom, { backgroundColor: `${theme.colors.cyan}20` }]} />
 
       <View style={styles.header}>
-        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz">
           <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerText}>

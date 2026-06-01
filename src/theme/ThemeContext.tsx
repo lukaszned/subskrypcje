@@ -53,6 +53,8 @@ const makeTheme = (
     ...overrides,
     primary,
     cyan: accent,
+    violet: heroEnd,
+    pink: accent,
   } as ThemeColors,
   gradients: {
     ...(vibrantTheme.gradients as ThemeGradients),
@@ -92,6 +94,8 @@ export const APP_THEMES: Record<ThemeName, AppTheme> = {
     warning: '#D1D5DB',
     danger: '#FFFFFF',
     darkText: '#050505',
+    violet: '#E5E7EB',
+    pink: '#CBD5E1',
   }),
 };
 

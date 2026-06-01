@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Plus, Search, Sparkles } from 'lucide-react-native';
-import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 import { PressableScale } from './PressableScale';
 
 interface EmptyStateProps {
@@ -24,11 +24,11 @@ export const EmptyState = ({
 }: EmptyStateProps) => {
   const { theme: appTheme } = useTheme();
   const localTheme = {
-    text: isDark === false ? '#0F172A' : appTheme.colors.text,
-    textDim: isDark === false ? '#64748B' : appTheme.colors.textMuted,
-    card: isDark === false ? '#FFFFFF' : appTheme.colors.card,
-    border: isDark === false ? '#E2E8F0' : appTheme.colors.border,
-    iconBg: isDark === false ? `${appTheme.colors.primary}16` : `${appTheme.colors.primary}1F`,
+    text: appTheme.colors.text,
+    textDim: appTheme.colors.textMuted,
+    card: isDark === false ? appTheme.colors.cardStrong : appTheme.colors.card,
+    border: appTheme.colors.border,
+    iconBg: withAlpha(appTheme.colors.primary, isDark === false ? 0.12 : 0.16),
   };
   const Icon = type === 'search' ? Search : type === 'calm' ? Sparkles : Plus;
 
@@ -82,7 +82,6 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   button: {
-    backgroundColor: vibrantTheme.colors.primary,
     paddingVertical: 14,
     paddingHorizontal: 28,
     borderRadius: 18,

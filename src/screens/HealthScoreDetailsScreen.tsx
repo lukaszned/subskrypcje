@@ -20,6 +20,7 @@ import { useSubscriptions } from '../hooks/useSubscriptions';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate } from '../utils/date';
+import { goBackOrDashboard } from '../utils/navigation';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'HealthScoreDetails'>;
 
@@ -130,7 +131,7 @@ export function HealthScoreDetailsScreen() {
       <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}26` }]} />
       <View style={styles.glowTwo} />
       <View style={styles.header}>
-        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz">
           <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>

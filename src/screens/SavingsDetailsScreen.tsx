@@ -20,6 +20,7 @@ import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { formatShortDate } from '../utils/date';
 import type { BillingCycle, SavingsItem, Subscription } from '../types/api';
+import { goBackOrDashboard } from '../utils/navigation';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'SavingsDetails'>;
 
@@ -85,7 +86,7 @@ export function SavingsDetailsScreen() {
       <View style={[styles.glowOne, { backgroundColor: `${theme.colors.primary}26` }]} />
       <View style={[styles.glowTwo, { backgroundColor: `${theme.colors.cyan}20` }]} />
       <View style={styles.header}>
-        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz">
           <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCopy}>

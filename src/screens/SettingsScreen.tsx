@@ -21,6 +21,7 @@ import type { AppStackParamList } from '../types/navigation';
 import type { UpdateUserSettingsPayload } from '../api/dashboard';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme, ThemeName } from '../theme/ThemeContext';
+import { goBackOrDashboard } from '../utils/navigation';
 
 const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
@@ -130,7 +131,7 @@ export const SettingsScreen = () => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.bg, borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBackOrDashboard(navigation)} style={styles.backBtn} accessibilityLabel="Wstecz">
           <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Ustawienia</Text>

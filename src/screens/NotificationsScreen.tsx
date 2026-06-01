@@ -16,6 +16,7 @@ import { useNotificationPreview } from '../hooks/useNotificationPreview';
 import type { AppStackParamList } from '../types/navigation';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
+import { goBackOrDashboard } from '../utils/navigation';
 import { EmptyState } from '../components/EmptyState';
 import { ErrorState } from '../components/ErrorState';
 import { SkeletonList } from '../components/LoadingState';
@@ -33,7 +34,7 @@ export const NotificationsScreen = React.memo(() => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <View style={[styles.header, { backgroundColor: theme.colors.bg, borderBottomColor: theme.colors.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.iconButton}>
+        <TouchableOpacity onPress={() => goBackOrDashboard(navigation)} style={styles.iconButton} accessibilityLabel="Wstecz">
           <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Powiadomienia</Text>

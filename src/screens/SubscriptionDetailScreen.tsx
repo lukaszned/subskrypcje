@@ -41,6 +41,7 @@ import { useCancelGuideRequest } from '../hooks/useCancelGuideRequest';
 import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
+import { goBackOrDashboard } from '../utils/navigation';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 import { getSeasonalStatus, parseSubscriptionNotes } from '../utils/subscriptionNotes';
@@ -74,7 +75,7 @@ export const SubscriptionDetailScreen = () => {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}><ArrowLeft size={24} color={theme.colors.text} /></TouchableOpacity>
+          <TouchableOpacity onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz"><ArrowLeft size={24} color={theme.colors.text} /></TouchableOpacity>
         </View>
         <View style={{ padding: 20 }}>
           <View style={{ alignItems: 'center', marginBottom: 30 }}>
@@ -103,7 +104,7 @@ export const SubscriptionDetailScreen = () => {
         text: 'Usuń',
         style: 'destructive',
         onPress: () => deleteMutation.mutate(id, {
-          onSuccess: () => navigation.goBack(),
+          onSuccess: () => goBackOrDashboard(navigation),
           onError: (error) => showDetailActionError(error, 'Nie udało się usunąć subskrypcji.'),
         })
       },
@@ -201,7 +202,7 @@ export const SubscriptionDetailScreen = () => {
       <View style={[styles.glowTop, { backgroundColor: `${theme.colors.primary}29` }]} />
       <View style={[styles.glowBottom, { backgroundColor: `${theme.colors.cyan}18` }]} />
       <View style={styles.header}>
-        <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={[styles.headerIconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} onPress={() => goBackOrDashboard(navigation)} accessibilityLabel="Wstecz">
           <ArrowLeft size={22} color={theme.colors.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
@@ -494,6 +495,7 @@ export const SubscriptionDetailScreen = () => {
         })}
         onRequestGuide={handleRequestGuide}
         isRequestingGuide={requestGuideMutation.isPending}
+        isConfirmingCancel={cancelMutation.isPending}
       />
     </SafeAreaView>
   );

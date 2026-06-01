@@ -27,7 +27,7 @@ export function GlassCard({ children, style, strong = false }: GlassCardProps) {
         {
           backgroundColor: strong ? theme.colors.cardStrong : theme.colors.card,
           borderColor: theme.colors.border,
-          shadowColor: '#000000',
+          shadowColor: theme.colors.bg,
         },
         style,
       ]}

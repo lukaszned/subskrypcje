@@ -18,6 +18,7 @@ import { useSubscriptions } from '../hooks/useSubscriptions';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import type { BillingCycle, Subscription } from '../types/api';
+import { goBackOrDashboard } from '../utils/navigation';
 
 function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCycle'>) {
   const amount = Number(subscription.amount || 0);
@@ -62,7 +63,7 @@ export const StatisticsScreen = () => {
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+        <TouchableOpacity onPress={() => goBackOrDashboard(navigation)} style={[styles.iconButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]} accessibilityLabel="Wstecz">
           <ArrowLeft size={24} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Statystyki</Text>
