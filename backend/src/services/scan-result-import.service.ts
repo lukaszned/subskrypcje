@@ -1,16 +1,21 @@
 import { z } from "zod";
+import { CreateSubscriptionInput } from "../validators/subscription";
+import {
+    createSubscription,
+    findPotentialDuplicateSubscription,
+} from "./subscription.service";
 import {
     ProductBucketInput,
     isPaymentProcessorOnlyProductItem,
 } from "./subscription-product-buckets.service";
 
-type ImportRecommendation =
+export type ImportRecommendation =
     | "create_subscription"
     | "review_price_change"
     | "review_bill"
     | "skip";
 
-type SubscriptionDraft = {
+export type SubscriptionDraft = {
     name: string;
     provider?: string | null;
     planName?: string | null;
@@ -33,6 +38,48 @@ export type ScanImportPreviewDraft = {
     recommendedAction: ImportRecommendation;
     draft?: SubscriptionDraft;
     warnings: string[];
+};
+
+export type ScanImportConfirmCreatedItem = {
+    sourceItemId?: string;
+    subscriptionId: string;
+    name: string;
+    provider?: string | null;
+    isRecurringBill: boolean;
+};
+
+export type ScanImportConfirmSkippedItem = {
+    sourceItemId?: string;
+    reason: "duplicate" | "unsupported_action" | "missing_required_field";
+    duplicateSubscriptionId?: string;
+    missingFields?: string[];
+};
+
+export type ScanImportConfirmResult = {
+    created: ScanImportConfirmCreatedItem[];
+    skipped: ScanImportConfirmSkippedItem[];
+    warnings: string[];
+    summary: {
+        requested: number;
+        created: number;
+        skipped: number;
+    };
+};
+
+type ImportConfirmDependencies = {
+    findPotentialDuplicate: (
+        userId: string,
+        data: CreateSubscriptionInput
+    ) => Promise<{ id: string } | null>;
+    createSubscription: (
+        userId: string,
+        data: CreateSubscriptionInput
+    ) => Promise<{
+        id: string;
+        name: string;
+        provider: string | null;
+        isRecurringBill: boolean;
+    }>;
 };
 
 const scanImportItemSchema = z
@@ -86,6 +133,44 @@ const scanImportItemSchema = z
 
 const importPreviewSchema = z.object({
     items: z.array(scanImportItemSchema).min(1).max(50),
+});
+
+const subscriptionDraftSchema = z
+    .object({
+        name: z.string().trim().min(1).max(100).optional(),
+        provider: z.union([z.string().trim().min(1), z.null()]).optional(),
+        planName: z.union([z.string().trim().min(1), z.null()]).optional(),
+        amount: z.coerce.number().positive().optional(),
+        currency: z.string().trim().min(3).max(5).optional(),
+        category: z.string().trim().min(1).optional(),
+        billingCycle: z.string().trim().min(1).optional(),
+        nextPaymentDate: z.string().trim().min(1).optional(),
+        lastPaymentDate: z.union([z.string().trim().min(1), z.null()]).optional(),
+        trialEndDate: z.union([z.string().trim().min(1), z.null()]).optional(),
+        isTrial: z.coerce.boolean().optional(),
+        isRecurringBill: z.coerce.boolean().optional(),
+        paymentMethodLabel: z.union([z.string().trim().min(1), z.null()]).optional(),
+        status: z.string().trim().min(1).optional(),
+        notes: z.union([z.string().trim().max(1000), z.null()]).optional(),
+    })
+    .strip();
+
+const importConfirmDraftSchema = z
+    .object({
+        sourceItemId: z.string().trim().min(1).optional(),
+        recommendedAction: z.enum([
+            "create_subscription",
+            "review_price_change",
+            "review_bill",
+            "skip",
+        ]),
+        draft: subscriptionDraftSchema.optional(),
+        warnings: z.array(z.string().trim().min(1).max(300)).optional().default([]),
+    })
+    .strip();
+
+const importConfirmSchema = z.object({
+    drafts: z.array(importConfirmDraftSchema).min(1).max(50),
 });
 
 type ScanImportItem = z.infer<typeof scanImportItemSchema> & ProductBucketInput;
@@ -359,5 +444,171 @@ export function buildImportPreview(payload: unknown) {
         drafts: parsed.items.map((item) =>
             mapScanItemToSubscriptionDraft(item as ScanImportItem)
         ),
+    };
+}
+
+function normalizeConfirmCategory(value: string | undefined) {
+    return mapCategory(value);
+}
+
+function normalizeConfirmBillingCycle(value: string | undefined) {
+    return normalizeBillingCycle(value);
+}
+
+function normalizeConfirmStatus(value: string | undefined) {
+    if (["pending", "paid", "overdue", "canceled"].includes(value ?? "")) {
+        return value as CreateSubscriptionInput["status"];
+    }
+
+    return "pending";
+}
+
+function sanitizeDraftNotes(notes: string | null | undefined) {
+    if (!notes) return null;
+
+    const safeLines = notes
+        .split(/\r?\n/)
+        .filter(
+            (line) =>
+                !/\b(raw|body|snippet|debug|credential|password|token|secret)\b/i.test(
+                    line
+                )
+        );
+
+    return safeLines.join("\n").slice(0, 1000) || null;
+}
+
+function toCreateSubscriptionInput(
+    draft: Partial<SubscriptionDraft> | undefined,
+    action: ImportRecommendation
+): { input?: CreateSubscriptionInput; missingFields: string[] } {
+    const missingFields: string[] = [];
+
+    if (!draft?.name) missingFields.push("draft.name");
+    if (!draft?.amount) missingFields.push("draft.amount");
+    if (!draft?.nextPaymentDate || Number.isNaN(Date.parse(draft.nextPaymentDate))) {
+        missingFields.push("draft.nextPaymentDate");
+    }
+
+    if (missingFields.length > 0 || !draft?.name || !draft.amount || !draft.nextPaymentDate) {
+        return { missingFields };
+    }
+
+    const input: CreateSubscriptionInput = {
+        name: draft.name,
+        provider: draft.provider ?? null,
+        planName: draft.planName ?? null,
+        amount: draft.amount,
+        currency: draft.currency ?? "PLN",
+        category: normalizeConfirmCategory(draft.category),
+        billingCycle: normalizeConfirmBillingCycle(draft.billingCycle),
+        nextPaymentDate: new Date(draft.nextPaymentDate).toISOString(),
+        lastPaymentDate:
+            draft.lastPaymentDate && !Number.isNaN(Date.parse(draft.lastPaymentDate))
+                ? new Date(draft.lastPaymentDate).toISOString()
+                : null,
+        trialEndDate:
+            draft.trialEndDate && !Number.isNaN(Date.parse(draft.trialEndDate))
+                ? new Date(draft.trialEndDate).toISOString()
+                : null,
+        isTrial: draft.isTrial ?? false,
+        isRecurringBill:
+            action === "review_bill" ? true : draft.isRecurringBill ?? false,
+        paymentMethodLabel: draft.paymentMethodLabel ?? null,
+        status: normalizeConfirmStatus(draft.status),
+        notes: sanitizeDraftNotes(draft.notes),
+    };
+
+    return { input, missingFields };
+}
+
+export async function confirmScanImportDrafts(
+    userId: string,
+    payload: unknown,
+    dependencies: ImportConfirmDependencies = {
+        findPotentialDuplicate: findPotentialDuplicateSubscription,
+        createSubscription,
+    }
+): Promise<ScanImportConfirmResult> {
+    const parsed = importConfirmSchema.parse(payload);
+    const created: ScanImportConfirmCreatedItem[] = [];
+    const skipped: ScanImportConfirmSkippedItem[] = [];
+    const warnings = new Set<string>();
+
+    for (const item of parsed.drafts) {
+        if (item.recommendedAction === "skip") {
+            skipped.push({
+                sourceItemId: item.sourceItemId,
+                reason: "unsupported_action",
+            });
+            continue;
+        }
+
+        if (item.recommendedAction === "review_price_change") {
+            warnings.add("Price-change items require manual review before saving.");
+            skipped.push({
+                sourceItemId: item.sourceItemId,
+                reason: "unsupported_action",
+            });
+            continue;
+        }
+
+        if (!["create_subscription", "review_bill"].includes(item.recommendedAction)) {
+            skipped.push({
+                sourceItemId: item.sourceItemId,
+                reason: "unsupported_action",
+            });
+            continue;
+        }
+
+        if (item.recommendedAction === "review_bill") {
+            warnings.add("Some bill-like items were saved as recurring bills after review.");
+        }
+
+        const { input, missingFields } = toCreateSubscriptionInput(
+            item.draft,
+            item.recommendedAction
+        );
+
+        if (!input) {
+            skipped.push({
+                sourceItemId: item.sourceItemId,
+                reason: "missing_required_field",
+                missingFields,
+            });
+            continue;
+        }
+
+        const duplicate = await dependencies.findPotentialDuplicate(userId, input);
+
+        if (duplicate) {
+            skipped.push({
+                sourceItemId: item.sourceItemId,
+                reason: "duplicate",
+                duplicateSubscriptionId: duplicate.id,
+            });
+            continue;
+        }
+
+        const subscription = await dependencies.createSubscription(userId, input);
+
+        created.push({
+            sourceItemId: item.sourceItemId,
+            subscriptionId: subscription.id,
+            name: subscription.name,
+            provider: subscription.provider,
+            isRecurringBill: subscription.isRecurringBill,
+        });
+    }
+
+    return {
+        created,
+        skipped,
+        warnings: Array.from(warnings),
+        summary: {
+            requested: parsed.drafts.length,
+            created: created.length,
+            skipped: skipped.length,
+        },
     };
 }

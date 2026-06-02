@@ -12,12 +12,16 @@ import {
     scanGmailHandler,
 } from "../controllers/email-scan.controller";
 import { requireAuth } from "../middlewares/auth.middleware";
+import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
     ImapScanServiceErrorCode,
     ImapScanServiceError,
     scanImapSubscriptions,
 } from "../services/imap-scan.service";
-import { buildImportPreview } from "../services/scan-result-import.service";
+import {
+    buildImportPreview,
+    confirmScanImportDrafts,
+} from "../services/scan-result-import.service";
 
 const router = Router();
 
@@ -144,6 +148,41 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
 router.post("/import-preview", requireAuth, async (req, res) => {
     try {
         return res.json(buildImportPreview(req.body ?? {}));
+    } catch (error) {
+        if (error instanceof ZodError) {
+            return res.status(400).json({
+                message: "Validation error",
+                code: "VALIDATION_ERROR",
+                errors: error.issues.map((issue) => ({
+                    field: issue.path.join("."),
+                    message: issue.message,
+                })),
+            });
+        }
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+        });
+    }
+});
+router.post("/import-confirm", requireAuth, async (req, res) => {
+    try {
+        const appUser = (req as AuthenticatedRequest).appUser;
+
+        if (!appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+            });
+        }
+
+        const result = await confirmScanImportDrafts(
+            appUser.id,
+            req.body ?? {}
+        );
+
+        return res.status(201).json(result);
     } catch (error) {
         if (error instanceof ZodError) {
             return res.status(400).json({

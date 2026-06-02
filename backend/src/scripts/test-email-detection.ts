@@ -22,7 +22,10 @@ import {
     classifyProductBucket,
     ProductBucketInput,
 } from "../services/subscription-product-buckets.service";
-import { buildImportPreview } from "../services/scan-result-import.service";
+import {
+    buildImportPreview,
+    confirmScanImportDrafts,
+} from "../services/scan-result-import.service";
 
 type AssertionFailure = {
     field: string;
@@ -137,6 +140,9 @@ const failedProductResultCases: string[] = [];
 let importPreviewPassed = 0;
 let importPreviewFailed = 0;
 const failedImportPreviewCases: string[] = [];
+let importConfirmPassed = 0;
+let importConfirmFailed = 0;
+const failedImportConfirmCases: string[] = [];
 
 function makeProductionMessage(
     input: Partial<ProductionImapScanMessage> & {
@@ -1241,6 +1247,156 @@ function runImportPreviewCase() {
     console.log("  actual:", JSON.stringify(preview, null, 2));
 }
 
+async function runImportConfirmCase() {
+    const failures: AssertionFailure[] = [];
+    const createdInputs: Array<{ userId: string; data: Record<string, unknown> }> = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const baseDraft = {
+        name: "ChatGPT Plus",
+        provider: "OpenAI",
+        planName: "ChatGPT Plus",
+        amount: 20,
+        currency: "USD",
+        category: "productivity",
+        billingCycle: "monthly",
+        nextPaymentDate: "2026-04-23T10:34:28.000Z",
+        lastPaymentDate: "2026-03-23T10:34:28.000Z",
+        trialEndDate: null,
+        isTrial: false,
+        isRecurringBill: false,
+        paymentMethodLabel: null,
+        status: "pending",
+        notes:
+            "Imported from IMAP scan preview.\nRaw body: secret\nPassword: nope\nUseful note",
+    };
+    const result = await confirmScanImportDrafts(
+        "auth-user",
+        {
+            userId: "client-forged-user",
+            drafts: [
+                {
+                    sourceItemId: "openai||ai_tools",
+                    recommendedAction: "create_subscription",
+                    draft: baseDraft,
+                    warnings: [],
+                    rawBody: "do not persist",
+                },
+                {
+                    sourceItemId: "utility||utilities",
+                    recommendedAction: "review_bill",
+                    draft: {
+                        ...baseDraft,
+                        name: "Utility Bill",
+                        provider: "UtilityCo",
+                        category: "utilities",
+                        amount: 123.45,
+                        currency: "PLN",
+                        isRecurringBill: false,
+                    },
+                    warnings: [],
+                },
+                {
+                    sourceItemId: "skip||historical",
+                    recommendedAction: "skip",
+                    warnings: [],
+                },
+                {
+                    sourceItemId: "price||change",
+                    recommendedAction: "review_price_change",
+                    warnings: [],
+                },
+                {
+                    sourceItemId: "duplicate||service",
+                    recommendedAction: "create_subscription",
+                    draft: {
+                        ...baseDraft,
+                        name: "Duplicate Service",
+                        provider: "DuplicateCo",
+                    },
+                    warnings: [],
+                },
+                {
+                    sourceItemId: "missing||amount",
+                    recommendedAction: "create_subscription",
+                    draft: {
+                        ...baseDraft,
+                        name: "Missing Amount",
+                        amount: undefined,
+                    },
+                    warnings: [],
+                },
+            ],
+        },
+        {
+            findPotentialDuplicate: async (_userId, data) =>
+                data.name === "Duplicate Service" ? { id: "existing-sub" } : null,
+            createSubscription: async (userId, data) => {
+                createdInputs.push({ userId, data });
+                return {
+                    id: `sub-${createdInputs.length}`,
+                    name: data.name,
+                    provider: data.provider ?? null,
+                    isRecurringBill: data.isRecurringBill ?? true,
+                };
+            },
+        }
+    );
+
+    assertField("Created count", 2, result.summary.created);
+    assertField("Skipped count", 4, result.summary.skipped);
+    assertField("Create subscription persisted", "sub-1", result.created[0]?.subscriptionId);
+    assertField("Review bill persisted", true, result.created[1]?.isRecurringBill);
+    assertField(
+        "Price change skipped unsupported",
+        "unsupported_action",
+        result.skipped.find((item) => item.sourceItemId === "price||change")?.reason
+    );
+    assertField(
+        "Skip action skipped unsupported",
+        "unsupported_action",
+        result.skipped.find((item) => item.sourceItemId === "skip||historical")?.reason
+    );
+    assertField(
+        "Duplicate skipped",
+        "duplicate",
+        result.skipped.find((item) => item.sourceItemId === "duplicate||service")?.reason
+    );
+    assertField(
+        "Missing amount skipped",
+        "missing_required_field",
+        result.skipped.find((item) => item.sourceItemId === "missing||amount")?.reason
+    );
+    assertField("Client userId ignored", true, createdInputs.every((item) => item.userId === "auth-user"));
+    assertField(
+        "Unsafe notes stripped",
+        false,
+        /raw body|password|secret|credential|token|debug/i.test(
+            String(createdInputs[0]?.data.notes ?? "")
+        )
+    );
+    assertField(
+        "Useful notes preserved",
+        true,
+        String(createdInputs[0]?.data.notes ?? "").includes("Useful note")
+    );
+
+    if (failures.length === 0) {
+        importConfirmPassed += 1;
+        console.log("PASS importConfirm: confirmed draft persistence contract");
+        return;
+    }
+
+    importConfirmFailed += 1;
+    failedImportConfirmCases.push("confirmed draft persistence contract");
+    console.log("FAIL importConfirm: confirmed draft persistence contract");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify(result, null, 2));
+}
+
 function runGmailLegacyQualityCase() {
     const failures: AssertionFailure[] = [];
     const assertField = (field: string, expected: unknown, value: unknown) => {
@@ -1812,6 +1968,7 @@ const baseObservedStats: ImapScanPlannerObservedStats = {
     billsOrUtilities: 0,
 };
 
+async function main() {
 runPlannerCase(
     "strong IMAP search provider",
     "adaptive",
@@ -2099,6 +2256,7 @@ runProductionImapRetrievalStabilityCase();
 runProductionImapBillDedupeCase();
 runImapFrontendContractCase();
 runImportPreviewCase();
+await runImportConfirmCase();
 runGmailLegacyQualityCase();
 runImapScanErrorClassifierCase();
 runGmailRedirectConfigCase();
@@ -2145,6 +2303,8 @@ console.log(`ProductResult Passed: ${productResultPassed}`);
 console.log(`ProductResult Failed: ${productResultFailed}`);
 console.log(`ImportPreview Passed: ${importPreviewPassed}`);
 console.log(`ImportPreview Failed: ${importPreviewFailed}`);
+console.log(`ImportConfirm Passed: ${importConfirmPassed}`);
+console.log(`ImportConfirm Failed: ${importConfirmFailed}`);
 
 if (passedCaseNames.length > 0) {
     console.log(`Passed cases: ${passedCaseNames.join(", ")}`);
@@ -2174,3 +2334,14 @@ if (failedImportPreviewCases.length > 0) {
     console.log(`Failed importPreview cases: ${failedImportPreviewCases.join(", ")}`);
     process.exitCode = 1;
 }
+
+if (failedImportConfirmCases.length > 0) {
+    console.log(`Failed importConfirm cases: ${failedImportConfirmCases.join(", ")}`);
+    process.exitCode = 1;
+}
+}
+
+main().catch((error) => {
+    console.error("Email detection test runner failed:", error);
+    process.exitCode = 1;
+});

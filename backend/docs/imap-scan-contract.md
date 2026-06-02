@@ -287,8 +287,8 @@ IMAP errors are credential-safe and do not include raw server internals:
 
 ## Current Known Limitations
 
-- The endpoint does not persist IMAP results to the database yet.
-- User confirmation/ignore/accept flows for IMAP product buckets are frontend/product work still to be wired.
+- IMAP scan results are not auto-saved. The user must review selected items, call `import-preview`, then call `import-confirm`.
+- Price-change notices are not automatically applied to existing records yet.
 - Some providers have weak server-side IMAP search; adaptive/deep scans use metadata prepass and time-bucket fallback.
 - The scan intentionally avoids returning raw email bodies.
 
@@ -303,7 +303,7 @@ Recommended flow:
 3. User selects items to confirm/import.
 4. Call `POST /email-scan/import-preview` with selected product items.
 5. Show normalized drafts and warnings.
-6. Later, after explicit user confirmation, frontend can call the existing subscription creation endpoint with an edited draft.
+6. After explicit user confirmation, call `POST /email-scan/import-confirm` with selected preview drafts.
 
 `POST /email-scan/import-preview` requires auth and does not write to the database.
 
@@ -373,6 +373,84 @@ Mapping notes:
 - `billingChannel`, amount semantics, evidence dates, and source message count are preserved in `notes`.
 - The endpoint never stores raw email bodies, IMAP credentials, or debug message payloads.
 
+### Import Confirm
+
+`POST /email-scan/import-confirm` requires auth and creates `Subscription` records only for confirmed preview drafts. It accepts the exact `drafts` array returned by `import-preview`.
+
+Request:
+
+```json
+{
+  "drafts": [
+    {
+      "sourceItemId": "skyshowtime|prime_video|streaming_video",
+      "recommendedAction": "create_subscription",
+      "draft": {
+        "name": "SkyShowtime on Prime Video",
+        "provider": "SkyShowtime",
+        "planName": null,
+        "amount": 24.99,
+        "currency": "PLN",
+        "category": "entertainment",
+        "billingCycle": "monthly",
+        "nextPaymentDate": "2026-02-13T10:00:00.000Z",
+        "lastPaymentDate": "2025-01-13T10:00:00.000Z",
+        "trialEndDate": null,
+        "isTrial": false,
+        "isRecurringBill": false,
+        "paymentMethodLabel": "Prime Video",
+        "status": "pending",
+        "notes": "Imported from IMAP scan preview..."
+      },
+      "warnings": [
+        "User should confirm this historical subscription is still active."
+      ]
+    }
+  ]
+}
+```
+
+Response:
+
+```json
+{
+  "created": [
+    {
+      "sourceItemId": "skyshowtime|prime_video|streaming_video",
+      "subscriptionId": "sub_123",
+      "name": "SkyShowtime on Prime Video",
+      "provider": "SkyShowtime",
+      "isRecurringBill": false
+    }
+  ],
+  "skipped": [
+    {
+      "sourceItemId": "amazon|price_change|ecommerce_membership",
+      "reason": "unsupported_action"
+    }
+  ],
+  "warnings": [
+    "Price-change items require manual review before saving."
+  ],
+  "summary": {
+    "requested": 2,
+    "created": 1,
+    "skipped": 1
+  }
+}
+```
+
+Persistence policy:
+
+- `create_subscription`: creates a normal subscription if required fields are present and no duplicate exists.
+- `review_bill`: creates a recurring bill using the current `Subscription` model with `isRecurringBill=true`.
+- `review_price_change`: skipped for now with `unsupported_action`; frontend should show it as a manual review/update task.
+- `skip`: skipped.
+- Duplicate protection checks existing non-canceled subscriptions for the same user/name/provider/plan.
+- The authenticated user id is always used; any client-provided `userId` is ignored.
+- Drafts missing required model fields such as `amount` or `nextPaymentDate` are skipped item-by-item with `missing_required_field`.
+- Raw bodies, credentials, tokens, debug payloads, and unknown client fields are not persisted.
+
 ## Frontend Implementation Checklist
 
 This is the suggested end-to-end frontend flow for the first IMAP scan UI. Frontend code is expected to stay responsible for UX, confirmation, editing, and final save decisions.
@@ -423,7 +501,9 @@ Recommended MVP behavior:
    - `review_bill` items
    - `skip` items
    - warnings
-10. Do not assume `import-preview` writes to the database. Final save is a later confirmation step using existing or future subscription save flows.
+10. User edits/confirms drafts in the UI.
+11. Call `POST /email-scan/import-confirm` with confirmed preview drafts.
+12. Show created records and skipped item warnings.
 
 ### Frontend Should Not
 
@@ -790,8 +870,8 @@ Server logs include redirect base/path/host and whether the redirect uses localh
 ## Backend Current Limitations / Next Steps
 
 - `POST /email-scan/import-preview` does not write to the database.
-- Final save/confirm endpoint is not implemented yet.
-- Frontend can later use existing subscription creation after user edits/confirms a draft, but this is not automatic.
+- `POST /email-scan/import-confirm` creates confirmed subscription/bill drafts after explicit user review.
+- Price-change import is review-only for now; it is not automatically applied to existing subscriptions.
 - Provider preset UI is not implemented yet.
 - OAuth/non-password IMAP provider flows are not implemented yet.
 - Gmail scan endpoint remains separate and unchanged.
@@ -806,9 +886,10 @@ Ready endpoints:
 
 - `POST /email-scan/imap/scan`
 - `POST /email-scan/import-preview`
+- `POST /email-scan/import-confirm`
 - `POST /email-scan/gmail/scan`
 
-All require the normal Bearer token. The IMAP scan endpoint accepts manual IMAP credentials and returns `productResult` buckets plus `scanSummary`. The import-preview endpoint accepts selected IMAP product bucket items and returns normalized drafts/warnings; it does not write to the database.
+All require the normal Bearer token. The IMAP scan endpoint accepts manual IMAP credentials and returns `productResult` buckets plus `scanSummary`. The import-preview endpoint accepts selected IMAP product bucket items and returns normalized drafts/warnings; it does not write to the database. The import-confirm endpoint accepts confirmed preview drafts and creates supported `Subscription` records.
 
 MVP provider scope:
 
@@ -828,12 +909,13 @@ Recommended implementation:
 7. Let the user select IMAP bucket items.
 8. Call import-preview.
 9. Show drafts and warnings before any real save action.
+10. After user confirmation, call import-confirm with selected preview drafts.
 
 Important product behavior:
 
 - `needsReviewSubscriptions` are not confirmed active subscriptions.
 - `priceChanges` are review alerts, not new subscriptions.
-- `billsOrUtilities` should be a separate section and can use `isRecurringBill=true` from preview drafts.
+- `billsOrUtilities` should be a separate section and can use `isRecurringBill=true` from preview/confirm drafts.
 - Do not store or log IMAP credentials.
 - Do not enable debug mode in production UI.
 - Do not assume Gmail has the same `productResult` shape as IMAP yet.
