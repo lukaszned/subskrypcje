@@ -162,6 +162,90 @@ export const emailDetectionFixtureCases: EmailDetectionFixtureCase[] = [
         },
     },
     {
+        name: "Supabase project paused EN",
+        input: {
+            id: "fixture-supabase-project-paused-en",
+            from: "Supabase <noreply@supabase.com>",
+            subject: "Your Supabase Project flowpay-dev has been paused.",
+            snippet:
+                "Your free project has been paused because it was inactive. Resume the project from your dashboard.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0,
+        },
+    },
+    {
+        name: "Supabase project going to be paused EN",
+        input: {
+            id: "fixture-supabase-project-going-paused-en",
+            from: "Supabase <noreply@supabase.com>",
+            subject: "Your Supabase Project flowpay-dev is going to be paused.",
+            snippet:
+                "Your project is going to be paused because it has not received traffic recently. This is an account status notice.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0,
+        },
+    },
+    {
+        name: "Supa monthly update newsletter EN",
+        input: {
+            id: "fixture-supa-monthly-update-newsletter-en",
+            from: "Supabase <noreply@supabase.com>",
+            subject: "Supa Update May 2026",
+            snippet:
+                "Read the latest product update, changelog, and release notes from the Supabase team.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0,
+        },
+    },
+    {
+        name: "GitHub third-party OAuth app added EN",
+        input: {
+            id: "fixture-github-third-party-oauth-app-added-en",
+            from: "GitHub <noreply@github.com>",
+            subject: "[GitHub] A third-party OAuth application has been added to your account",
+            snippet:
+                "A third-party OAuth application has been added to your GitHub account. Review account access in security settings.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0,
+        },
+    },
+    {
+        name: "GitHub first-party OAuth app added EN",
+        input: {
+            id: "fixture-github-first-party-oauth-app-added-en",
+            from: "GitHub <noreply@github.com>",
+            subject: "[GitHub] A first-party GitHub OAuth application has been added to your account",
+            snippet:
+                "A GitHub OAuth application has been added to your account. This security notice is not a billing receipt.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0,
+        },
+    },
+    {
+        name: "Generated content ready from SaaS provider EN",
+        input: {
+            id: "fixture-generated-content-ready-saas-en",
+            from: "Synthesia <no-reply@synthesia.io>",
+            subject: "Done! Boost Your Business with VantaFrame is ready",
+            snippet:
+                "Your video project is ready to view and share. Open the project to download your generated content.",
+        },
+        expected: {
+            isCandidate: false,
+            maxConfidence: 0,
+        },
+    },
+    {
         name: "Google Play trial receipt from month token EN",
         input: {
             id: "fixture-google-play-trial-receipt-month-token-en",

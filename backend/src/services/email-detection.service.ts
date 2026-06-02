@@ -212,6 +212,8 @@ type DetectionSignals = {
     hasPlanFeatureUpdateEvidence: boolean;
     hasReviewReplyEvidence: boolean;
     hasProductUpdateQuotaSecurityEvidence: boolean;
+    hasProjectStatusUpdateEvidence: boolean;
+    hasGeneratedContentReadyEvidence: boolean;
 };
 
 function providerEntry(
@@ -449,7 +451,9 @@ function includesAny(text: string, patterns: RegExp[]) {
 function hasAccountAdminUpdateSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
         /\b(terms of service|terms update|updated our .*terms|updated .*terms|privacy policy|policy update|legal update)\b/i,
-        /\b(account settings|review your .*account settings|security checkup|account checkup|manage your account|oauth app|connected app)\b/i,
+        /\b(account settings|review your .*account settings|security checkup|account checkup|manage your account|oauth app|oauth application|connected app)\b/i,
+        /\b(third-party|first-party)\s+oauth\s+application\s+has\s+been\s+added\b/i,
+        /\b(app|application)\s+(?:has\s+been\s+)?added\s+to\s+your\s+account\b/i,
         /\b(zmiany w regulaminie|aktualizacja regulaminu|polityka prywatno[s\u015b]ci|warunki korzystania)\b/i,
     ]);
 }
@@ -484,9 +488,27 @@ function hasPlanFeatureUpdateSignal(subjectAndSnippet: string) {
 
 function hasProductUpdateQuotaSecuritySignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
-        /\b(product update|service update|quota|usage quota|best practices|security best practices|security recommendations)\b/i,
+        /\b(product update|service update|monthly update|company update|newsletter|changelog|release notes|quota|usage quota|best practices|security best practices|security recommendations)\b/i,
+        /\b(?:\w+\s+)?update\s+(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\s+\d{4}\b/i,
         /\bgoogle cloud\b.{0,120}\b(action required|quota|security|product update|best practices)\b/i,
         /\b(action required)\b.{0,120}\b(google cloud|security|quota)\b/i,
+    ]);
+}
+
+function hasProjectStatusUpdateSignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(project|service|workspace|site|app|application|account)\b.{0,80}\b(has been|was|is going to be|will be)\s+paused\b/i,
+        /\b(project|service|workspace|site|app|application|account)\b.{0,80}\b(inactive|suspended|deactivated)\b/i,
+        /\bfree\s+(project|workspace|app|application)\b.{0,80}\b(paused|inactive|suspended)\b/i,
+    ]);
+}
+
+function hasGeneratedContentReadySignal(subjectAndSnippet: string) {
+    return includesAny(subjectAndSnippet, [
+        /\b(done|complete|completed|finished)[!,.:\s-]+.{0,120}\b(is|are)\s+ready\b/i,
+        /\byour\s+.{2,120}\b(video|render|export|report|file|project|content|presentation|asset|design)\b.{0,80}\b(is|are)\s+ready\b/i,
+        /\b(video|render|export|report|file|project|content|presentation|asset|design)\b.{0,80}\b(is|are)\s+ready\b/i,
+        /\bready\s+to\s+(download|view|share|publish)\b/i,
     ]);
 }
 
@@ -557,6 +579,7 @@ function hasNegatedBillingSignal(subjectAndSnippet: string) {
         /nie faktura ani potwierdzenie platnosci/i,
         /nie jest faktur[a\u0105] ani rachunkiem/i,
         /\bnot a receipt\b/i,
+        /\bnot a billing receipt\b/i,
         /\bnot a billing confirmation\b/i,
         /\bnot a payment confirmation\b/i,
         /\bdoes not confirm billing\b/i,
@@ -1443,6 +1466,9 @@ function hasAccountSecurityLoginSignal(subjectAndSnippet: string) {
 
 function hasAccountSecurityCodeSignal(subjectAndSnippet: string) {
     return includesAny(subjectAndSnippet, [
+        /\byour\s+[\w\s.-]{0,40}\s+code\s+(?:is|:)\s*\d{4,8}\b/i,
+        /\b(?:verification|security|login|sign-in|one-time|otp)\s+code\s+(?:is|:)?\s*\d{4,8}\b/i,
+        /\buse\s+(?:this\s+)?code\s+to\s+(?:verify|sign in|login|log in|confirm)\b/i,
         /wprowad[z\u017a] poni[z\u017c]szy kod/i,
         /wpisz poni[z\u017c]szy kod/i,
         /tw[o\u00f3]j kod to/i,
@@ -2028,6 +2054,12 @@ function collectDetectionSignals(params: {
     const hasReviewReplyEvidence = hasReviewReplySignal(params.subjectAndSnippet);
     const hasProductUpdateQuotaSecurityEvidence =
         hasProductUpdateQuotaSecuritySignal(params.subjectAndSnippet);
+    const hasProjectStatusUpdateEvidence = hasProjectStatusUpdateSignal(
+        params.subjectAndSnippet
+    );
+    const hasGeneratedContentReadyEvidence = hasGeneratedContentReadySignal(
+        params.subjectAndSnippet
+    );
     const hasCreditLoanMarketingEvidence = hasCreditLoanMarketingSignal(
         params.subjectAndSnippet
     );
@@ -2265,6 +2297,8 @@ function collectDetectionSignals(params: {
         hasPlanFeatureUpdateEvidence,
         hasReviewReplyEvidence,
         hasProductUpdateQuotaSecurityEvidence,
+        hasProjectStatusUpdateEvidence,
+        hasGeneratedContentReadyEvidence,
     };
 }
 
@@ -3224,6 +3258,22 @@ export function analyzeMessageForSubscription(
         reasons.push("-0.70 onboarding-only message without billing evidence");
     }
 
+    if (
+        signals.hasProjectStatusUpdateEvidence &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.8;
+        reasons.push("-0.80 project/account status update without billing evidence");
+    }
+
+    if (
+        signals.hasGeneratedContentReadyEvidence &&
+        !hasExplicitActiveBillingEvidence(signals)
+    ) {
+        confidence -= 0.8;
+        reasons.push("-0.80 generated content ready message without billing evidence");
+    }
+
     const normalizedConfidence = Math.max(0, Math.min(1, confidence));
     const isBlockedAccountMessage =
         (signals.hasAccountSecurityEvidence ||
@@ -3389,6 +3439,12 @@ export function analyzeMessageForSubscription(
     const isBlockedProductUpdateQuotaSecurityMessage =
         signals.hasProductUpdateQuotaSecurityEvidence &&
         !hasRealActiveBillingEvidence(signals);
+    const isBlockedProjectStatusUpdateMessage =
+        signals.hasProjectStatusUpdateEvidence &&
+        !hasExplicitActiveBillingEvidence(signals);
+    const isBlockedGeneratedContentReadyMessage =
+        signals.hasGeneratedContentReadyEvidence &&
+        !hasExplicitActiveBillingEvidence(signals);
 
     if (isBlockedAccountSecurityCodeMessage) {
         reasons.push("-blocked: account/security code message without billing signal");
@@ -3532,6 +3588,14 @@ export function analyzeMessageForSubscription(
         reasons.push("-blocked: product update/quota/security message without billing evidence");
     }
 
+    if (isBlockedProjectStatusUpdateMessage) {
+        reasons.push("-blocked: project/account status update without billing evidence");
+    }
+
+    if (isBlockedGeneratedContentReadyMessage) {
+        reasons.push("-blocked: generated content ready message without billing evidence");
+    }
+
     const candidateFromPositiveEvidence = isCandidateFromPositiveEvidence(signals);
     const candidateByDecisionPolicy = isCandidateByDecisionPolicy(
         signals,
@@ -3539,45 +3603,49 @@ export function analyzeMessageForSubscription(
         candidateFromPositiveEvidence,
         normalizedConfidence
     );
+    const isBlockedMessage =
+        isBlockedAccountMessage ||
+        isBlockedNegatedSubscriptionMessage ||
+        isBlockedNegatedBillingMessage ||
+        isBlockedCanceledSubscriptionMessage ||
+        isBlockedRefundMessage ||
+        isBlockedFreePlanMessage ||
+        isBlockedMarketingMessage ||
+        isBlockedSubscriptionUpsellMessage ||
+        isBlockedMarketingNegatedMessage ||
+        isBlockedPromotionalTrialMessage ||
+        isBlockedPaymentSetupMessage ||
+        isBlockedUnreadableEncodedMessage ||
+        isBlockedAccountSecurityCodeMessage ||
+        isBlockedSuspiciousSenderMessage ||
+        isBlockedProgressReportMessage ||
+        isBlockedTransportTicketMessage ||
+        isBlockedPhoneTopUpMessage ||
+        isBlockedNewsletterRecommendationMessage ||
+        isBlockedOneTimePurchaseMessage ||
+        isBlockedOneTimeMarketplaceEcommerceMessage ||
+        isBlockedPaymentMethodOnlyMessage ||
+        isBlockedPublicStatutoryPaymentMessage ||
+        isBlockedFreeAppStorePurchaseMessage ||
+        isBlockedMarketingIntermediaryMessage ||
+        isBlockedCreditLoanMarketingMessage ||
+        isBlockedExpiredReactivationMessage ||
+        isBlockedRawHeaderSnippetMessage ||
+        isBlockedPaymentProcessorWithoutMerchantMessage ||
+        isBlockedOnboardingOnlyMessage ||
+        isBlockedAccountAdminUpdateMessage ||
+        isBlockedCollaborationInviteMessage ||
+        isBlockedPlanFeatureUpdateMessage ||
+        isBlockedReviewReplyMessage ||
+        isBlockedProductUpdateQuotaSecurityMessage ||
+        isBlockedProjectStatusUpdateMessage ||
+        isBlockedGeneratedContentReadyMessage;
+    const finalConfidence = isBlockedMessage ? 0 : normalizedConfidence;
 
     return {
         isCandidate:
-            !isBlockedAccountMessage &&
-            !isBlockedNegatedSubscriptionMessage &&
-            !isBlockedNegatedBillingMessage &&
-            !isBlockedCanceledSubscriptionMessage &&
-            !isBlockedRefundMessage &&
-            !isBlockedFreePlanMessage &&
-            !isBlockedMarketingMessage &&
-            !isBlockedSubscriptionUpsellMessage &&
-            !isBlockedMarketingNegatedMessage &&
-            !isBlockedPromotionalTrialMessage &&
-            !isBlockedPaymentSetupMessage &&
-            !isBlockedUnreadableEncodedMessage &&
-            !isBlockedAccountSecurityCodeMessage &&
-            !isBlockedSuspiciousSenderMessage &&
-            !isBlockedProgressReportMessage &&
-            !isBlockedTransportTicketMessage &&
-            !isBlockedPhoneTopUpMessage &&
-            !isBlockedNewsletterRecommendationMessage &&
-            !isBlockedOneTimePurchaseMessage &&
-            !isBlockedOneTimeMarketplaceEcommerceMessage &&
-            !isBlockedPaymentMethodOnlyMessage &&
-            !isBlockedPublicStatutoryPaymentMessage &&
-            !isBlockedFreeAppStorePurchaseMessage &&
-            !isBlockedMarketingIntermediaryMessage &&
-            !isBlockedCreditLoanMarketingMessage &&
-            !isBlockedExpiredReactivationMessage &&
-            !isBlockedRawHeaderSnippetMessage &&
-            !isBlockedPaymentProcessorWithoutMerchantMessage &&
-            !isBlockedOnboardingOnlyMessage &&
-            !isBlockedAccountAdminUpdateMessage &&
-            !isBlockedCollaborationInviteMessage &&
-            !isBlockedPlanFeatureUpdateMessage &&
-            !isBlockedReviewReplyMessage &&
-            !isBlockedProductUpdateQuotaSecurityMessage &&
-            candidateByDecisionPolicy,
-        confidence: normalizedConfidence,
+            !isBlockedMessage && candidateByDecisionPolicy,
+        confidence: finalConfidence,
         reasons,
         detected,
     };
