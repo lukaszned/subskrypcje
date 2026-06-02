@@ -22,6 +22,7 @@ import {
     buildImportPreview,
     confirmScanImportDrafts,
 } from "../services/scan-result-import.service";
+import { getEmailScanUserMessage } from "../services/subscription-product-buckets.service";
 
 const router = Router();
 
@@ -116,6 +117,7 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
+                userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 errors: error.issues.map((issue) => ({
                     field: issue.path.join("."),
                     message: issue.message,
@@ -136,12 +138,14 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
             return res.status(response.status).json({
                 message: response.message,
                 code: error.code,
+                userMessage: getEmailScanUserMessage(error.code),
             });
         }
 
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 });
@@ -153,6 +157,7 @@ router.post("/import-preview", requireAuth, async (req, res) => {
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
+                userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 errors: error.issues.map((issue) => ({
                     field: issue.path.join("."),
                     message: issue.message,
@@ -163,6 +168,7 @@ router.post("/import-preview", requireAuth, async (req, res) => {
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 });
@@ -174,6 +180,7 @@ router.post("/import-confirm", requireAuth, async (req, res) => {
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -188,6 +195,7 @@ router.post("/import-confirm", requireAuth, async (req, res) => {
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
+                userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 errors: error.issues.map((issue) => ({
                     field: issue.path.join("."),
                     message: issue.message,
@@ -198,6 +206,7 @@ router.post("/import-confirm", requireAuth, async (req, res) => {
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 });

@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { supabase } from "../lib/supabase";
 import { prisma } from "../lib/prisma";
+import { getEmailScanUserMessage } from "../services/subscription-product-buckets.service";
 
 export interface AuthenticatedRequest extends Request {
     authUser?: {
@@ -26,6 +27,7 @@ export async function requireAuth(
             return res.status(401).json({
                 message: "Missing or invalid authorization header",
                 code: "AUTH_REQUIRED",
+                userMessage: getEmailScanUserMessage("AUTH_REQUIRED"),
             });
         }
 
@@ -37,6 +39,7 @@ export async function requireAuth(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -49,6 +52,7 @@ export async function requireAuth(
             return res.status(400).json({
                 message: "Authenticated user has no email",
                 code: "AUTH_EMAIL_MISSING",
+                userMessage: getEmailScanUserMessage("AUTH_REQUIRED"),
             });
         }
 
@@ -77,6 +81,7 @@ export async function requireAuth(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }

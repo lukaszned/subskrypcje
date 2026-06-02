@@ -20,6 +20,7 @@ import {
 import {
     buildProductResult,
     classifyProductBucket,
+    getEmailScanUserMessage,
     ProductBucketInput,
 } from "../services/subscription-product-buckets.service";
 import {
@@ -1060,6 +1061,10 @@ function runImapFrontendContractCase() {
         assertField(`${item.displayName} productBucket`, "string", typeof item.productBucket);
         assertField(`${item.displayName} primaryAction`, "string", typeof item.primaryAction);
         assertField(`${item.displayName} userFacingReason`, "string", typeof item.userFacingReason);
+        assertField(`${item.displayName} productBucketLabel`, "string", typeof item.productBucketLabel);
+        assertField(`${item.displayName} categoryLabel`, "string", typeof item.categoryLabel);
+        assertField(`${item.displayName} primaryActionLabel`, "string", typeof item.primaryActionLabel);
+        assertField(`${item.displayName} recommendedSelected`, "boolean", typeof item.recommendedSelected);
         assertField(
             `${item.displayName} userFacingReason no double punctuation`,
             false,
@@ -1083,6 +1088,130 @@ function runImapFrontendContractCase() {
     failedProductResultCases.push("IMAP frontend contract");
     console.log("FAIL productResult: IMAP frontend contract");
     console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
+function runProductResultFrontendHelperCase() {
+    const result = buildProductResult([
+        {
+            displayName: "Strong Current",
+            provider: "Strong Current",
+            category: "ai_tools",
+            status: "active",
+            confidence: 0.95,
+            displayAmount: "20.00 USD monthly",
+            amountKind: "charged",
+            lastEvidenceDate: "2026-05-01T00:00:00.000Z",
+            evidenceSummary: ["active subscription payment confirmation"],
+        },
+        {
+            displayName: "Current Missing Amount",
+            provider: "Current Missing Amount",
+            category: "ai_tools",
+            status: "active",
+            confidence: 0.95,
+            lastEvidenceDate: "2026-05-02T00:00:00.000Z",
+            evidenceSummary: ["active subscription payment confirmation"],
+        },
+        {
+            displayName: "Payment Processor",
+            provider: "Tpay",
+            category: "payment_processor",
+            status: "active",
+            displayAmount: "49.99 PLN",
+            billingChannel: "Payment Processor",
+            evidenceSummary: ["payment processor"],
+        },
+        {
+            displayName: "Utility Bill",
+            provider: "Utility Bill",
+            category: "internet_isp",
+            status: "invoice_due",
+            dueAmount: "55.13 PLN",
+            amountKind: "due",
+            lastEvidenceDate: "2026-05-03T00:00:00.000Z",
+        },
+        {
+            displayName: "Weak Membership",
+            provider: "Weak Membership",
+            category: "delivery_membership",
+            status: "stale_needs_review",
+            needsReview: true,
+            displayAmount: "29.99 PLN",
+        },
+        {
+            displayName: "Unknown Category",
+            provider: "Unknown Category",
+            category: "custom_unknown_category",
+            status: "stale_needs_review",
+            needsReview: true,
+            displayAmount: "10.00 PLN",
+        },
+    ]);
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const strong = result.currentSubscriptions.find(
+        (item) => item.displayName === "Strong Current"
+    );
+    const missing = result.currentSubscriptions.find(
+        (item) => item.displayName === "Current Missing Amount"
+    );
+    const processor = result.needsReviewSubscriptions.find(
+        (item) => item.displayName === "Payment Processor"
+    );
+    const bill = result.billsOrUtilities.find(
+        (item) => item.displayName === "Utility Bill"
+    );
+    const weak = result.needsReviewSubscriptions.find(
+        (item) => item.displayName === "Weak Membership"
+    );
+    const unknown = result.needsReviewSubscriptions.find(
+        (item) => item.displayName === "Unknown Category"
+    );
+
+    assertField("Current bucket label", "Aktywne subskrypcje", strong?.productBucketLabel);
+    assertField("Current category label", "Narzędzia AI", strong?.categoryLabel);
+    assertField("Current action label", "Dodaj jako aktywną", strong?.primaryActionLabel);
+    assertField("Current amount kind label", "Pobrano", strong?.amountKindLabel);
+    assertField("Current recommended selected", true, strong?.recommendedSelected);
+    assertField("Current missing amount recommended", false, missing?.recommendedSelected);
+    assertField(
+        "Current missing amount reason",
+        "Brakuje kwoty — uzupełnij przed zapisem.",
+        missing?.selectionReason
+    );
+    assertField("Processor recommended selected", false, processor?.recommendedSelected);
+    assertField("Processor category label", "Operator płatności", processor?.categoryLabel);
+    assertField("Bill recommended selected", true, bill?.recommendedSelected);
+    assertField("Bill bucket label", "Rachunki cykliczne", bill?.productBucketLabel);
+    assertField("Bill amount kind label", "Kwota do zapłaty", bill?.amountKindLabel);
+    assertField("Weak membership selected", false, weak?.recommendedSelected);
+    assertField("Unknown category fallback", "Inne", unknown?.categoryLabel);
+    assertField(
+        "IMAP auth userMessage",
+        "Nie udało się zalogować do skrzynki. Sprawdź adres e-mail i hasło albo użyj hasła aplikacji.",
+        getEmailScanUserMessage("IMAP_AUTH_FAILED")
+    );
+    assertField(
+        "Unknown code fallback",
+        "Wystąpił błąd serwera. Spróbuj ponownie za chwilę.",
+        getEmailScanUserMessage("SOMETHING_UNKNOWN")
+    );
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: frontend helper labels and selection");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("frontend helper labels and selection");
+    console.log("FAIL productResult: frontend helper labels and selection");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify(result, null, 2));
 }
 
 function runImportPreviewCase() {
@@ -2255,6 +2384,7 @@ runProductionImapAmountSemanticsCase();
 runProductionImapRetrievalStabilityCase();
 runProductionImapBillDedupeCase();
 runImapFrontendContractCase();
+runProductResultFrontendHelperCase();
 runImportPreviewCase();
 await runImportConfirmCase();
 runGmailLegacyQualityCase();

@@ -11,7 +11,9 @@ export type ProductPrimaryAction =
     | "confirm_manually"
     | "review_old_bill"
     | "review_price_change"
-    | "ignore_or_archive";
+    | "ignore_or_archive"
+    | "create_subscription"
+    | "skip";
 
 export type ProductBucketInput = {
     displayName?: string;
@@ -20,6 +22,17 @@ export type ProductBucketInput = {
     category?: string;
     status: string;
     confidence?: number;
+    amount?: string | number;
+    displayAmount?: string;
+    amountKind?: string | null;
+    currentAmount?: string;
+    regularAmount?: string;
+    futureAmount?: string;
+    promoAmount?: string;
+    trialThenAmount?: string;
+    dueAmount?: string;
+    latestAmount?: string;
+    warnings?: string[];
     lastEvidenceDate?: string;
     recencyStatus?: string;
     source?: string;
@@ -40,6 +53,12 @@ export type ProductResultItem<T extends ProductBucketInput> = T & {
     productBucket: ProductBucket;
     primaryAction: ProductPrimaryAction;
     userFacingReason: string;
+    productBucketLabel: string;
+    categoryLabel: string;
+    primaryActionLabel: string;
+    amountKindLabel: string | null;
+    recommendedSelected: boolean;
+    selectionReason: string | null;
 };
 
 export type ProductResult<T extends ProductBucketInput> = {
@@ -64,6 +83,94 @@ export type ProductResult<T extends ProductBucketInput> = {
     };
 };
 
+const PRODUCT_BUCKET_LABELS: Record<ProductBucket, string> = {
+    currentSubscriptions: "Aktywne subskrypcje",
+    needsReviewSubscriptions: "Do sprawdzenia",
+    historicalSubscriptions: "Historyczne",
+    priceChanges: "Zmiany cen",
+    billsOrUtilities: "Rachunki cykliczne",
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+    payment_processor: "Operator płatności",
+    internet_isp: "Internet",
+    telecom_mobile: "Telefon",
+    telecom: "Telefon",
+    ai_tools: "Narzędzia AI",
+    delivery_membership: "Dostawy / membership",
+    software_saas: "Software / SaaS",
+    app_store_marketplace: "App Store / marketplace",
+    productivity: "Produktywność",
+    productivity_office: "Produktywność",
+    utilities: "Rachunki",
+    utilities_energy: "Rachunki",
+    streaming: "Streaming",
+    streaming_video: "Streaming",
+    streaming_music: "Streaming",
+    music_audio: "Streaming",
+    cloud_storage: "Chmura / storage",
+    finance: "Finanse",
+    finance_accounting: "Finanse",
+    ecommerce: "Zakupy",
+    ecommerce_membership: "Zakupy",
+    shopping: "Zakupy",
+    unknown: "Inne",
+};
+
+const PRIMARY_ACTION_LABELS: Record<string, string> = {
+    show_as_active: "Dodaj jako aktywną",
+    confirm_still_active: "Potwierdź, czy nadal aktywna",
+    confirm_manually: "Potwierdź ręcznie",
+    review_old_bill: "Sprawdź rachunek",
+    review_bill: "Sprawdź rachunek",
+    review_price_change: "Sprawdź zmianę ceny",
+    skip: "Pomiń",
+    ignore_or_archive: "Pomiń",
+    create_subscription: "Utwórz subskrypcję",
+};
+
+const AMOUNT_KIND_LABELS: Record<string, string> = {
+    due: "Kwota do zapłaty",
+    paid: "Zapłacono",
+    charged: "Pobrano",
+    upcoming: "Nadchodząca płatność",
+    unknown: "Kwota do sprawdzenia",
+    regular_price: "Kwota regularna",
+    promo_price: "Kwota promocyjna",
+    trial_then_price: "Kwota po okresie próbnym",
+    new_price: "Nowa cena",
+};
+
+const EMAIL_SCAN_USER_MESSAGES: Record<string, string> = {
+    AUTH_REQUIRED: "Zaloguj się ponownie, aby kontynuować.",
+    UNAUTHORIZED: "Zaloguj się ponownie, aby kontynuować.",
+    AUTH_DATABASE_UNAVAILABLE:
+        "Chwilowy problem z połączeniem z bazą danych. Spróbuj ponownie za chwilę.",
+    VALIDATION_ERROR: "Sprawdź formularz i uzupełnij wymagane pola.",
+    IMAP_AUTH_FAILED:
+        "Nie udało się zalogować do skrzynki. Sprawdź adres e-mail i hasło albo użyj hasła aplikacji.",
+    IMAP_CONNECTION_FAILED:
+        "Nie udało się połączyć ze skrzynką. Sprawdź serwer, port i ustawienia SSL.",
+    IMAP_CONNECTION_TIMEOUT:
+        "Skanowanie skrzynki trwało zbyt długo. Spróbuj ponownie lub użyj szybkiego trybu.",
+    IMAP_MAILBOX_NOT_FOUND: "Nie znaleziono wybranego folderu poczty.",
+    IMAP_UNSUPPORTED:
+        "Ten serwer pocztowy nie obsługuje wymaganej operacji skanowania.",
+    IMAP_SCAN_FAILED: "Nie udało się przeskanować skrzynki. Spróbuj ponownie.",
+    GMAIL_CONNECTION_NOT_FOUND: "Połącz konto Gmail, aby uruchomić skanowanie.",
+    GMAIL_REAUTH_REQUIRED:
+        "Połączenie z Gmail wygasło. Połącz Gmail ponownie.",
+    GMAIL_REFRESH_FAILED:
+        "Nie udało się odświeżyć dostępu do Gmail. Połącz konto ponownie.",
+    GMAIL_TOKEN_DECRYPT_FAILED:
+        "Nie udało się odczytać połączenia Gmail. Połącz konto ponownie.",
+    GMAIL_API_FAILED:
+        "Gmail chwilowo nie odpowiedział poprawnie. Spróbuj ponownie.",
+    GMAIL_OAUTH_CONFIG_MISSING: "Konfiguracja Gmail OAuth jest niekompletna.",
+    GMAIL_SCAN_FAILED: "Nie udało się przeskanować Gmail. Spróbuj ponownie.",
+    INTERNAL_SERVER_ERROR: "Wystąpił błąd serwera. Spróbuj ponownie za chwilę.",
+};
+
 function normalizeAsciiText(text: string) {
     return text
         .normalize("NFD")
@@ -71,6 +178,35 @@ function normalizeAsciiText(text: string) {
         .replace(/\u0142/g, "l")
         .replace(/\u0141/g, "L")
         .toLowerCase();
+}
+
+export function getProductBucketLabel(bucket: string | undefined) {
+    return PRODUCT_BUCKET_LABELS[bucket as ProductBucket] ?? "Do sprawdzenia";
+}
+
+export function getCategoryLabel(category: string | undefined) {
+    const normalized = (category ?? "unknown").trim().toLowerCase();
+
+    if (CATEGORY_LABELS[normalized]) return CATEGORY_LABELS[normalized];
+
+    return "Inne";
+}
+
+export function getPrimaryActionLabel(action: string | undefined) {
+    return PRIMARY_ACTION_LABELS[action ?? ""] ?? "Sprawdź ręcznie";
+}
+
+export function getAmountKindLabel(amountKind: string | null | undefined) {
+    if (!amountKind) return null;
+
+    return AMOUNT_KIND_LABELS[amountKind] ?? "Kwota do sprawdzenia";
+}
+
+export function getEmailScanUserMessage(code: string | undefined) {
+    return (
+        EMAIL_SCAN_USER_MESSAGES[code ?? ""] ??
+        EMAIL_SCAN_USER_MESSAGES.INTERNAL_SERVER_ERROR
+    );
 }
 
 export function isSubscriptionLikeCategory(category: string | undefined) {
@@ -233,6 +369,96 @@ function sortByDateName<T extends ProductBucketInput>(
         itemTimestamp(right) - itemTimestamp(left) ||
         itemName(left).localeCompare(itemName(right))
     );
+}
+
+function hasImportableAmount(item: ProductBucketInput) {
+    return Boolean(
+        item.amount ||
+            item.displayAmount ||
+            item.dueAmount ||
+            item.regularAmount ||
+            item.latestAmount ||
+            item.trialThenAmount ||
+            item.futureAmount ||
+            item.promoAmount
+    );
+}
+
+function buildSelectionRecommendation(
+    item: ProductBucketInput,
+    bucket: ProductBucket,
+    primaryAction: ProductPrimaryAction
+) {
+    const hasAmount = hasImportableAmount(item);
+
+    if (isPaymentProcessorOnlyProductItem(item) || item.category === "payment_processor") {
+        return {
+            recommendedSelected: false,
+            selectionReason:
+                "Wykryto operatora płatności, ale usługa wymaga potwierdzenia.",
+        };
+    }
+
+    if (bucket === "priceChanges") {
+        return {
+            recommendedSelected: false,
+            selectionReason:
+                "Wykryto możliwą zmianę ceny — sprawdź ręcznie.",
+        };
+    }
+
+    if (bucket === "historicalSubscriptions") {
+        return {
+            recommendedSelected: false,
+            selectionReason:
+                "Znaleziono starszy sygnał — potwierdź, czy nadal aktywne.",
+        };
+    }
+
+    if (bucket === "needsReviewSubscriptions") {
+        return {
+            recommendedSelected: false,
+            selectionReason: "Wynik wymaga ręcznego potwierdzenia.",
+        };
+    }
+
+    if (!hasAmount) {
+        return {
+            recommendedSelected: false,
+            selectionReason: "Brakuje kwoty — uzupełnij przed zapisem.",
+        };
+    }
+
+    if (
+        bucket === "currentSubscriptions" &&
+        (primaryAction === "show_as_active" ||
+            primaryAction === "create_subscription") &&
+        item.category !== "payment_processor"
+    ) {
+        return {
+            recommendedSelected: true,
+            selectionReason:
+                "Wykryto aktywną subskrypcję z danymi płatności.",
+        };
+    }
+
+    if (
+        bucket === "billsOrUtilities" &&
+        (primaryAction === "show_as_active" ||
+            primaryAction === "review_old_bill")
+    ) {
+        return {
+            recommendedSelected: true,
+            selectionReason: item.dueAmount
+                ? "Rachunek z kwotą do sprawdzenia."
+                : "Wykryto rachunek cykliczny z kwotą.",
+        };
+    }
+
+    return {
+        recommendedSelected: false,
+        selectionReason: "Wynik wymaga ręcznego potwierdzenia.",
+    };
 }
 
 function hasManualReviewPriority<T extends ProductBucketInput>(
@@ -412,11 +638,22 @@ export function buildProductResult<T extends ProductBucketInput>(
 
     for (const item of items) {
         const productDecision = classifyProductBucket(item);
+        const selectionRecommendation = buildSelectionRecommendation(
+            item,
+            productDecision.bucket,
+            productDecision.primaryAction
+        );
         const productItem: ProductResultItem<T> = {
             ...item,
             productBucket: productDecision.bucket,
             primaryAction: productDecision.primaryAction,
             userFacingReason: productDecision.userFacingReason,
+            productBucketLabel: getProductBucketLabel(productDecision.bucket),
+            categoryLabel: getCategoryLabel(item.category),
+            primaryActionLabel: getPrimaryActionLabel(productDecision.primaryAction),
+            amountKindLabel: getAmountKindLabel(item.amountKind),
+            recommendedSelected: selectionRecommendation.recommendedSelected,
+            selectionReason: selectionRecommendation.selectionReason,
         };
 
         productResult[productDecision.bucket].push(productItem);

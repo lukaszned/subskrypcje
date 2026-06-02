@@ -160,6 +160,12 @@ Common fields:
 - `productBucket`
 - `primaryAction`
 - `userFacingReason`
+- `productBucketLabel`
+- `categoryLabel`
+- `primaryActionLabel`
+- `amountKindLabel`
+- `recommendedSelected`
+- `selectionReason`
 - `billingCycle`
 - `firstSeen`
 - `lastSeen`
@@ -200,6 +206,22 @@ Date/source fields:
 - `regular_price`
 - `trial_then_price`
 - `unknown`
+
+Frontend helper fields are additive. Existing technical fields remain the source of truth, while helper fields are intended for UI labels and bulk-selection behavior:
+
+- `productBucketLabel`: Polish bucket label, for example `Do sprawdzenia` or `Rachunki cykliczne`.
+- `categoryLabel`: Polish category label, for example `Operator płatności`, `Internet`, `Narzędzia AI`, or fallback `Inne`.
+- `primaryActionLabel`: Polish action label, for example `Potwierdź, czy nadal aktywna`.
+- `amountKindLabel`: Polish amount label such as `Kwota do zapłaty`, or `null` when no amount kind exists.
+- `recommendedSelected`: backend suggestion for "Zaznacz rekomendowane".
+- `selectionReason`: short Polish explanation shown near bulk-selection decisions.
+
+Recommended selection policy:
+
+- Strong current subscriptions with an amount can be preselected.
+- Bills/utilities with a detected amount can be preselected after review.
+- Needs-review subscriptions, payment-processor-only items, historical items, and price changes are not preselected.
+- Items missing `amount` are not preselected because `import-confirm` cannot create a `Subscription` without an amount.
 
 ## Status And Actions
 
@@ -741,6 +763,16 @@ Send the selected product items as returned by the scan response:
 ```
 
 ## Endpoint Error Handling For Frontend
+
+Known error responses keep existing `message` and `code` fields and add:
+
+```json
+{
+  "userMessage": "Sprawdź formularz i uzupełnij wymagane pola."
+}
+```
+
+Frontend can display `userMessage` directly for known auth, validation, Gmail, and IMAP scan errors.
 
 | HTTP | Code | Frontend behavior |
 | --- | --- | --- |

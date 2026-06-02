@@ -25,6 +25,7 @@ import {
     disconnectEmailConnectionSchema,
     scanGmailSchema,
 } from "../validators/email-scan";
+import { getEmailScanUserMessage } from "../services/subscription-product-buckets.service";
 
 const detectionStatusValues = Object.values(DetectedSubscriptionStatus);
 
@@ -81,27 +82,32 @@ function sendGmailOAuthError(res: Response, error: GmailOAuthServiceError) {
             return res.status(500).json({
                 message: "Missing Google OAuth configuration.",
                 code: "MISSING_GOOGLE_OAUTH_CONFIG",
+                userMessage: getEmailScanUserMessage("GMAIL_OAUTH_CONFIG_MISSING"),
             });
         case "INVALID_OAUTH_STATE":
             return res.status(400).json({
                 message: "Invalid OAuth state.",
                 code: "INVALID_OAUTH_STATE",
+                userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
             });
         case "GOOGLE_OAUTH_ERROR":
             return res.status(400).json({
                 message: "Google OAuth error.",
                 code: "GOOGLE_OAUTH_ERROR",
+                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         case "GMAIL_PROFILE_EMAIL_MISSING":
             return res.status(400).json({
                 message: "Gmail profile email is missing.",
                 code: "GMAIL_PROFILE_EMAIL_MISSING",
+                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         case "GMAIL_CONNECTION_FAILED":
         default:
             return res.status(500).json({
                 message: "Gmail connection failed.",
                 code: "GMAIL_CONNECTION_FAILED",
+                userMessage: getEmailScanUserMessage("GMAIL_API_FAILED"),
             });
     }
 }
@@ -112,37 +118,44 @@ function sendGmailScanError(res: Response, error: GmailScanServiceError) {
             return res.status(500).json({
                 message: "Gmail OAuth is not configured on the server.",
                 code: "GMAIL_OAUTH_CONFIG_MISSING",
+                userMessage: getEmailScanUserMessage("GMAIL_OAUTH_CONFIG_MISSING"),
             });
         case "GMAIL_CONNECTION_NOT_FOUND":
             return res.status(404).json({
                 message: "Gmail connection not found.",
                 code: "GMAIL_CONNECTION_NOT_FOUND",
+                userMessage: getEmailScanUserMessage("GMAIL_CONNECTION_NOT_FOUND"),
             });
         case "GMAIL_REAUTH_REQUIRED":
             return res.status(409).json({
                 message: "Gmail connection requires reauthorization.",
                 code: "GMAIL_REAUTH_REQUIRED",
+                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         case "GMAIL_TOKEN_DECRYPT_FAILED":
             return res.status(409).json({
                 message: "Gmail connection requires reauthorization.",
                 code: "GMAIL_TOKEN_DECRYPT_FAILED",
+                userMessage: getEmailScanUserMessage("GMAIL_TOKEN_DECRYPT_FAILED"),
             });
         case "GMAIL_REFRESH_FAILED":
             return res.status(409).json({
                 message: "Gmail connection requires reauthorization.",
                 code: "GMAIL_REFRESH_FAILED",
+                userMessage: getEmailScanUserMessage("GMAIL_REFRESH_FAILED"),
             });
         case "GMAIL_API_FAILED":
             return res.status(502).json({
                 message: "Gmail API request failed. Try again later.",
                 code: "GMAIL_API_FAILED",
+                userMessage: getEmailScanUserMessage("GMAIL_API_FAILED"),
             });
         case "GMAIL_SCAN_FAILED":
         default:
             return res.status(500).json({
                 message: "Gmail scan failed.",
                 code: "GMAIL_SCAN_FAILED",
+                userMessage: getEmailScanUserMessage("GMAIL_SCAN_FAILED"),
             });
     }
 }
@@ -175,6 +188,7 @@ export async function getGmailAuthUrlHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -213,6 +227,7 @@ export async function getGmailAuthUrlHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -226,6 +241,7 @@ export async function handleGmailOAuthCallbackHandler(
             return res.status(400).json({
                 message: "Google OAuth error.",
                 code: "GOOGLE_OAUTH_ERROR",
+                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         }
 
@@ -236,6 +252,7 @@ export async function handleGmailOAuthCallbackHandler(
             return res.status(400).json({
                 message: "Missing OAuth code or state.",
                 code: "MISSING_OAUTH_PARAMS",
+                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         }
 
@@ -255,6 +272,7 @@ export async function handleGmailOAuthCallbackHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -268,6 +286,7 @@ export async function scanGmailHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -292,6 +311,7 @@ export async function scanGmailHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -305,6 +325,7 @@ export async function getEmailScanStatusHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -316,6 +337,7 @@ export async function getEmailScanStatusHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -329,6 +351,7 @@ export async function getEmailConnectionsHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -340,6 +363,7 @@ export async function getEmailConnectionsHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -353,6 +377,7 @@ export async function disconnectEmailConnectionHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -367,6 +392,7 @@ export async function disconnectEmailConnectionHandler(
             return res.status(404).json({
                 message: "Email connection not found.",
                 code: "EMAIL_CONNECTION_NOT_FOUND",
+                userMessage: getEmailScanUserMessage("GMAIL_CONNECTION_NOT_FOUND"),
             });
         }
 
@@ -384,6 +410,7 @@ export async function disconnectEmailConnectionHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -397,6 +424,7 @@ export async function getDetectedSubscriptionsHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -406,6 +434,7 @@ export async function getDetectedSubscriptionsHandler(
             return res.status(400).json({
                 message: "Invalid detection status.",
                 code: "INVALID_DETECTION_STATUS",
+                userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
             });
         }
 
@@ -421,6 +450,7 @@ export async function getDetectedSubscriptionsHandler(
             return res.status(400).json({
                 message: "Invalid pagination parameters.",
                 code: "INVALID_PAGINATION",
+                userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
             });
         }
 
@@ -436,6 +466,7 @@ export async function getDetectedSubscriptionsHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -448,6 +479,7 @@ function sendValidationError(res: Response, error: ZodError) {
     return res.status(400).json({
         message: "Validation error",
         code: "VALIDATION_ERROR",
+        userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
         errors: error.issues.map((issue) => ({
             field: issue.path.join("."),
             message: issue.message,
@@ -464,6 +496,7 @@ export async function ignoreDetectedSubscriptionHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -477,11 +510,13 @@ export async function ignoreDetectedSubscriptionHandler(
                 return res.status(404).json({
                     message: "Detected subscription not found.",
                     code: "DETECTION_NOT_FOUND",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 });
             case "already_accepted":
                 return res.status(409).json({
                     message: "Accepted detection cannot be ignored.",
                     code: "DETECTION_ALREADY_ACCEPTED",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 });
             case "ignored":
                 return res.json({
@@ -495,6 +530,7 @@ export async function ignoreDetectedSubscriptionHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
@@ -508,6 +544,7 @@ export async function acceptDetectedSubscriptionHandler(
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
             });
         }
 
@@ -523,33 +560,39 @@ export async function acceptDetectedSubscriptionHandler(
                 return res.status(404).json({
                     message: "Detected subscription not found.",
                     code: "DETECTION_NOT_FOUND",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 });
             case "already_accepted":
                 return res.status(409).json({
                     message: "Detected subscription has already been accepted.",
                     code: "DETECTION_ALREADY_ACCEPTED",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 });
             case "already_ignored":
                 return res.status(409).json({
                     message: "Ignored detection cannot be accepted.",
                     code: "DETECTION_ALREADY_IGNORED",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 });
             case "marked_duplicate":
                 return res.status(409).json({
                     message: "Duplicate detection cannot be accepted.",
                     code: "DETECTION_MARKED_DUPLICATE",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                 });
             case "needs_review":
                 return res.status(400).json({
                     message:
                         "Detected subscription needs review before it can be accepted.",
                     code: "DETECTION_NEEDS_REVIEW",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                     missingFields: result.missingFields ?? [],
                 });
             case "duplicate_subscription":
                 return res.status(409).json({
                     message: "A similar subscription already exists",
                     code: "DUPLICATE_SUBSCRIPTION",
+                    userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
                     duplicate: result.duplicate,
                 });
             case "accepted":
@@ -569,6 +612,7 @@ export async function acceptDetectedSubscriptionHandler(
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
         });
     }
 }
