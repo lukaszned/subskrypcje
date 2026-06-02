@@ -1127,10 +1127,21 @@ function runImportPreviewCase() {
                 category: "utilities_energy",
                 status: "stale_needs_review",
                 productBucket: "billsOrUtilities",
-                primaryAction: "review_old_bill",
+                primaryAction: "show_as_active",
                 dueAmount: "123.45 PLN",
                 dueDateText: "15.04.2025",
                 billingCycle: "monthly",
+            },
+            {
+                id: "current-missing-amount",
+                displayName: "Current Missing Amount",
+                provider: "Current Missing Amount",
+                category: "ai_tools",
+                status: "active",
+                productBucket: "currentSubscriptions",
+                primaryAction: "show_as_active",
+                billingCycle: "monthly",
+                lastEvidenceDate: "2026-01-01T00:00:00.000Z",
             },
             {
                 id: "processor-only",
@@ -1160,6 +1171,7 @@ function runImportPreviewCase() {
     const promo = byId("promo-sub");
     const price = byId("price-change");
     const bill = byId("bill");
+    const currentMissingAmount = byId("current-missing-amount");
     const processorOnly = byId("processor-only");
     let invalidRejected = false;
 
@@ -1169,7 +1181,7 @@ function runImportPreviewCase() {
         invalidRejected = true;
     }
 
-    assertField("Draft count", 5, preview.drafts.length);
+    assertField("Draft count", 6, preview.drafts.length);
     assertField("Stale action", "create_subscription", stale?.recommendedAction);
     assertField("Stale category", "entertainment", stale?.draft?.category);
     assertField("Stale review warning", true, stale?.warnings.some((warning) => warning.includes("confirm")));
@@ -1183,6 +1195,23 @@ function runImportPreviewCase() {
     assertField("Bill category", "utilities", bill?.draft?.category);
     assertField("Bill amount", 123.45, bill?.draft?.amount);
     assertField("Bill nextPaymentDate", "2025-04-15T00:00:00.000Z", bill?.draft?.nextPaymentDate);
+    assertField(
+        "Bill notes import recommendation",
+        true,
+        bill?.draft?.notes?.includes("Import recommendation: review_bill")
+    );
+    assertField(
+        "Bill notes no conflicting recommended action",
+        false,
+        bill?.draft?.notes?.includes("Recommended action: show_as_active")
+    );
+    assertField(
+        "Current missing amount warning",
+        true,
+        currentMissingAmount?.warnings.some((warning) =>
+            warning.includes("Confirm amount before saving")
+        )
+    );
     assertField("Processor-only action", "create_subscription", processorOnly?.recommendedAction);
     assertField(
         "Processor-only warning",
@@ -1481,6 +1510,109 @@ function runProductResultContractCase() {
     productResultFailed += 1;
     failedProductResultCases.push("mixed historical subscriptions and bills");
     console.log("FAIL productResult: mixed historical subscriptions and bills");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+    console.log("  actual:", JSON.stringify(actual.scanSummary, null, 2));
+}
+
+function runProductResultReviewDefaultCase() {
+    const items: ProductBucketInput[] = [
+        {
+            displayName: "ChatGPT Plus",
+            provider: "OpenAI",
+            category: "ai_tools",
+            status: "active",
+            confidence: 0.98,
+            evidenceSummary: [
+                "active subscription payment confirmation",
+                "charged monthly",
+                "billing cycle",
+            ],
+            evidenceTypes: ["payment confirmation", "subscription renewal"],
+        },
+        {
+            displayName: "Apple",
+            provider: "Apple",
+            billingChannel: "Apple",
+            category: "app_store_marketplace",
+            status: "stale_needs_review",
+            recencyStatus: "stale_needs_review",
+            needsReview: true,
+        },
+        {
+            displayName: "Uber One",
+            provider: "Uber One",
+            category: "delivery_membership",
+            status: "active",
+            confidence: 0.7,
+            evidenceSummary: ["membership benefits", "savings summary"],
+            evidenceTypes: ["membership wording"],
+        },
+        {
+            displayName: "Tpay",
+            provider: "Tpay",
+            billingChannel: "Payment Processor",
+            category: "payment_processor",
+            status: "active",
+            evidenceSummary: ["payment through payment processor"],
+        },
+        {
+            displayName: "Baselinker",
+            provider: "Baselinker",
+            category: "software_saas",
+            status: "stale_needs_review",
+            recencyStatus: "stale_needs_review",
+            needsReview: true,
+        },
+        {
+            displayName: "PayU",
+            provider: "PayU",
+            billingChannel: "Payment Processor",
+            category: "payment_processor",
+            status: "active",
+            evidenceSummary: ["payment through payment processor"],
+        },
+        {
+            displayName: "TOYA",
+            provider: "TOYA",
+            category: "internet_isp",
+            status: "invoice_due",
+            evidenceSummary: ["invoice due"],
+        },
+        {
+            displayName: "Play",
+            provider: "Play",
+            category: "telecom_mobile",
+            status: "invoice_due",
+            evidenceSummary: ["payment due reminder"],
+        },
+    ];
+    const actual = buildProductResult(items);
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+
+    assertField("currentSubscriptions", 1, actual.scanSummary.currentSubscriptions);
+    assertField("needsReviewSubscriptions", 5, actual.scanSummary.needsReviewSubscriptions);
+    assertField("billsOrUtilities", 2, actual.scanSummary.billsOrUtilities);
+    assertField("recommendedDefaultMode", "review", actual.scanSummary.recommendedDefaultMode);
+    assertField(
+        "recommendedUserMessage",
+        "We found possible subscriptions and recurring bills. Please review the results before importing.",
+        actual.scanSummary.recommendedUserMessage
+    );
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: review default when review items dominate");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("review default when review items dominate");
+    console.log("FAIL productResult: review default when review items dominate");
     console.log("  failures:", JSON.stringify(failures, null, 2));
     console.log("  actual:", JSON.stringify(actual.scanSummary, null, 2));
 }
@@ -1826,6 +1958,7 @@ runProductBucketCase(
 );
 
 runProductResultContractCase();
+runProductResultReviewDefaultCase();
 runProductionImapAggregationCase();
 runProductionImapAmountSemanticsCase();
 runProductionImapRetrievalStabilityCase();

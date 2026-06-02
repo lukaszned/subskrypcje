@@ -235,6 +235,21 @@ function sortByDateName<T extends ProductBucketInput>(
     );
 }
 
+function hasManualReviewPriority<T extends ProductBucketInput>(
+    productResult: ProductResult<T>
+) {
+    return (
+        productResult.needsReviewSubscriptions.length +
+            productResult.billsOrUtilities.length >
+            productResult.currentSubscriptions.length ||
+        productResult.needsReviewSubscriptions.some(isPaymentProcessorOnlyProductItem) ||
+        (productResult.currentSubscriptions.length <= 1 &&
+            productResult.needsReviewSubscriptions.length +
+                productResult.billsOrUtilities.length >=
+                2)
+    );
+}
+
 export function classifyProductBucket(
     item: ProductBucketInput
 ): ProductBucketDecision {
@@ -434,10 +449,17 @@ export function buildProductResult<T extends ProductBucketInput>(
             productResult.historicalSubscriptions.length > 0 ||
             productResult.billsOrUtilities.some((subscription) => subscription.needsReview));
 
-    if (productResult.currentSubscriptions.length > 0) {
+    if (
+        productResult.currentSubscriptions.length > 0 &&
+        !hasManualReviewPriority(productResult)
+    ) {
         productResult.scanSummary.recommendedDefaultMode = "current";
         productResult.scanSummary.recommendedUserMessage =
-            "We found recent active subscription or bill evidence. Review older items separately.";
+            "We found recent active subscriptions. Review any older or bill-like items separately.";
+    } else if (productResult.currentSubscriptions.length > 0) {
+        productResult.scanSummary.recommendedDefaultMode = "review";
+        productResult.scanSummary.recommendedUserMessage =
+            "We found possible subscriptions and recurring bills. Please review the results before importing.";
     } else if (
         productResult.needsReviewSubscriptions.length > 0 &&
         productResult.priceChanges.length > 0

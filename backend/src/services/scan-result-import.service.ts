@@ -221,11 +221,16 @@ function chooseNextPaymentDate(item: ScanImportItem, billingCycle: string) {
     );
 }
 
-function buildNotes(item: ScanImportItem, warnings: string[]) {
+function buildNotes(
+    item: ScanImportItem,
+    warnings: string[],
+    recommendedAction: ImportRecommendation
+) {
     const lines = [
         "Imported from IMAP scan preview.",
         item.productBucket ? `Bucket: ${item.productBucket}` : undefined,
-        item.primaryAction ? `Recommended action: ${item.primaryAction}` : undefined,
+        item.primaryAction ? `Product action: ${item.primaryAction}` : undefined,
+        `Import recommendation: ${recommendedAction}`,
         item.billingChannel ? `Billing channel: ${item.billingChannel}` : undefined,
         item.amountKind ? `Amount kind: ${item.amountKind}` : undefined,
         item.promoAmount ? `Promo amount: ${item.promoAmount}` : undefined,
@@ -303,7 +308,9 @@ export function mapScanItemToSubscriptionDraft(
     const billingCycle = normalizeBillingCycle(item.billingCycle);
     const nextPaymentDate = chooseNextPaymentDate(item, billingCycle);
 
-    if (!amount) warnings.push("Amount is missing or could not be parsed.");
+    if (!amount) {
+        warnings.push("Amount is missing or could not be parsed. Confirm amount before saving.");
+    }
     if (!nextPaymentDate) warnings.push("Next payment date is missing or estimated.");
     if (item.productBucket === "needsReviewSubscriptions") {
         warnings.push("User should confirm this historical subscription is still active.");
@@ -334,7 +341,7 @@ export function mapScanItemToSubscriptionDraft(
                   isRecurringBill: recommendedAction === "review_bill",
                   paymentMethodLabel: item.billingChannel ?? null,
                   status: "pending",
-                  notes: buildNotes(item, warnings),
+                  notes: buildNotes(item, warnings, recommendedAction),
               };
 
     return {
