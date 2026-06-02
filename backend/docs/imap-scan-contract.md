@@ -99,12 +99,14 @@ Backend TODO, post-MVP or before unified UI:
 }
 ```
 
-`profile` values:
+`profile` values for the mobile MVP:
 
-- `fast`: recent window only, intended for quick first-run feedback.
-- `balanced`: recent scan plus conservative metadata retrieval.
-- `adaptive`: recommended default; chooses capability-based fallbacks.
-- `deep`: recall-oriented scan for older, yearly, or marketplace-billed evidence.
+- Frontend may send `balanced`, omit `profile`, or keep older values such as `fast`, `adaptive`, or `deep`.
+- Backend normalizes all requested values to the stable MVP profile: `balanced`.
+- Unknown profile strings are accepted and normalized to `balanced`; they are not rejected for MVP compatibility.
+- The response includes `scanSummary.profileRequested`, `scanSummary.profileEffective`, `scanSummary.profileNormalized`, and `scanSummary.profileNormalizationReason`.
+
+This keeps the mobile app contract simple while preserving the old request field for backward compatibility.
 
 ## Response
 
@@ -247,6 +249,10 @@ Common `primaryAction` values:
 Useful frontend fields:
 
 - `scanProfile`
+- `profileRequested`
+- `profileEffective`
+- `profileNormalized`
+- `profileNormalizationReason`
 - `effectiveScanMode`
 - `effectiveWindowDays`
 - `scanReliabilityLevel`
@@ -328,6 +334,18 @@ Recommended flow:
 6. After explicit user confirmation, call `POST /email-scan/import-confirm` with selected preview drafts.
 
 `POST /email-scan/import-preview` requires auth and does not write to the database.
+
+For mobile MVP, send at most 50 selected items at once. If the request exceeds this cap, backend returns:
+
+```json
+{
+  "message": "Too many import preview items.",
+  "code": "IMPORT_PREVIEW_TOO_MANY_ITEMS",
+  "userMessage": "Wybrano zbyt wiele pozycji naraz. Zmniejsz wybór i spróbuj ponownie."
+}
+```
+
+Malformed selected items are skipped item-by-item where possible and returned as `recommendedAction: "skip"` with a warning, so one bad card does not break the entire preview.
 
 Request:
 
@@ -676,7 +694,11 @@ Bills and utilities:
     }
   },
   "scanSummary": {
-    "scanProfile": "adaptive",
+    "scanProfile": "balanced",
+    "profileRequested": "adaptive",
+    "profileEffective": "balanced",
+    "profileNormalized": true,
+    "profileNormalizationReason": "MVP mobile scan uses the stable balanced profile.",
     "effectiveScanMode": "deep",
     "scanReliabilityLevel": "medium",
     "recommendedFallbackStrategy": "metadata_prepass_plus_time_buckets",
@@ -896,8 +918,20 @@ Physical phones cannot complete OAuth through a localhost redirect on the develo
 
 - `redirectMode`: `localhost` or `lan_or_custom`
 - `redirectUriHost`: host part only, for example `localhost` or `192.168.18.5`
+- `redirectUri`: exact callback URI registered in the Google authorization URL
+- `callbackPath`: always `/email-scan/gmail/callback`
+- `redirectReachabilityHint`: safe human-readable hint for localhost/tunnel/mobile setup
+
+`GET /email-scan/gmail/oauth-diagnostics` returns the same safe redirect diagnostics without generating an auth URL. Use it during mobile/dev setup checks. It does not include OAuth client secrets, tokens, codes, or state.
 
 Server logs include redirect base/path/host and whether the redirect uses localhost. They do not log OAuth code, state, access tokens, or refresh tokens.
+
+The callback route returns a simple browser page:
+
+- success: “Gmail connected”
+- failure: “Gmail connection failed” with a safe code such as `INVALID_OAUTH_STATE` or `GMAIL_CONNECTION_FAILED`
+
+The frontend should still refresh `/email-scan/status` after the browser returns or the user switches back to the app.
 
 ## Backend Current Limitations / Next Steps
 

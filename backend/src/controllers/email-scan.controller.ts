@@ -11,6 +11,7 @@ import {
     ignoreDetectedSubscriptionForUser,
 } from "../services/email-scan.service";
 import {
+    buildGmailOAuthDiagnostics,
     getGmailAuthUrl,
     getGmailRedirectDiagnostics,
     GmailOAuthServiceError,
@@ -88,7 +89,7 @@ function sendGmailOAuthError(res: Response, error: GmailOAuthServiceError) {
             return res.status(400).json({
                 message: "Invalid OAuth state.",
                 code: "INVALID_OAUTH_STATE",
-                userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
+                userMessage: getEmailScanUserMessage("GMAIL_OAUTH_STATE_INVALID"),
             });
         case "GOOGLE_OAUTH_ERROR":
             return res.status(400).json({
@@ -110,6 +111,47 @@ function sendGmailOAuthError(res: Response, error: GmailOAuthServiceError) {
                 userMessage: getEmailScanUserMessage("GMAIL_API_FAILED"),
             });
     }
+}
+
+function escapeHtml(value: string) {
+    return value
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
+function sendGmailOAuthHtml(
+    res: Response,
+    options: { ok: boolean; title: string; message: string; code?: string }
+) {
+    const status = options.ok ? 200 : 400;
+    const codeLine = options.code
+        ? `<p class="code">Code: ${escapeHtml(options.code)}</p>`
+        : "";
+
+    return res.status(status).type("html").send(`<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(options.title)}</title>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 32px; line-height: 1.45; color: #111827; }
+    main { max-width: 560px; margin: 0 auto; }
+    h1 { font-size: 24px; margin-bottom: 12px; }
+    .code { color: #6b7280; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>${escapeHtml(options.title)}</h1>
+    <p>${escapeHtml(options.message)}</p>
+    ${codeLine}
+  </main>
+</body>
+</html>`);
 }
 
 function sendGmailScanError(res: Response, error: GmailScanServiceError) {
@@ -216,6 +258,9 @@ export async function getGmailAuthUrlHandler(
             authUrl,
             redirectMode: redirectDiagnostics.redirectMode,
             redirectUriHost: redirectDiagnostics.redirectUriHost,
+            redirectUri,
+            callbackPath: redirectDiagnostics.callbackPath,
+            redirectReachabilityHint: redirectDiagnostics.redirectReachabilityHint,
         });
     } catch (error) {
         console.error("Error creating Gmail auth URL:", error);
@@ -232,16 +277,75 @@ export async function getGmailAuthUrlHandler(
     }
 }
 
-export async function handleGmailOAuthCallbackHandler(
+export async function getGmailOAuthDiagnosticsHandler(
     req: AuthenticatedRequest,
     res: Response
 ) {
     try {
+        if (!req.appUser) {
+            return res.status(401).json({
+                message: "Unauthorized",
+                code: "UNAUTHORIZED",
+                userMessage: getEmailScanUserMessage("UNAUTHORIZED"),
+            });
+        }
+
+        const diagnostics = buildGmailOAuthDiagnostics();
+
+        console.info("[email-scan] gmail oauth diagnostics", {
+            userId: req.appUser.id,
+            requestIp: req.ip,
+            userAgent: req.get("user-agent") ?? "",
+            redirectBase: diagnostics.redirectBase,
+            redirectPath: diagnostics.redirectPath,
+            redirectUriHost: diagnostics.redirectUriHost,
+            redirectMode: diagnostics.redirectMode,
+            redirectUriUsesLocalhost: diagnostics.redirectUriUsesLocalhost,
+            isTunnelRedirect: diagnostics.isTunnelRedirect,
+        });
+
+        return res.json(diagnostics);
+    } catch (error) {
+        console.error("Error creating Gmail OAuth diagnostics:", {
+            name: error instanceof Error ? error.name : "UnknownError",
+            message:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown Gmail OAuth diagnostics error",
+        });
+
+        return res.status(500).json({
+            message: "Internal server error",
+            code: "INTERNAL_SERVER_ERROR",
+            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
+        });
+    }
+}
+
+export async function handleGmailOAuthCallbackHandler(
+    req: AuthenticatedRequest,
+    res: Response
+) {
+    const diagnostics = buildGmailOAuthDiagnostics();
+
+    console.info("[email-scan] gmail oauth callback received", {
+        hasCode: Boolean(req.query.code),
+        hasState: Boolean(req.query.state),
+        hasError: Boolean(req.query.error),
+        requestIp: req.ip,
+        userAgent: req.get("user-agent") ?? "",
+        redirectUriHost: diagnostics.redirectUriHost,
+        redirectMode: diagnostics.redirectMode,
+        callbackPath: diagnostics.callbackPath,
+    });
+
+    try {
         if (req.query.error) {
-            return res.status(400).json({
-                message: "Google OAuth error.",
+            return sendGmailOAuthHtml(res, {
+                ok: false,
+                title: "Gmail connection failed",
+                message: "Google did not complete authorization. Return to the app and try connecting Gmail again.",
                 code: "GOOGLE_OAUTH_ERROR",
-                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         }
 
@@ -249,30 +353,59 @@ export async function handleGmailOAuthCallbackHandler(
         const state = getOAuthQueryParam(req.query.state);
 
         if (!code || !state) {
-            return res.status(400).json({
-                message: "Missing OAuth code or state.",
+            return sendGmailOAuthHtml(res, {
+                ok: false,
+                title: "Gmail connection failed",
+                message: "The Gmail callback was missing required OAuth data. Return to the app and try again.",
                 code: "MISSING_OAUTH_PARAMS",
-                userMessage: getEmailScanUserMessage("GMAIL_REAUTH_REQUIRED"),
             });
         }
 
         const connection = await handleGmailOAuthCallback(code, state);
 
-        return res.json({
-            connection,
-            message: "Gmail connected successfully.",
+        console.info("[email-scan] gmail oauth callback connected", {
+            connectionId: connection.id,
+            provider: connection.provider,
+            email: connection.email,
+        });
+
+        return sendGmailOAuthHtml(res, {
+            ok: true,
+            title: "Gmail connected",
+            message: "Gmail was connected successfully. You can return to the app and continue scanning.",
         });
     } catch (error) {
-        console.error("Error handling Gmail OAuth callback:", error);
+        console.error("Error handling Gmail OAuth callback:", {
+            name: error instanceof Error ? error.name : "UnknownError",
+            code: error instanceof GmailOAuthServiceError ? error.code : undefined,
+            message:
+                error instanceof Error
+                    ? error.message
+                    : "Unknown Gmail OAuth callback error",
+            hasCode: Boolean(req.query.code),
+            hasState: Boolean(req.query.state),
+            redirectUriHost: diagnostics.redirectUriHost,
+            redirectMode: diagnostics.redirectMode,
+        });
 
         if (error instanceof GmailOAuthServiceError) {
-            return sendGmailOAuthError(res, error);
+            return sendGmailOAuthHtml(res, {
+                ok: false,
+                title: "Gmail connection failed",
+                message: getEmailScanUserMessage(
+                    error.code === "INVALID_OAUTH_STATE"
+                        ? "GMAIL_OAUTH_STATE_INVALID"
+                        : "GMAIL_OAUTH_CALLBACK_FAILED"
+                ),
+                code: error.code,
+            });
         }
 
-        return res.status(500).json({
-            message: "Internal server error",
-            code: "INTERNAL_SERVER_ERROR",
-            userMessage: getEmailScanUserMessage("INTERNAL_SERVER_ERROR"),
+        return sendGmailOAuthHtml(res, {
+            ok: false,
+            title: "Gmail connection failed",
+            message: getEmailScanUserMessage("GMAIL_OAUTH_CALLBACK_FAILED"),
+            code: "GMAIL_OAUTH_CALLBACK_FAILED",
         });
     }
 }

@@ -40,6 +40,20 @@ export type ScanImportPreviewDraft = {
     warnings: string[];
 };
 
+export type ImportPreviewServiceErrorCode =
+    | "IMPORT_PREVIEW_TOO_MANY_ITEMS"
+    | "IMPORT_PREVIEW_TIMEOUT";
+
+export class ImportPreviewServiceError extends Error {
+    constructor(
+        public code: ImportPreviewServiceErrorCode,
+        message: string
+    ) {
+        super(message);
+        this.name = "ImportPreviewServiceError";
+    }
+}
+
 export type ScanImportConfirmCreatedItem = {
     sourceItemId?: string;
     subscriptionId: string;
@@ -131,8 +145,10 @@ const scanImportItemSchema = z
         message: "scan item must include productBucket, primaryAction, or status",
     });
 
+const IMPORT_PREVIEW_MAX_ITEMS = 50;
+
 const importPreviewSchema = z.object({
-    items: z.array(scanImportItemSchema).min(1).max(50),
+    items: z.array(z.unknown()).min(1),
 });
 
 const subscriptionDraftSchema = z
@@ -440,10 +456,32 @@ export function mapScanItemToSubscriptionDraft(
 export function buildImportPreview(payload: unknown) {
     const parsed = validateScanImportSelection(payload);
 
+    if (parsed.items.length > IMPORT_PREVIEW_MAX_ITEMS) {
+        throw new ImportPreviewServiceError(
+            "IMPORT_PREVIEW_TOO_MANY_ITEMS",
+            "Too many import preview items."
+        );
+    }
+
     return {
-        drafts: parsed.items.map((item) =>
-            mapScanItemToSubscriptionDraft(item as ScanImportItem)
-        ),
+        drafts: parsed.items.map((item, index) => {
+            const itemResult = scanImportItemSchema.safeParse(item);
+
+            if (!itemResult.success) {
+                return {
+                    sourceItemId:
+                        item && typeof item === "object" && "id" in item
+                            ? String((item as { id?: unknown }).id ?? "")
+                            : undefined,
+                    recommendedAction: "skip" as ImportRecommendation,
+                    warnings: [
+                        `Selected item ${index + 1} could not be parsed and was skipped.`,
+                    ],
+                };
+            }
+
+            return mapScanItemToSubscriptionDraft(itemResult.data as ScanImportItem);
+        }),
     };
 }
 

@@ -7,6 +7,7 @@ import {
     getDetectedSubscriptionsHandler,
     getEmailScanStatusHandler,
     getGmailAuthUrlHandler,
+    getGmailOAuthDiagnosticsHandler,
     handleGmailOAuthCallbackHandler,
     ignoreDetectedSubscriptionHandler,
     scanGmailHandler,
@@ -16,11 +17,13 @@ import { AuthenticatedRequest } from "../middlewares/auth.middleware";
 import {
     ImapScanServiceErrorCode,
     ImapScanServiceError,
+    normalizeImapScanProfile,
     scanImapSubscriptions,
 } from "../services/imap-scan.service";
 import {
     buildImportPreview,
     confirmScanImportDrafts,
+    ImportPreviewServiceError,
 } from "../services/scan-result-import.service";
 import { getEmailScanUserMessage } from "../services/subscription-product-buckets.service";
 
@@ -70,7 +73,7 @@ const scanImapSchema = z
         username: z.string().trim().min(1, "username is required"),
         password: z.string().min(1, "password is required"),
         mailbox: z.string().trim().min(1).optional().default("INBOX"),
-        profile: z.enum(["fast", "balanced", "adaptive", "deep"]).optional().default("adaptive"),
+        profile: z.string().trim().min(1).optional(),
         includeDebug: z.coerce.boolean().optional().default(false),
     })
     .strict();
@@ -100,12 +103,56 @@ function safeImapRequestContext(body: unknown) {
     };
 }
 
+function safeBodyKeys(body: unknown) {
+    return body && typeof body === "object" && !Array.isArray(body)
+        ? Object.keys(body as Record<string, unknown>).sort()
+        : [];
+}
+
+function safeImportPreviewContext(body: unknown) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return { bodyKeys: safeBodyKeys(body), itemCount: 0 };
+    }
+
+    const value = body as Record<string, unknown>;
+    const items = Array.isArray(value.items) ? value.items : [];
+    const buckets: Record<string, number> = {};
+    const actions: Record<string, number> = {};
+
+    for (const item of items) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const record = item as Record<string, unknown>;
+        const bucket =
+            typeof record.productBucket === "string" ? record.productBucket : "unknown";
+        const action =
+            typeof record.primaryAction === "string" ? record.primaryAction : "unknown";
+        buckets[bucket] = (buckets[bucket] ?? 0) + 1;
+        actions[action] = (actions[action] ?? 0) + 1;
+    }
+
+    return {
+        bodyKeys: safeBodyKeys(body),
+        itemCount: items.length,
+        buckets,
+        actions,
+    };
+}
+
 router.get("/gmail/auth-url", requireAuth, getGmailAuthUrlHandler);
+router.get("/gmail/oauth-diagnostics", requireAuth, getGmailOAuthDiagnosticsHandler);
 router.get("/gmail/callback", handleGmailOAuthCallbackHandler);
 router.post("/gmail/scan", requireAuth, scanGmailHandler);
 router.post("/imap/scan", requireAuth, async (req, res) => {
     try {
         const input = scanImapSchema.parse(req.body ?? {});
+        const profileNormalization = normalizeImapScanProfile(input.profile);
+
+        console.info("[email-scan] imap profile normalization", {
+            requestedProfile: profileNormalization.requestedProfile,
+            effectiveProfile: profileNormalization.effectiveProfile,
+            normalized: Boolean(profileNormalization.warning),
+            request: safeImapRequestContext(req.body),
+        });
         const result = await scanImapSubscriptions(input);
 
         return res.json({
@@ -150,14 +197,52 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
     }
 });
 router.post("/import-preview", requireAuth, async (req, res) => {
+    const startedAt = Date.now();
+    const appUser = (req as AuthenticatedRequest).appUser;
+    const context = safeImportPreviewContext(req.body);
+
+    console.info("[email-scan] import-preview received", {
+        userId: appUser?.id,
+        ...context,
+    });
+
+    res.on("finish", () => {
+        console.info("[email-scan] import-preview finished", {
+            userId: appUser?.id,
+            statusCode: res.statusCode,
+            durationMs: Date.now() - startedAt,
+            ...context,
+        });
+    });
+
     try {
         return res.json(buildImportPreview(req.body ?? {}));
     } catch (error) {
+        if (error instanceof ImportPreviewServiceError) {
+            return res
+                .status(error.code === "IMPORT_PREVIEW_TOO_MANY_ITEMS" ? 400 : 504)
+                .json({
+                    message: error.message,
+                    code: error.code,
+                    userMessage: getEmailScanUserMessage(error.code),
+                    details: {
+                        expected: "items array",
+                        receivedKeys: context.bodyKeys,
+                        itemCount: context.itemCount,
+                        maxItems: 50,
+                    },
+                });
+        }
+
         if (error instanceof ZodError) {
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
                 userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
+                details: {
+                    expected: "items array",
+                    receivedKeys: context.bodyKeys,
+                },
                 errors: error.issues.map((issue) => ({
                     field: issue.path.join("."),
                     message: issue.message,

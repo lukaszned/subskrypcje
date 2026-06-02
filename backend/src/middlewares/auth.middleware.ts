@@ -15,6 +15,24 @@ export interface AuthenticatedRequest extends Request {
     };
 }
 
+function isDatabaseUnavailableError(error: unknown) {
+    const code =
+        error && typeof error === "object" && "code" in error
+            ? String((error as { code?: unknown }).code ?? "")
+            : "";
+    const message =
+        error instanceof Error
+            ? error.message
+            : typeof error === "string"
+            ? error
+            : "";
+
+    return /^(P1001|P1002|P1017)$/.test(code) ||
+        /(can't reach database|database.*unavailable|connection.*(terminated|timeout|refused|closed)|ECONNRESET|ETIMEDOUT|ECONNREFUSED)/i.test(
+            message
+        );
+}
+
 export async function requireAuth(
     req: AuthenticatedRequest,
     res: Response,
@@ -77,6 +95,25 @@ export async function requireAuth(
 
         next();
     } catch (error) {
+        if (isDatabaseUnavailableError(error)) {
+            console.error("Auth middleware database unavailable:", {
+                name: error instanceof Error ? error.name : "UnknownError",
+                code:
+                    error && typeof error === "object" && "code" in error
+                        ? (error as { code?: unknown }).code
+                        : undefined,
+                message:
+                    error instanceof Error
+                        ? error.message
+                        : "Database unavailable during auth",
+            });
+            return res.status(503).json({
+                message: "Authentication database is temporarily unavailable",
+                code: "AUTH_DATABASE_UNAVAILABLE",
+                userMessage: getEmailScanUserMessage("AUTH_DATABASE_UNAVAILABLE"),
+            });
+        }
+
         console.error("Auth middleware error:", error);
         return res.status(500).json({
             message: "Internal server error",

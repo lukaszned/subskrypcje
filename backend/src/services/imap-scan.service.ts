@@ -93,13 +93,17 @@ export type ScanImapSubscriptionsInput = {
     username: string;
     password: string;
     mailbox?: string;
-    profile?: ImapProductScanProfile;
+    profile?: ImapProductScanProfile | string | null;
     includeDebug?: boolean;
     now?: Date;
 };
 
 export type ImapScanSummary = {
     scanProfile: ImapProductScanProfile;
+    profileRequested?: string | null;
+    profileEffective: "balanced";
+    profileNormalized: boolean;
+    profileNormalizationReason?: string;
     scanMode: ImapScanMode;
     effectiveScanMode: ImapScanMode;
     effectiveWindowDays: number;
@@ -191,6 +195,33 @@ export type ImapScanSummary = {
     deepFallbackCandidatesBeforeCap?: number;
     deepFallbackCandidatesAfterPriorityPreserve?: number;
 };
+
+export function normalizeImapScanProfile(inputProfile: unknown): {
+    requestedProfile: string | null;
+    effectiveProfile: "balanced";
+    normalizedFrom: string | null;
+    warning?: string;
+} {
+    const requestedProfile =
+        typeof inputProfile === "string" && inputProfile.trim().length > 0
+            ? inputProfile.trim()
+            : null;
+
+    return {
+        requestedProfile,
+        effectiveProfile: "balanced",
+        normalizedFrom:
+            requestedProfile && requestedProfile !== "balanced"
+                ? requestedProfile
+                : null,
+        warning:
+            requestedProfile && requestedProfile !== "balanced"
+                ? "MVP mobile scan uses the stable balanced profile."
+                : requestedProfile
+                ? undefined
+                : "MVP mobile scan uses the stable balanced profile.",
+    };
+}
 
 export type ScanImapSubscriptionsResult = {
     productResult: ProductResult<ImapProductCanonicalItem>;
@@ -2702,7 +2733,8 @@ async function analyzeFetchedMessage(message: {
 export async function scanImapSubscriptions(
     input: ScanImapSubscriptionsInput
 ): Promise<ScanImapSubscriptionsResult> {
-    const profile = input.profile ?? "adaptive";
+    const profileNormalization = normalizeImapScanProfile(input.profile);
+    const profile = profileNormalization.effectiveProfile;
     const defaults = profileDefaults(profile);
     const mailbox = input.mailbox?.trim() || "INBOX";
     const now = input.now ?? new Date();
@@ -2784,6 +2816,10 @@ export async function scanImapSubscriptions(
                 : "");
         const scanSummary: ImapScanSummary = {
             scanProfile: profile,
+            profileRequested: profileNormalization.requestedProfile,
+            profileEffective: profileNormalization.effectiveProfile,
+            profileNormalized: Boolean(profileNormalization.warning),
+            profileNormalizationReason: profileNormalization.warning,
             scanMode: defaults.scanMode,
             effectiveScanMode: plan.effectiveScanMode,
             effectiveWindowDays: plan.effectiveWindowDays,

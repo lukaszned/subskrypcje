@@ -8,7 +8,7 @@ import {
 } from "./email-scan-oauth-state.service";
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
-const GMAIL_CALLBACK_PATH = "/email-scan/gmail/callback";
+export const GMAIL_CALLBACK_PATH = "/email-scan/gmail/callback";
 
 export type GmailOAuthErrorCode =
     | "MISSING_GOOGLE_OAUTH_CONFIG"
@@ -63,27 +63,51 @@ export function getGmailRedirectDiagnostics(redirectUri: string) {
     try {
         const parsed = new URL(redirectUri);
         const redirectBase = `${parsed.protocol}//${parsed.host}`;
+        const isLocalhost = /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname);
+        const isTunnel = /(ngrok|trycloudflare|cloudflared|localhost\.run|serveo)/i.test(
+            parsed.hostname
+        );
 
         return {
             redirectBase,
             redirectPath: parsed.pathname,
+            callbackPath: GMAIL_CALLBACK_PATH,
             redirectUriHost: parsed.hostname,
-            redirectMode: /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)
-                ? "localhost"
-                : "lan_or_custom",
-            redirectUriUsesLocalhost: /^(localhost|127\.0\.0\.1)$/i.test(
-                parsed.hostname
-            ),
+            redirectMode: isLocalhost ? "localhost" : "lan_or_custom",
+            redirectUriUsesLocalhost: isLocalhost,
+            isTunnelRedirect: isTunnel,
+            redirectReachabilityHint: isLocalhost
+                ? "Localhost redirects work from desktop browser testing, but not from a physical phone. Use GMAIL_REDIRECT_BASE_URL with a public tunnel for mobile dev."
+                : isTunnel
+                ? "Tunnel redirect detected. Keep the tunnel running and register this exact callback URL in Google Cloud Console."
+                : "Custom redirect detected. Register this exact callback URL in Google Cloud Console and make sure the mobile browser can reach it.",
         };
     } catch {
         return {
             redirectBase: "",
             redirectPath: GMAIL_CALLBACK_PATH,
+            callbackPath: GMAIL_CALLBACK_PATH,
             redirectUriHost: "",
             redirectMode: "unknown",
             redirectUriUsesLocalhost: false,
+            isTunnelRedirect: false,
+            redirectReachabilityHint:
+                "Gmail redirect URI could not be parsed. Check GMAIL_REDIRECT_BASE_URL or GOOGLE_REDIRECT_URI.",
         };
     }
+}
+
+export function buildGmailOAuthDiagnostics() {
+    const redirectUri = resolveGmailRedirectUri();
+    const diagnostics = getGmailRedirectDiagnostics(redirectUri);
+
+    return {
+        gmailOAuthConfigured: Boolean(
+            process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
+        ),
+        redirectUri,
+        ...diagnostics,
+    };
 }
 
 function createOAuthClient() {

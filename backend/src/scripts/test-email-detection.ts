@@ -9,11 +9,13 @@ import {
     buildProductionImapCanonicalItemsForTest,
     buildProductionImapProductResultForTest,
     classifyImapScanError,
+    normalizeImapScanProfile,
     ProductionImapScanMessage,
     selectPreservedRetrievalCandidatesForTest,
 } from "../services/imap-scan.service";
 import { calculateGmailDuplicateQueryMatches } from "../services/gmail-scan.service";
 import {
+    buildGmailOAuthDiagnostics,
     getGmailRedirectDiagnostics,
     resolveGmailRedirectUri,
 } from "../services/gmail-oauth.service";
@@ -26,6 +28,7 @@ import {
 import {
     buildImportPreview,
     confirmScanImportDrafts,
+    ImportPreviewServiceError,
 } from "../services/scan-result-import.service";
 
 type AssertionFailure = {
@@ -1196,6 +1199,27 @@ function runProductResultFrontendHelperCase() {
         getEmailScanUserMessage("IMAP_AUTH_FAILED")
     );
     assertField(
+        "Import preview cap userMessage present",
+        true,
+        getEmailScanUserMessage("IMPORT_PREVIEW_TOO_MANY_ITEMS").length > 0 &&
+            getEmailScanUserMessage("IMPORT_PREVIEW_TOO_MANY_ITEMS") !==
+                getEmailScanUserMessage("INTERNAL_SERVER_ERROR")
+    );
+    assertField(
+        "Gmail OAuth state userMessage present",
+        true,
+        getEmailScanUserMessage("GMAIL_OAUTH_STATE_INVALID").length > 0 &&
+            getEmailScanUserMessage("GMAIL_OAUTH_STATE_INVALID") !==
+                getEmailScanUserMessage("INTERNAL_SERVER_ERROR")
+    );
+    assertField(
+        "Auth database unavailable userMessage present",
+        true,
+        getEmailScanUserMessage("AUTH_DATABASE_UNAVAILABLE").length > 0 &&
+            getEmailScanUserMessage("AUTH_DATABASE_UNAVAILABLE") !==
+                getEmailScanUserMessage("INTERNAL_SERVER_ERROR")
+    );
+    assertField(
         "Unknown code fallback",
         "Wystąpił błąd serwera. Spróbuj ponownie za chwilę.",
         getEmailScanUserMessage("SOMETHING_UNKNOWN")
@@ -1313,12 +1337,26 @@ function runImportPreviewCase() {
     const bill = byId("bill");
     const currentMissingAmount = byId("current-missing-amount");
     const processorOnly = byId("processor-only");
-    let invalidRejected = false;
+    const invalidPreview = buildImportPreview({ items: [{ id: "bad-item" }] });
+    const tooManyItems = Array.from({ length: 51 }, (_, index) => ({
+        id: `item-${index}`,
+        displayName: `Item ${index}`,
+        provider: "Provider",
+        category: "ai_tools",
+        status: "active",
+        productBucket: "currentSubscriptions",
+        primaryAction: "show_as_active",
+        displayAmount: "10.00 PLN",
+    }));
+    let tooManyRejected = false;
+    let tooManyCode: string | undefined;
 
     try {
-        buildImportPreview({ items: [{}] });
-    } catch {
-        invalidRejected = true;
+        buildImportPreview({ items: tooManyItems });
+    } catch (error) {
+        tooManyRejected = true;
+        tooManyCode =
+            error instanceof ImportPreviewServiceError ? error.code : undefined;
     }
 
     assertField("Draft count", 6, preview.drafts.length);
@@ -1361,7 +1399,16 @@ function runImportPreviewCase() {
         )
     );
     assertField("No debug in notes", false, /raw|snippet|password|credential|debug/i.test(JSON.stringify(preview)));
-    assertField("Invalid item rejected", true, invalidRejected);
+    assertField("Invalid item skipped", "skip", invalidPreview.drafts[0]?.recommendedAction);
+    assertField(
+        "Invalid item warning",
+        true,
+        invalidPreview.drafts[0]?.warnings.some((warning) =>
+            warning.includes("could not be parsed")
+        )
+    );
+    assertField("Too many items rejected", true, tooManyRejected);
+    assertField("Too many items code", "IMPORT_PREVIEW_TOO_MANY_ITEMS", tooManyCode);
 
     if (failures.length === 0) {
         importPreviewPassed += 1;
@@ -1710,6 +1757,77 @@ function runImapScanErrorClassifierCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runImapProfileNormalizationCase() {
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const cases: Array<{
+        name: string;
+        input: unknown;
+        requested: string | null;
+        normalizedFrom: string | null;
+        hasWarning: boolean;
+    }> = [
+        {
+            name: "missing",
+            input: undefined,
+            requested: null,
+            normalizedFrom: null,
+            hasWarning: true,
+        },
+        {
+            name: "fast",
+            input: "fast",
+            requested: "fast",
+            normalizedFrom: "fast",
+            hasWarning: true,
+        },
+        {
+            name: "adaptive",
+            input: "adaptive",
+            requested: "adaptive",
+            normalizedFrom: "adaptive",
+            hasWarning: true,
+        },
+        {
+            name: "balanced",
+            input: "balanced",
+            requested: "balanced",
+            normalizedFrom: null,
+            hasWarning: false,
+        },
+        {
+            name: "unknown",
+            input: "experimental",
+            requested: "experimental",
+            normalizedFrom: "experimental",
+            hasWarning: true,
+        },
+    ];
+
+    for (const testCase of cases) {
+        const actual = normalizeImapScanProfile(testCase.input);
+        assertField(`${testCase.name} effective`, "balanced", actual.effectiveProfile);
+        assertField(`${testCase.name} requested`, testCase.requested, actual.requestedProfile);
+        assertField(`${testCase.name} normalizedFrom`, testCase.normalizedFrom, actual.normalizedFrom);
+        assertField(`${testCase.name} warning`, testCase.hasWarning, Boolean(actual.warning));
+    }
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: IMAP MVP profile normalization");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("IMAP MVP profile normalization");
+    console.log("FAIL productResult: IMAP MVP profile normalization");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
 function runGmailRedirectConfigCase() {
     const failures: AssertionFailure[] = [];
     const assertField = (field: string, expected: unknown, value: unknown) => {
@@ -1747,6 +1865,29 @@ function runGmailRedirectConfigCase() {
         const diagnostics = getGmailRedirectDiagnostics(resolveGmailRedirectUri());
         assertField("Redirect mode", "lan_or_custom", diagnostics.redirectMode);
         assertField("Redirect host", "192.168.18.5", diagnostics.redirectUriHost);
+        assertField("Callback path", "/email-scan/gmail/callback", diagnostics.callbackPath);
+
+        process.env.GMAIL_REDIRECT_BASE_URL =
+            "https://sub-sentry-test.trycloudflare.com";
+        const tunnelDiagnostics = buildGmailOAuthDiagnostics();
+        assertField(
+            "Tunnel redirect URI",
+            "https://sub-sentry-test.trycloudflare.com/email-scan/gmail/callback",
+            tunnelDiagnostics.redirectUri
+        );
+        assertField("Tunnel detected", true, tunnelDiagnostics.isTunnelRedirect);
+        assertField(
+            "Tunnel callback path",
+            "/email-scan/gmail/callback",
+            tunnelDiagnostics.callbackPath
+        );
+        assertField(
+            "No OAuth secret in diagnostics",
+            false,
+            /client_secret|refresh_token|access_token/i.test(
+                JSON.stringify(tunnelDiagnostics)
+            )
+        );
     } finally {
         if (previousBase === undefined) {
             delete process.env.GMAIL_REDIRECT_BASE_URL;
@@ -2385,6 +2526,7 @@ runProductionImapRetrievalStabilityCase();
 runProductionImapBillDedupeCase();
 runImapFrontendContractCase();
 runProductResultFrontendHelperCase();
+runImapProfileNormalizationCase();
 runImportPreviewCase();
 await runImportConfirmCase();
 runGmailLegacyQualityCase();
