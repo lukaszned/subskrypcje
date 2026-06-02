@@ -1132,6 +1132,19 @@ function runImportPreviewCase() {
                 dueDateText: "15.04.2025",
                 billingCycle: "monthly",
             },
+            {
+                id: "processor-only",
+                displayName: "Tpay",
+                provider: "Tpay",
+                billingChannel: "Payment Processor",
+                category: "payment_processor",
+                status: "active",
+                productBucket: "needsReviewSubscriptions",
+                primaryAction: "confirm_manually",
+                displayAmount: "10.00 PLN",
+                billingCycle: "monthly",
+                evidenceSummary: ["payment through payment processor"],
+            },
         ],
     };
     const preview = buildImportPreview(payload);
@@ -1147,6 +1160,7 @@ function runImportPreviewCase() {
     const promo = byId("promo-sub");
     const price = byId("price-change");
     const bill = byId("bill");
+    const processorOnly = byId("processor-only");
     let invalidRejected = false;
 
     try {
@@ -1155,7 +1169,7 @@ function runImportPreviewCase() {
         invalidRejected = true;
     }
 
-    assertField("Draft count", 4, preview.drafts.length);
+    assertField("Draft count", 5, preview.drafts.length);
     assertField("Stale action", "create_subscription", stale?.recommendedAction);
     assertField("Stale category", "entertainment", stale?.draft?.category);
     assertField("Stale review warning", true, stale?.warnings.some((warning) => warning.includes("confirm")));
@@ -1169,6 +1183,14 @@ function runImportPreviewCase() {
     assertField("Bill category", "utilities", bill?.draft?.category);
     assertField("Bill amount", 123.45, bill?.draft?.amount);
     assertField("Bill nextPaymentDate", "2025-04-15T00:00:00.000Z", bill?.draft?.nextPaymentDate);
+    assertField("Processor-only action", "create_subscription", processorOnly?.recommendedAction);
+    assertField(
+        "Processor-only warning",
+        true,
+        processorOnly?.warnings.some((warning) =>
+            warning.includes("Payment processor detected")
+        )
+    );
     assertField("No debug in notes", false, /raw|snippet|password|credential|debug/i.test(JSON.stringify(preview)));
     assertField("Invalid item rejected", true, invalidRejected);
 
@@ -1684,6 +1706,122 @@ runProductBucketCase(
     {
         bucket: "needsReviewSubscriptions",
         primaryAction: "confirm_still_active",
+    }
+);
+
+runProductBucketCase(
+    "Tpay-like payment processor-only item",
+    {
+        displayName: "Tpay",
+        provider: "Tpay",
+        billingChannel: "Payment Processor",
+        category: "payment_processor",
+        status: "active",
+        confidence: 0.9,
+        evidenceSummary: ["payment through payment processor", "amount/currency detected"],
+        evidenceTypes: ["payment confirmation"],
+    },
+    {
+        bucket: "needsReviewSubscriptions",
+        primaryAction: "confirm_manually",
+    }
+);
+
+runProductBucketCase(
+    "PayU-like unclear payment processor item",
+    {
+        displayName: "PayU",
+        provider: "PayU",
+        billingChannel: "Payment Processor",
+        category: "payment_processor",
+        status: "active",
+        confidence: 0.85,
+        evidenceSummary: ["payment confirmation", "merchant unclear"],
+    },
+    {
+        bucket: "needsReviewSubscriptions",
+        primaryAction: "confirm_manually",
+    }
+);
+
+runProductBucketCase(
+    "Payment processor with clear merchant subscription",
+    {
+        displayName: "Netflix",
+        provider: "Netflix",
+        billingChannel: "Payment Processor",
+        category: "streaming_video",
+        status: "active",
+        confidence: 0.95,
+        evidenceSummary: [
+            "automatic payment to merchant",
+            "active subscription payment confirmation",
+            "monthly renewal",
+        ],
+        evidenceTypes: ["payment confirmation", "subscription renewal"],
+    },
+    {
+        bucket: "currentSubscriptions",
+        primaryAction: "show_as_active",
+    }
+);
+
+runProductBucketCase(
+    "Weak delivery membership does not become current",
+    {
+        displayName: "Delivery Club",
+        provider: "Delivery Club",
+        category: "delivery_membership",
+        status: "active",
+        confidence: 0.7,
+        evidenceSummary: ["membership benefits", "savings summary"],
+        evidenceTypes: ["membership wording"],
+    },
+    {
+        bucket: "needsReviewSubscriptions",
+        primaryAction: "confirm_still_active",
+    }
+);
+
+runProductBucketCase(
+    "Strong delivery membership renewal can become current",
+    {
+        displayName: "Delivery Club",
+        provider: "Delivery Club",
+        category: "delivery_membership",
+        status: "active",
+        confidence: 0.95,
+        evidenceSummary: [
+            "active membership payment confirmation",
+            "charged monthly",
+            "next billing date",
+        ],
+        evidenceTypes: ["payment confirmation", "billing cycle"],
+    },
+    {
+        bucket: "currentSubscriptions",
+        primaryAction: "show_as_active",
+    }
+);
+
+runProductBucketCase(
+    "ChatGPT Plus current remains current",
+    {
+        displayName: "ChatGPT Plus",
+        provider: "OpenAI",
+        category: "ai_tools",
+        status: "active",
+        confidence: 0.98,
+        evidenceSummary: [
+            "active subscription payment confirmation",
+            "charged monthly",
+            "billing cycle",
+        ],
+        evidenceTypes: ["payment confirmation", "subscription renewal"],
+    },
+    {
+        bucket: "currentSubscriptions",
+        primaryAction: "show_as_active",
     }
 );
 

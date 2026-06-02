@@ -8,6 +8,7 @@ export type ProductBucket =
 export type ProductPrimaryAction =
     | "show_as_active"
     | "confirm_still_active"
+    | "confirm_manually"
     | "review_old_bill"
     | "review_price_change"
     | "ignore_or_archive";
@@ -87,6 +88,72 @@ export function isMembershipLikeCategory(category: string | undefined) {
 export function isBillLikeCategory(category: string | undefined) {
     return /(utilities_energy|telecom|telecom_mobile|internet_isp|insurance|finance_insurance|government|government_tax_insurance|rent|loan_credit|other_bill)/i.test(
         category ?? ""
+    );
+}
+
+export function isPaymentProcessorLikeIdentity(value: string | undefined) {
+    const normalized = normalizeAsciiText(value ?? "")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .replace(/\s+/g, "_");
+
+    return /^(payment_processor|payment|payments|processor|payment_channel|operator_platnosci|platnosc|platnosci|tpay|payu|przelewy24|p24|autopay|stripe|paypal|google_payments|apple_billing|apple_billing_and_subscriptions)$/.test(
+        normalized
+    );
+}
+
+function hasReliableMerchantIdentity(item: ProductBucketInput) {
+    const provider = item.provider ?? item.displayName;
+
+    return Boolean(
+        provider &&
+            !isPaymentProcessorLikeIdentity(provider) &&
+            item.category !== "payment_processor"
+    );
+}
+
+export function isPaymentProcessorOnlyProductItem(item: ProductBucketInput) {
+    const text = normalizeAsciiText(
+        [
+            item.billingChannel,
+            ...(item.evidenceTypes ?? []),
+            ...(item.evidenceSummary ?? []),
+            ...(item.reasons ?? []),
+        ]
+            .filter(Boolean)
+            .join(" ")
+    );
+    const processorIdentity =
+        item.category === "payment_processor" ||
+        isPaymentProcessorLikeIdentity(item.provider) ||
+        isPaymentProcessorLikeIdentity(item.displayName);
+    const processorChannel =
+        isPaymentProcessorLikeIdentity(item.billingChannel) ||
+        /\b(payment processor|operator platnosci|tpay|payu|przelewy24|stripe|paypal|google payments)\b/i.test(
+            text
+        );
+
+    return Boolean(
+        (processorIdentity || processorChannel) && !hasReliableMerchantIdentity(item)
+    );
+}
+
+function hasStrongCurrentSubscriptionEvidence(item: ProductBucketInput) {
+    const text = normalizeAsciiText(
+        [
+            item.billingChannel,
+            ...(item.evidenceTypes ?? []),
+            ...(item.evidenceSummary ?? []),
+            ...(item.reasons ?? []),
+        ]
+            .filter(Boolean)
+            .join(" ")
+    );
+
+    if (isPaymentProcessorOnlyProductItem(item)) return false;
+
+    return /(active subscription|subscription active|membership active|payment confirmation|charged|paid|renewal|renews|will renew|next billing|next renewal|recurring payment|automatic payment|trial.*charged|trial.*paid|future charge|receipt|invoice|billing evidence|amount\/currency detected|billing cycle)/i.test(
+        text
     );
 }
 
@@ -192,11 +259,21 @@ export function classifyProductBucket(
         };
     }
 
+    if (isPaymentProcessorOnlyProductItem(item)) {
+        return {
+            bucket: "needsReviewSubscriptions",
+            primaryAction: "confirm_manually",
+            userFacingReason:
+                "Detected payment through a payment processor, but the actual subscription service is unclear. Please confirm manually.",
+        };
+    }
+
     if (
         isSubscriptionLike &&
         ["active", "likely_active"].includes(item.status) &&
         item.recencyStatus !== "stale_needs_review" &&
-        !item.needsReview
+        !item.needsReview &&
+        hasStrongCurrentSubscriptionEvidence(item)
     ) {
         return {
             bucket: "currentSubscriptions",
@@ -205,6 +282,20 @@ export function classifyProductBucket(
                 item.status === "likely_active"
                     ? "Subscription-like evidence was found, but it is slightly outside the recent active window."
                     : "Recent active subscription or membership evidence was found.",
+        };
+    }
+
+    if (
+        isSubscriptionLike &&
+        ["active", "likely_active"].includes(item.status) &&
+        item.recencyStatus !== "stale_needs_review" &&
+        !item.needsReview
+    ) {
+        return {
+            bucket: "needsReviewSubscriptions",
+            primaryAction: "confirm_still_active",
+            userFacingReason:
+                "Subscription-like evidence was found, but current billing evidence is not strong enough to show as active.",
         };
     }
 
@@ -231,12 +322,26 @@ export function classifyProductBucket(
     if (
         ["active", "likely_active"].includes(item.status) &&
         item.recencyStatus !== "stale_needs_review" &&
-        !item.needsReview
+        !item.needsReview &&
+        hasStrongCurrentSubscriptionEvidence(item)
     ) {
         return {
             bucket: "currentSubscriptions",
             primaryAction: "show_as_active",
             userFacingReason: "Recent or likely-current subscription evidence was found.",
+        };
+    }
+
+    if (
+        ["active", "likely_active"].includes(item.status) &&
+        item.recencyStatus !== "stale_needs_review" &&
+        !item.needsReview
+    ) {
+        return {
+            bucket: "needsReviewSubscriptions",
+            primaryAction: "confirm_still_active",
+            userFacingReason:
+                "Possible subscription evidence was found, but current billing evidence should be confirmed manually.",
         };
     }
 

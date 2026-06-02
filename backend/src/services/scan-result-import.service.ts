@@ -1,5 +1,8 @@
 import { z } from "zod";
-import { ProductBucketInput } from "./subscription-product-buckets.service";
+import {
+    ProductBucketInput,
+    isPaymentProcessorOnlyProductItem,
+} from "./subscription-product-buckets.service";
 
 type ImportRecommendation =
     | "create_subscription"
@@ -264,6 +267,7 @@ export function mapProductBucketToImportRecommendation(
         bucket === "currentSubscriptions" ||
         bucket === "needsReviewSubscriptions" ||
         item.primaryAction === "confirm_still_active" ||
+        item.primaryAction === "confirm_manually" ||
         item.primaryAction === "show_as_active"
     ) {
         return "create_subscription";
@@ -303,6 +307,9 @@ export function mapScanItemToSubscriptionDraft(
     if (!nextPaymentDate) warnings.push("Next payment date is missing or estimated.");
     if (item.productBucket === "needsReviewSubscriptions") {
         warnings.push("User should confirm this historical subscription is still active.");
+    }
+    if (isPaymentProcessorOnlyProductItem(item)) {
+        warnings.push("Payment processor detected; service name requires confirmation.");
     }
     if (recommendedAction === "review_bill") {
         warnings.push("Bill-like item should be reviewed before creating a recurring bill.");
