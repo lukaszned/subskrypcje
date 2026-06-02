@@ -211,53 +211,120 @@ export type ImapScanServiceErrorCode =
 export class ImapScanServiceError extends Error {
     constructor(
         public code: ImapScanServiceErrorCode,
-        message: string
+        message: string,
+        public safeCause?: {
+            name?: string;
+            code?: string;
+            status?: string | number;
+            responseCode?: string;
+            message?: string;
+        }
     ) {
         super(message);
         this.name = "ImapScanServiceError";
     }
 }
 
-function classifyImapScanError(error: unknown): ImapScanServiceError {
-    const message = error instanceof Error ? error.message : "";
-    const normalized = normalizeAsciiText(message);
+function getSafeImapErrorCause(error: unknown): ImapScanServiceError["safeCause"] {
+    if (!error || typeof error !== "object") {
+        return {
+            message: typeof error === "string" ? error : undefined,
+        };
+    }
 
-    if (/auth|authentication|authenticate|login|credentials|invalid user|password/.test(normalized)) {
+    const value = error as Record<string, unknown>;
+
+    return {
+        name: error instanceof Error ? error.name : undefined,
+        code: typeof value.code === "string" ? value.code : undefined,
+        status:
+            typeof value.status === "string" || typeof value.status === "number"
+                ? value.status
+                : undefined,
+        responseCode:
+            typeof value.responseCode === "string"
+                ? value.responseCode
+                : typeof value.response === "string"
+                ? value.response
+                : undefined,
+        message: error instanceof Error ? error.message : undefined,
+    };
+}
+
+export function classifyImapScanError(error: unknown): ImapScanServiceError {
+    const safeCause = getSafeImapErrorCause(error);
+    const combined = [
+        safeCause?.name,
+        safeCause?.code,
+        safeCause?.status,
+        safeCause?.responseCode,
+        safeCause?.message,
+    ]
+        .filter(Boolean)
+        .join(" ");
+    const normalized = normalizeAsciiText(combined);
+
+    if (
+        /auth|authentication|authenticationfailed|authenticate|login failed|login|credentials|invalid user|invalid credentials|bad credentials|password|app password|application password|\bno\b.*authenticationfailed/.test(
+            normalized
+        )
+    ) {
         return new ImapScanServiceError(
             "IMAP_AUTH_FAILED",
-            "IMAP authentication failed."
+            "IMAP authentication failed.",
+            safeCause
         );
     }
 
-    if (/timeout|timed out|etimedout/.test(normalized)) {
+    if (
+        /timeout|timed out|etimedout|greeting timeout|command timeout|socket timeout/.test(
+            normalized
+        )
+    ) {
         return new ImapScanServiceError(
             "IMAP_CONNECTION_TIMEOUT",
-            "IMAP connection timed out."
+            "IMAP connection timed out.",
+            safeCause
         );
     }
 
-    if (/mailbox|folder|not found|no such/.test(normalized)) {
+    if (
+        /mailbox.*(not found|not exist|does not exist|missing)|folder.*(not found|not exist|does not exist)|no such mailbox|select failed|mailbox doesn't exist|mailbox does not exist/.test(
+            normalized
+        )
+    ) {
         return new ImapScanServiceError(
             "IMAP_MAILBOX_NOT_FOUND",
-            "Requested IMAP mailbox was not found."
+            "Requested IMAP mailbox was not found.",
+            safeCause
         );
     }
 
-    if (/unsupported|not supported|capability|invalid command/.test(normalized)) {
+    if (
+        /unsupported|not supported|capability|invalid command|unsupported search|unsupported charset|bad charset|search.*not supported|uid search.*bad|command not understood/.test(
+            normalized
+        )
+    ) {
         return new ImapScanServiceError(
             "IMAP_UNSUPPORTED",
-            "IMAP server does not support a required scan operation."
+            "IMAP server does not support a required scan operation.",
+            safeCause
         );
     }
 
-    if (/connect|connection|econnrefused|enotfound|network|socket/.test(normalized)) {
+    if (
+        /connect|connection|econnrefused|enotfound|eai_again|econnreset|network|socket|tls|ssl|certificate|cert_|self signed|socket closed|closed before secure|handshake|wrong version number/.test(
+            normalized
+        )
+    ) {
         return new ImapScanServiceError(
             "IMAP_CONNECTION_FAILED",
-            "Could not connect to the IMAP server."
+            "Could not connect to the IMAP server.",
+            safeCause
         );
     }
 
-    return new ImapScanServiceError("IMAP_SCAN_FAILED", "IMAP scan failed.");
+    return new ImapScanServiceError("IMAP_SCAN_FAILED", "IMAP scan failed.", safeCause);
 }
 
 type ScanProfileDefaults = {

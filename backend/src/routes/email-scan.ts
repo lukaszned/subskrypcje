@@ -70,6 +70,31 @@ const scanImapSchema = z
     })
     .strict();
 
+function safeImapUsernameDomain(username: unknown) {
+    if (typeof username !== "string") return undefined;
+    const domain = username.split("@")[1]?.trim().toLowerCase();
+    return domain ? `*@${domain}` : "present";
+}
+
+function safeImapRequestContext(body: unknown) {
+    if (!body || typeof body !== "object" || Array.isArray(body)) {
+        return {};
+    }
+
+    const value = body as Record<string, unknown>;
+
+    return {
+        host: typeof value.host === "string" ? value.host : undefined,
+        port: value.port,
+        secure: value.secure,
+        mailbox: value.mailbox,
+        profile: value.profile,
+        username: safeImapUsernameDomain(value.username),
+        passwordPresent:
+            typeof value.password === "string" && value.password.length > 0,
+    };
+}
+
 router.get("/gmail/auth-url", requireAuth, getGmailAuthUrlHandler);
 router.get("/gmail/callback", handleGmailOAuthCallbackHandler);
 router.post("/gmail/scan", requireAuth, scanGmailHandler);
@@ -96,6 +121,13 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
 
         if (error instanceof ImapScanServiceError) {
             const response = imapErrorResponse[error.code];
+
+            console.error("[email-scan] imap scan service error", {
+                code: error.code,
+                message: error.message,
+                request: safeImapRequestContext(req.body),
+                cause: error.safeCause,
+            });
 
             return res.status(response.status).json({
                 message: response.message,

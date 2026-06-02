@@ -8,6 +8,7 @@ import {
 import {
     buildProductionImapCanonicalItemsForTest,
     buildProductionImapProductResultForTest,
+    classifyImapScanError,
     ProductionImapScanMessage,
     selectPreservedRetrievalCandidatesForTest,
 } from "../services/imap-scan.service";
@@ -1354,6 +1355,72 @@ function runGmailLegacyQualityCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runImapScanErrorClassifierCase() {
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const cases = [
+        {
+            name: "AUTHENTICATIONFAILED",
+            error: Object.assign(new Error("NO [AUTHENTICATIONFAILED] Invalid credentials"), {
+                responseCode: "AUTHENTICATIONFAILED",
+            }),
+            expected: "IMAP_AUTH_FAILED",
+        },
+        {
+            name: "ETIMEDOUT",
+            error: Object.assign(new Error("Socket timeout while waiting for greeting"), {
+                code: "ETIMEDOUT",
+            }),
+            expected: "IMAP_CONNECTION_TIMEOUT",
+        },
+        {
+            name: "ENOTFOUND",
+            error: Object.assign(new Error("getaddrinfo ENOTFOUND imap.example.test"), {
+                code: "ENOTFOUND",
+            }),
+            expected: "IMAP_CONNECTION_FAILED",
+        },
+        {
+            name: "mailbox not found",
+            error: new Error("SELECT failed: no such mailbox"),
+            expected: "IMAP_MAILBOX_NOT_FOUND",
+        },
+        {
+            name: "unsupported search",
+            error: new Error("BAD unsupported search charset"),
+            expected: "IMAP_UNSUPPORTED",
+        },
+        {
+            name: "unknown runtime bug",
+            error: new Error("Cannot read properties of undefined"),
+            expected: "IMAP_SCAN_FAILED",
+        },
+    ];
+
+    for (const testCase of cases) {
+        assertField(
+            testCase.name,
+            testCase.expected,
+            classifyImapScanError(testCase.error).code
+        );
+    }
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: IMAP scan error classifier");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("IMAP scan error classifier");
+    console.log("FAIL productResult: IMAP scan error classifier");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
 function runPlannerCase(
     name: string,
     profile: "fast" | "balanced" | "deep" | "adaptive",
@@ -1966,6 +2033,7 @@ runProductionImapBillDedupeCase();
 runImapFrontendContractCase();
 runImportPreviewCase();
 runGmailLegacyQualityCase();
+runImapScanErrorClassifierCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);

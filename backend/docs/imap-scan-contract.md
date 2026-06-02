@@ -673,6 +673,19 @@ Send the selected product items as returned by the scan response:
 | 504 | `IMAP_CONNECTION_TIMEOUT` | Show timeout state and retry option. |
 | 500 | `IMAP_SCAN_FAILED` | Show a generic safe failure message. |
 
+### IMAP Error Classification
+
+The IMAP scan endpoint classifies common provider failures before returning a frontend-safe error code:
+
+- `IMAP_AUTH_FAILED`: invalid credentials, login failure, `AUTHENTICATIONFAILED`, app-password style auth problems.
+- `IMAP_CONNECTION_TIMEOUT`: socket/greeting/command timeout, `ETIMEDOUT`.
+- `IMAP_CONNECTION_FAILED`: DNS/network/socket/TLS/certificate failures such as `ENOTFOUND`, `ECONNRESET`, `ECONNREFUSED`.
+- `IMAP_MAILBOX_NOT_FOUND`: missing mailbox/folder, `SELECT failed`, `no such mailbox`.
+- `IMAP_UNSUPPORTED`: unsupported command/search/capability/charset.
+- `IMAP_SCAN_FAILED`: unexpected scanner/runtime error after known categories are ruled out.
+
+Server logs include safe diagnostics only: error name/code/message, host, port, mailbox, profile, and masked username domain. They never include IMAP passwords, tokens, OAuth secrets, or raw email bodies.
+
 ## Backend Email Scan Diagnostics
 
 The backend logs safe request/response diagnostics for all `/email-scan/*` routes to help mobile integration testing.
