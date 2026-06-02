@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   acceptDetectedSubscription,
+  confirmEmailScanImport,
   getEmailScanImportPreview,
   getEmailDetections,
   getEmailScanStatus,
@@ -12,6 +13,7 @@ import {
 import {
   AcceptDetectedSubscriptionPayload,
   DetectedSubscriptionStatus,
+  EmailScanImportConfirmRequest,
   EmailScanImportPreviewRequest,
   GetEmailDetectionsParams,
   GmailScanRequest,
@@ -76,6 +78,19 @@ export function useRunImapScan() {
 export function useEmailScanImportPreview() {
   return useMutation({
     mutationFn: (payload: EmailScanImportPreviewRequest) => getEmailScanImportPreview(payload),
+  });
+}
+
+export function useEmailScanImportConfirm() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (payload: EmailScanImportConfirmRequest) => confirmEmailScanImport(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['email-scan'] });
+      queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
+      queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+    },
   });
 }
 

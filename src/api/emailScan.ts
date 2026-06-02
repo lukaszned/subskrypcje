@@ -3,6 +3,8 @@ import {
   AcceptDetectedSubscriptionPayload,
   AcceptDetectedSubscriptionResponse,
   EmailDetectionsResponse,
+  EmailScanImportConfirmRequest,
+  EmailScanImportConfirmResponse,
   EmailScanImportPreviewRequest,
   EmailScanImportPreviewResponse,
   EmailScanStatusResponse,
@@ -33,7 +35,13 @@ export async function runImapScan(payload: ImapScanRequest): Promise<ImapScanRes
 export async function getEmailScanImportPreview(
   payload: EmailScanImportPreviewRequest
 ): Promise<EmailScanImportPreviewResponse> {
-  return apiPostWithTimeout<EmailScanImportPreviewResponse>('/email-scan/import-preview', payload, 45000);
+  return apiPostWithTimeout<EmailScanImportPreviewResponse>('/email-scan/import-preview', payload, 120000);
+}
+
+export async function confirmEmailScanImport(
+  payload: EmailScanImportConfirmRequest
+): Promise<EmailScanImportConfirmResponse> {
+  return apiPostWithTimeout<EmailScanImportConfirmResponse>('/email-scan/import-confirm', payload, 120000);
 }
 
 export async function getEmailDetections(

@@ -420,6 +420,8 @@ export interface EmailScanStatusResponse {
 
 export interface GmailAuthUrlResponse {
   authUrl: string;
+  redirectMode?: string;
+  redirectUriHost?: string | null;
 }
 
 export interface GmailScanRequest {
@@ -524,10 +526,68 @@ export interface EmailScanImportPreviewRequest {
 
 export interface EmailScanImportPreviewResponse {
   count?: number;
-  items?: unknown[];
-  drafts?: unknown[];
-  subscriptions?: unknown[];
+  items?: EmailScanImportDraft[];
+  drafts?: EmailScanImportDraft[];
+  subscriptions?: EmailScanImportDraft[];
   warnings?: string[];
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface EmailScanImportDraftPayload {
+  name?: string | null;
+  displayName?: string | null;
+  provider?: string | null;
+  amount?: number | string | null;
+  monthlyAmount?: number | string | null;
+  price?: number | string | null;
+  currency?: string | null;
+  category?: SubscriptionCategory | string | null;
+  categoryLabel?: string | null;
+  billingCycle?: BillingCycle | string | null;
+  nextPaymentDate?: string | null;
+  isRecurringBill?: boolean;
+  notes?: string | null;
+  evidenceSnippet?: string | null;
+  [key: string]: unknown;
+}
+
+export interface EmailScanImportDraft {
+  sourceItemId?: string;
+  recommendedAction?: string;
+  action?: string;
+  type?: string;
+  draft?: EmailScanImportDraftPayload;
+  subscription?: EmailScanImportDraftPayload;
+  [key: string]: unknown;
+}
+
+export interface EmailScanImportConfirmRequest {
+  drafts: EmailScanImportDraft[];
+}
+
+export interface EmailScanImportConfirmResponse {
+  created?: Array<{
+    sourceItemId?: string;
+    subscriptionId?: string;
+    name?: string;
+    provider?: string | null;
+    isRecurringBill?: boolean;
+    [key: string]: unknown;
+  }>;
+  skipped?: Array<{
+    sourceItemId?: string;
+    reason?: string;
+    missingFields?: string[];
+    [key: string]: unknown;
+  }>;
+  warnings?: string[];
+  summary?: {
+    requested?: number;
+    created?: number;
+    skipped?: number;
+    [key: string]: unknown;
+  };
   message?: string;
   [key: string]: unknown;
 }
@@ -542,12 +602,21 @@ export type EmailScanPrimaryAction =
 export interface EmailScanProductItem {
   id?: string;
   sourceMessageId?: string;
+  displayName?: string | null;
   provider?: string | null;
   name?: string | null;
   category?: string | null;
+  categoryLabel?: string | null;
   status?: string | null;
   primaryAction?: EmailScanPrimaryAction;
+  primaryActionLabel?: string | null;
   action?: EmailScanPrimaryAction;
+  productBucket?: string | null;
+  productBucketLabel?: string | null;
+  amountKind?: string | null;
+  amountKindLabel?: string | null;
+  recommendedSelected?: boolean;
+  selectionReason?: string | null;
   amount?: number | string | null;
   currency?: string | null;
   billingCycle?: BillingCycle | string | null;
@@ -581,6 +650,10 @@ export interface EmailScanProductResult {
     quickScanLikelyIncomplete?: boolean;
     userFacingCoverageNote?: string | null;
     deepScanReason?: string | null;
+    profileRequested?: string | null;
+    profileEffective?: string | null;
+    profileNormalized?: boolean;
+    profileNormalizationReason?: string | null;
   };
 }
 

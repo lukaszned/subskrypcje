@@ -25,7 +25,6 @@ import {
   AlertCircle,
   ArrowLeft,
   CheckCircle,
-  ChevronRight,
   Clock,
   ExternalLink,
   FileText,
@@ -48,6 +47,7 @@ import { ApiError } from '../lib/apiClient';
 import {
   useAcceptDetection,
   useEmailDetections,
+  useEmailScanImportConfirm,
   useEmailScanImportPreview,
   useEmailScanStatus,
   useGmailAuthUrl,
@@ -57,9 +57,12 @@ import {
 } from '../hooks/useEmailScan';
 import type { AppStackParamList } from '../types/navigation';
 import {
+  BILLING_CYCLE_LABELS,
   BillingCycle,
   CATEGORY_LABELS,
   DetectedSubscription,
+  EmailScanImportDraft,
+  EmailScanImportDraftPayload,
   EmailScanImportPreviewResponse,
   EmailScanImportSelection,
   EmailScanProductItem,
@@ -96,12 +99,7 @@ const CYCLE_OPTIONS: { id: BillingCycle; label: string }[] = [
   { id: 'custom', label: 'Inny' },
 ];
 
-const IMAP_PROFILE_OPTIONS: { id: EmailScanProfile; label: string; hint: string }[] = [
-  { id: 'fast', label: 'Szybki', hint: 'Krótki pierwszy skan' },
-  { id: 'adaptive', label: 'Adaptacyjny', hint: 'Rekomendowany' },
-  { id: 'balanced', label: 'Zbalansowany', hint: 'Kompromis' },
-  { id: 'deep', label: 'Dokładny', hint: 'Najdokładniejszy' },
-];
+const IMAP_FIXED_PROFILE: EmailScanProfile = 'balanced';
 
 type ImapProviderPreset = {
   id: 'onet' | 'interia';
@@ -112,7 +110,6 @@ type ImapProviderPreset = {
   port: string;
   secure: boolean;
   mailbox: string;
-  profile: EmailScanProfile;
 };
 
 const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
@@ -125,7 +122,6 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
     port: '993',
     secure: true,
     mailbox: 'INBOX',
-    profile: 'adaptive',
   },
   {
     id: 'interia',
@@ -136,16 +132,10 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
     port: '993',
     secure: true,
     mailbox: 'INBOX',
-    profile: 'adaptive',
   },
 ];
 
 const DEFAULT_IMAP_PRESET = IMAP_PROVIDER_PRESETS[0];
-
-function getImapProfileLabel(profile?: EmailScanProfile | string | null) {
-  if (!profile) return null;
-  return IMAP_PROFILE_OPTIONS.find((item) => item.id === profile)?.label || humanizeBackendValue(profile);
-}
 
 type ProductBucket = 'current' | 'review' | 'history' | 'price' | 'bill';
 type ProductFilter = 'all' | ProductBucket;
@@ -193,10 +183,23 @@ const PRODUCT_DECISION_LABELS: Record<string, string> = {
   sprawdzone: 'Sprawdzone',
   ignoruj: 'Zignorowane',
   'przypomnij później': 'Później',
-  confirm_still_active: 'Potwierdź aktywność',
+  active_candidate: 'Aktywna kandydatura',
+  bill_candidate: 'Kandydat na rachunek',
+  canceled: 'Anulowane',
+  confirm_manually: 'Potwierdź ręcznie',
+  confirm_still_active: 'Potwierdź, czy nadal aktywna',
+  low_evidence_needs_review: 'Słaby dowód',
+  manual_review: 'Ręczna weryfikacja',
+  needs_review: 'Do sprawdzenia',
+  not_subscription: 'Nie subskrypcja',
+  payment_processor_needs_review: 'Operator płatności',
+  possible_subscription: 'Możliwa subskrypcja',
+  price_change: 'Zmiana ceny',
   review_price_change: 'Sprawdź zmianę ceny',
   review_old_bill: 'Sprawdź rachunek',
   review_bill: 'Sprawdź rachunek',
+  review_later: 'Sprawdź później',
+  stale_needs_review: 'Historyczny dowód',
   create_subscription: 'Utwórz subskrypcję',
   show_as_active: 'Dodaj jako aktywną',
   create_bill: 'Dodaj rachunek',
@@ -213,17 +216,59 @@ const PRODUCT_BUCKET_LABELS: Record<ProductBucket, string> = {
 };
 
 const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
-  ai_tools: 'narzędzia AI',
-  billsOrUtilities: 'rachunki cykliczne',
-  currentSubscriptions: 'aktywne subskrypcje',
-  delivery_membership: 'dostawy / membership',
-  internet_isp: 'internet',
-  needsReviewSubscriptions: 'do sprawdzenia',
-  payment_processor: 'operator płatności',
-  priceChanges: 'zmiany cen',
-  telecom_mobile: 'telefon',
-  streaming_video: 'streaming wideo',
-  utilities: 'rachunki',
+  ai_tools: 'Narzędzia AI',
+  app_store: 'Sklep z aplikacjami',
+  apple_app_store: 'Apple App Store',
+  banking_finance: 'Finanse',
+  billsOrUtilities: 'Rachunki cykliczne',
+  cloud_storage: 'Chmura',
+  currentSubscriptions: 'Aktywne subskrypcje',
+  delivery_membership: 'Dostawy / membership',
+  ecommerce_membership: 'Membership zakupowy',
+  gaming: 'Gry',
+  google_play: 'Google Play',
+  internet_isp: 'Internet',
+  needsReviewSubscriptions: 'Do sprawdzenia',
+  online_payments: 'Płatności online',
+  payment_processor: 'Operator płatności',
+  priceChanges: 'Zmiany cen',
+  software_saas: 'Software / SaaS',
+  subscription_marketplace: 'Marketplace subskrypcji',
+  telecom_mobile: 'Telefon',
+  streaming_video: 'Streaming wideo',
+  utilities: 'Rachunki',
+  utilities_energy: 'Energia',
+};
+
+const ERROR_CODE_MESSAGES: Record<string, string> = {
+  IMAP_AUTH_FAILED:
+    'Nie udało się zalogować do skrzynki IMAP. Sprawdź pełny adres e-mail, hasło albo hasło aplikacji. Dla Onetu i Interii zwykle potrzebne jest hasło aplikacji lub włączony dostęp IMAP.',
+  IMAP_CONNECTION_TIMEOUT:
+    'Połączenie IMAP trwało zbyt długo. Spróbuj ponownie albo sprawdź host, port 993 i SSL.',
+  IMAP_SCAN_TIMEOUT:
+    'Skan IMAP przekroczył limit czasu. Skrzynka może odpowiadać wolno, więc ponów próbę za chwilę.',
+  IMAP_CONNECTION_FAILED:
+    'Nie udało się połączyć ze skrzynką. Sprawdź serwer, port i ustawienia SSL.',
+  IMAP_MAILBOX_NOT_FOUND:
+    'Nie znaleziono wybranego folderu poczty. Sprawdź nazwę mailboxa albo zostaw INBOX.',
+  GMAIL_OAUTH_NOT_CONNECTED:
+    'Gmail nie jest jeszcze połączony. Otwórz autoryzację Google, wróć do aplikacji i odśwież status połączenia.',
+  GMAIL_OAUTH_CALLBACK_FAILED:
+    'Google nie zakończył autoryzacji. Sprawdź, czy publiczny callback backendu/Cloudflare jest ustawiony w Google Cloud i spróbuj połączyć Gmaila ponownie.',
+  GMAIL_AUTH_URL_FAILED:
+    'Nie udało się przygotować linku logowania Google. Sprawdź konfigurację OAuth backendu i spróbuj ponownie.',
+  GMAIL_CONNECTION_NOT_FOUND:
+    'Połącz konto Gmail, aby uruchomić skanowanie.',
+  GMAIL_REAUTH_REQUIRED:
+    'Połączenie z Gmail wygasło. Połącz Gmail ponownie.',
+  GMAIL_REFRESH_FAILED:
+    'Nie udało się odświeżyć dostępu do Gmail. Połącz konto ponownie.',
+  AUTH_REQUIRED:
+    'Zaloguj się ponownie, aby kontynuować.',
+  VALIDATION_ERROR:
+    'Sprawdź formularz i uzupełnij wymagane pola.',
+  INTERNAL_SERVER_ERROR:
+    'Wystąpił błąd serwera. Spróbuj ponownie za chwilę.',
 };
 
 function humanizeBackendValue(value: unknown) {
@@ -271,7 +316,7 @@ function getFriendlyScanNote(note?: string | null) {
   }
 
   if (normalized.includes('quick scan')) {
-    return 'Szybki skan może być niepełny. Dla pewności uruchom dokładniejszy tryb.';
+    return 'Skan może być niepełny. Możesz ponowić skan skrzynki za chwilę.';
   }
 
   return note;
@@ -286,25 +331,43 @@ function getErrorCode(error: unknown) {
   return null;
 }
 
+function getApiUserMessage(error: unknown) {
+  if (!(error instanceof ApiError)) return null;
+
+  const body = error.body as any;
+  const userMessage = body?.userMessage || body?.error?.userMessage;
+
+  return typeof userMessage === 'string' && userMessage.trim() ? userMessage.trim() : null;
+}
+
 function getEmailScanErrorMessage(error: unknown, source: 'gmail' | 'imap' | 'preview', showTechnical = false) {
   const rawMessage = error instanceof Error ? error.message : String(error || '');
+  const userMessage = getApiUserMessage(error);
   const code = getErrorCode(error);
   const status = error instanceof ApiError ? error.status : undefined;
   const text = `${rawMessage} ${code || ''}`.toLowerCase();
+  const normalizedCode = typeof code === 'string' ? code.toUpperCase() : null;
 
-  let message = rawMessage || 'Nie udało się wykonać operacji.';
+  let message = userMessage || rawMessage || 'Nie udało się wykonać operacji.';
 
-  if (status === 401 || status === 403 || text.includes('unauthorized') || text.includes('jwt')) {
+  if (userMessage) {
+    message = userMessage;
+  } else if (normalizedCode && ERROR_CODE_MESSAGES[normalizedCode]) {
+    message = ERROR_CODE_MESSAGES[normalizedCode];
+  } else if (status === 401 || status === 403 || text.includes('unauthorized') || text.includes('jwt')) {
     message = 'Sesja wygasła. Zaloguj się ponownie i uruchom skan jeszcze raz.';
-  } else if (text.includes('timeout') || text.includes('abort') || text.includes('timed out')) {
+  } else if (status === 408 || status === 504 || text.includes('timeout') || text.includes('abort') || text.includes('timed out')) {
     message = source === 'imap'
-      ? 'Skanowanie trwało zbyt długo. Spróbuj trybu szybkiego albo ponów próbę za chwilę.'
-      : 'Backend nie odpowiedział na czas. Spróbuj ponownie za chwilę.';
-  } else if (text.includes('network request failed') || text.includes('failed to fetch') || text.includes('brak polaczenia')) {
+      ? 'Skan IMAP trwał zbyt długo. Sprawdź port 993/SSL albo ponów próbę za chwilę.'
+      : 'Backend nie odpowiedział na czas. Spróbuj ponownie za chwilę; jeśli to Gmail, odśwież status po OAuth.';
+  } else if (text.includes('network request failed') || text.includes('failed to fetch') || text.includes('brak polaczenia') || text.includes('brak połączenia')) {
     message = 'Nie udało się połączyć z backendem. Sprawdź Wi-Fi, adres API i czy backend działa.';
   } else if (text.includes('validation') || status === 400) {
     message = 'Sprawdź wymagane pola formularza i spróbuj ponownie.';
+  } else if (source === 'gmail' && (text.includes('oauth') || text.includes('google') || text.includes('redirect'))) {
+    message = 'Autoryzacja Gmaila nie wróciła poprawnie do backendu. Upewnij się, że używasz publicznego callbacku Cloudflare i odśwież status po powrocie do aplikacji.';
   } else if (
+    normalizedCode === 'IMAP_AUTH_FAILED' ||
     text.includes('credential') ||
     text.includes('password') ||
     text.includes('auth') ||
@@ -357,7 +420,7 @@ function safeDate(value: string | null | undefined) {
 }
 
 function getProductItemTitle(item: EmailScanProductItem) {
-  return item.name || item.provider || item.billingChannel || 'Znalezione do sprawdzenia';
+  return item.displayName || item.name || item.provider || item.billingChannel || 'Znalezione do sprawdzenia';
 }
 
 function getProductItemAction(item: EmailScanProductItem) {
@@ -400,6 +463,116 @@ function formatProductDate(item: EmailScanProductItem) {
 function getDecisionLabel(action: string | undefined) {
   if (!action) return null;
   return PRODUCT_DECISION_LABELS[action] || humanizeBackendValue(action);
+}
+
+function getBillingCycleLabel(cycle: unknown) {
+  if (!cycle) return null;
+  const key = String(cycle) as BillingCycle;
+  return BILLING_CYCLE_LABELS[key] || humanizeBackendValue(cycle);
+}
+
+function getScanReliabilityLabel(level?: string | null) {
+  switch (level) {
+    case 'low':
+      return 'niska';
+    case 'medium':
+      return 'średnia';
+    case 'high':
+      return 'wysoka';
+    default:
+      return humanizeBackendValue(level);
+  }
+}
+
+function getPreviewDraftPayload(rawDraft: EmailScanImportDraft): EmailScanImportDraftPayload {
+  const payload = rawDraft.draft || rawDraft.subscription || rawDraft;
+  return payload as EmailScanImportDraftPayload;
+}
+
+function getPreviewDraftsFromResult(result: EmailScanImportPreviewResponse | null): EmailScanImportDraft[] {
+  if (!result) return [];
+
+  const preferredSource = Array.isArray(result.drafts) && result.drafts.length > 0
+    ? result.drafts
+    : Array.isArray(result.items) && result.items.length > 0
+      ? result.items
+      : Array.isArray(result.subscriptions)
+        ? result.subscriptions
+        : [];
+
+  return preferredSource as EmailScanImportDraft[];
+}
+
+function getPreviewDraftKey(rawDraft: EmailScanImportDraft, index: number) {
+  const payload = getPreviewDraftPayload(rawDraft);
+  const base = rawDraft.sourceItemId ||
+    payload.sourceItemId ||
+    payload.id ||
+    payload.name ||
+    payload.provider ||
+    `draft-${index}`;
+
+  return `${String(base)}-${index}`;
+}
+
+function getPreviewDraftTitle(rawDraft: EmailScanImportDraft, index: number) {
+  const payload = getPreviewDraftPayload(rawDraft);
+  return payload.displayName || payload.name || payload.provider || `Pozycja ${index + 1}`;
+}
+
+function getPreviewDraftAmount(rawDraft: EmailScanImportDraft) {
+  const payload = getPreviewDraftPayload(rawDraft);
+  return payload.amount ?? payload.monthlyAmount ?? payload.price ?? null;
+}
+
+function formatEditableAmount(value: unknown) {
+  if (value === null || value === undefined || value === '') return '';
+  return String(value).replace('.', ',');
+}
+
+function parseEditableAmount(value: string) {
+  const normalized = value.trim().replace(',', '.');
+  if (!normalized) return undefined;
+
+  const match = normalized.match(/\d+(?:\.\d+)?/);
+  const parsed = Number(match?.[0] ?? normalized);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
+}
+
+function buildPreviewDraftEdits(result: EmailScanImportPreviewResponse | null) {
+  return getPreviewDraftsFromResult(result).reduce<Record<string, { selected: boolean; amount: string; currency: string }>>((acc, draft, index) => {
+    const payload = getPreviewDraftPayload(draft);
+    const key = getPreviewDraftKey(draft, index);
+
+    acc[key] = {
+      selected: true,
+      amount: formatEditableAmount(getPreviewDraftAmount(draft)),
+      currency: payload.currency || 'PLN',
+    };
+
+    return acc;
+  }, {});
+}
+
+function applyPreviewDraftEdit(rawDraft: EmailScanImportDraft, edit?: { amount: string; currency: string }) {
+  if (!edit) return rawDraft;
+
+  const payload = getPreviewDraftPayload(rawDraft);
+  const editedPayload: EmailScanImportDraftPayload = {
+    ...payload,
+    amount: parseEditableAmount(edit.amount),
+    currency: edit.currency.trim() || payload.currency || 'PLN',
+  };
+
+  if (rawDraft.draft) {
+    return { ...rawDraft, draft: editedPayload };
+  }
+
+  if (rawDraft.subscription) {
+    return { ...rawDraft, subscription: editedPayload };
+  }
+
+  return { ...rawDraft, ...editedPayload };
 }
 
 function getScanModeLabel(mode?: string | null) {
@@ -553,6 +726,7 @@ export const EmailScanScreen = () => {
   const scanMutation = useRunGmailScan();
   const imapScanMutation = useRunImapScan();
   const importPreviewMutation = useEmailScanImportPreview();
+  const importConfirmMutation = useEmailScanImportConfirm();
   const ignoreMutation = useIgnoreDetection();
   const acceptMutation = useAcceptDetection();
 
@@ -566,14 +740,12 @@ export const EmailScanScreen = () => {
   const [notes, setNotes] = useState('Import z Gmail Email Scan');
   const [submitted, setSubmitted] = useState(false);
 
-  // Advanced / Debug
+  // Advanced scan helpers
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [isDryRun, setIsDryRun] = useState(false);
-  const [isDebug, setIsDebug] = useState(false);
   const [dryRunResults, setDryRunResults] = useState<DetectedSubscription[] | null>(null);
   const [lastScanProductResult, setLastScanProductResult] = useState<EmailScanProductResult | null>(null);
   const [lastScanDiagnostics, setLastScanDiagnostics] = useState<ScanDiagnostics | null>(null);
-  const [locallyReviewedProductItems, setLocallyReviewedProductItems] = useState<Record<string, string>>({});
   const [selectedImportItems, setSelectedImportItems] = useState<Record<string, boolean>>({});
   const [selectedProductReview, setSelectedProductReview] = useState<SelectedProductReview>(null);
   const [productFilter, setProductFilter] = useState<ProductFilter>('all');
@@ -586,8 +758,8 @@ export const EmailScanScreen = () => {
   const [imapUsername, setImapUsername] = useState('');
   const [imapPassword, setImapPassword] = useState('');
   const [imapMailbox, setImapMailbox] = useState(DEFAULT_IMAP_PRESET.mailbox);
-  const [imapProfile, setImapProfile] = useState<EmailScanProfile>(DEFAULT_IMAP_PRESET.profile);
   const [importPreviewResult, setImportPreviewResult] = useState<EmailScanImportPreviewResponse | null>(null);
+  const [previewDraftEdits, setPreviewDraftEdits] = useState<Record<string, { selected: boolean; amount: string; currency: string }>>({});
 
   const status = statusQuery.data;
   const detections = detectionsQuery.data?.items ?? [];
@@ -599,14 +771,6 @@ export const EmailScanScreen = () => {
     () => Object.values(selectedImportItems).filter(Boolean).length,
     [selectedImportItems]
   );
-  const productFindingCount = useMemo(() => {
-    if (!lastScanProductResult) return 0;
-    return lastScanProductResult.currentSubscriptions.length +
-      lastScanProductResult.needsReviewSubscriptions.length +
-      lastScanProductResult.historicalSubscriptions.length +
-      lastScanProductResult.priceChanges.length +
-      lastScanProductResult.billsOrUtilities.length;
-  }, [lastScanProductResult]);
   const canRunImapScan = imapHost.trim().length > 0 &&
     Number(imapPort) > 0 &&
     imapUsername.trim().length > 0 &&
@@ -658,14 +822,14 @@ export const EmailScanScreen = () => {
     authUrlMutation.mutate(undefined, {
       onSuccess: async ({ authUrl }) => {
         if (!authUrl) {
-          Alert.alert('Blad konfiguracji', 'Backend nie zwrocil adresu autoryzacji Gmaila.');
+          Alert.alert('Błąd konfiguracji Gmaila', 'Backend nie zwrócił linku logowania Google. Sprawdź konfigurację OAuth i spróbuj ponownie.');
           return;
         }
 
         if (hasNativeLocalRedirect(authUrl)) {
           Alert.alert(
             'Niepoprawny redirect Gmaila',
-            'Backend zwrocil redirect_uri na localhost. Na telefonie uzyj LAN IP albo ngrok i dodaj ten redirect URI w Google Cloud Console.'
+            'Backend nadal zwraca lokalny redirect_uri. Na telefonie użyj publicznego callbacku backendu/Cloudflare, potem odśwież link autoryzacji.'
           );
           return;
         }
@@ -675,14 +839,14 @@ export const EmailScanScreen = () => {
           setWizardStep('scan');
           Alert.alert(
             'Połącz Gmaila',
-            'Po autoryzacji wróć do aplikacji i odśwież status połączenia.'
+            'Po zgodzie Google wróć do aplikacji. Jeśli status nie zmieni się od razu, użyj odświeżenia w prawym górnym rogu.'
           );
         } catch {
           Alert.alert('Błąd', 'Nie udało się otworzyć strony autoryzacji Gmaila.');
         }
       },
       onError: (error: any) => {
-        Alert.alert('Nie udało się połączyć Gmaila', getEmailScanErrorMessage(error, 'gmail', isDebug));
+        Alert.alert('Nie udało się połączyć Gmaila', getEmailScanErrorMessage(error, 'gmail'));
       },
     });
   };
@@ -692,8 +856,8 @@ export const EmailScanScreen = () => {
 
     if (!isConnected) {
       Alert.alert(
-        'Najpierw polacz Gmaila',
-        'Skan Gmaila mozna uruchomic dopiero po poprawnym OAuth i odswiezeniu statusu polaczenia.'
+        'Najpierw połącz Gmaila',
+        'Skan Gmaila można uruchomić dopiero po OAuth. Po autoryzacji wróć do aplikacji i odśwież status połączenia.'
       );
       return;
     }
@@ -705,7 +869,6 @@ export const EmailScanScreen = () => {
       limit: 25,
       sinceDays: 365,
       dryRun: isDryRun,
-      debug: isDebug,
       ...overrides
     };
 
@@ -714,9 +877,9 @@ export const EmailScanScreen = () => {
         const productResult = getProductResultFromScan(result);
         setLastScanProductResult(productResult);
         setLastScanDiagnostics(getScanDiagnosticsFromScan(result));
-        setLocallyReviewedProductItems({});
         setSelectedImportItems({});
         setImportPreviewResult(null);
+        setPreviewDraftEdits({});
         setProductFilter('all');
         setWizardStep('review');
         if (payload.dryRun) {
@@ -735,7 +898,7 @@ export const EmailScanScreen = () => {
         }
       },
       onError: (error: any) => {
-        Alert.alert('Nie udało się przeskanować Gmaila', getEmailScanErrorMessage(error, 'gmail', isDebug));
+        Alert.alert('Nie udało się przeskanować Gmaila', getEmailScanErrorMessage(error, 'gmail'));
       },
     });
   };
@@ -745,10 +908,9 @@ export const EmailScanScreen = () => {
     setImapPort(preset.port);
     setImapSecure(preset.secure);
     setImapMailbox(preset.mailbox);
-    setImapProfile(preset.profile);
   };
 
-  const handleImapScan = (profileOverride?: EmailScanProfile) => {
+  const handleImapScan = () => {
     if (isAnyScanPending) return;
 
     if (!canRunImapScan) {
@@ -766,9 +928,21 @@ export const EmailScanScreen = () => {
       username: imapUsername.trim(),
       password: imapPassword,
       mailbox: imapMailbox.trim() || 'INBOX',
-      profile: profileOverride ?? imapProfile,
-      ...(isDebug ? { includeDebug: true } : {}),
+      profile: IMAP_FIXED_PROFILE,
+      includeDebug: false,
     };
+
+    if (__DEV__) {
+      console.log('[EmailScan] IMAP scan request shape', {
+        host: payload.host,
+        port: payload.port,
+        secure: payload.secure,
+        mailbox: payload.mailbox,
+        profile: payload.profile,
+        usernamePresent: payload.username.length > 0,
+        passwordPresent: payload.password.length > 0,
+      });
+    }
 
     setScanSource('imap');
     setWizardStep('scan');
@@ -778,9 +952,9 @@ export const EmailScanScreen = () => {
         const productResult = getProductResultFromScan(result);
         setLastScanProductResult(productResult);
         setLastScanDiagnostics(getScanDiagnosticsFromScan(result));
-        setLocallyReviewedProductItems({});
         setSelectedImportItems({});
         setImportPreviewResult(null);
+        setPreviewDraftEdits({});
         setProductFilter(productResult?.scanSummary?.recommendedDefaultMode === 'review' ? 'review' : 'all');
         setWizardStep('review');
         Alert.alert(
@@ -791,13 +965,15 @@ export const EmailScanScreen = () => {
       onError: (error: any) => {
         Alert.alert(
           'Nie udało się przeskanować IMAP',
-          getEmailScanErrorMessage(error, 'imap', isDebug)
+          getEmailScanErrorMessage(error, 'imap')
         );
       },
     });
   };
 
   const toggleImportSelection = (key: string) => {
+    setImportPreviewResult(null);
+    setPreviewDraftEdits({});
     setSelectedImportItems((current) => ({
       ...current,
       [key]: !current[key],
@@ -813,18 +989,34 @@ export const EmailScanScreen = () => {
       return;
     }
 
+    if (__DEV__) {
+      const summary = selections.reduce<Record<string, number>>((acc, entry) => {
+        const key = `${entry.bucket}:${entry.action || getProductItemAction(entry.item)}`;
+        acc[key] = (acc[key] || 0) + 1;
+        return acc;
+      }, {});
+
+      console.log('[EmailScan] Import preview request shape', {
+        endpoint: '/email-scan/import-preview',
+        sourceProvider: scanSource === 'imap' ? 'imap' : 'gmail',
+        itemCount: selections.length,
+        summary,
+      });
+    }
+
     importPreviewMutation.mutate({
       sourceProvider: scanSource === 'imap' ? 'imap' : 'gmail',
       selections,
     }, {
       onSuccess: (result) => {
         setImportPreviewResult(result);
+        setPreviewDraftEdits(buildPreviewDraftEdits(result));
         setWizardStep('preview');
       },
       onError: (error: any) => {
         Alert.alert(
           'Nie udało się przygotować podglądu',
-          getEmailScanErrorMessage(error, 'preview', isDebug)
+          getEmailScanErrorMessage(error, 'preview')
         );
       },
     });
@@ -840,12 +1032,70 @@ export const EmailScanScreen = () => {
       userFacingCoverageNote: 'Demo pokazuje bucketowy wynik skanu: historyczne subskrypcje do potwierdzenia, zmianę ceny i rachunek za usługę.',
       deepScanReason: null,
     });
-    setLocallyReviewedProductItems({});
     setSelectedImportItems({});
     setImportPreviewResult(null);
+    setPreviewDraftEdits({});
     setSelectedProductReview(null);
     setProductFilter('all');
     setWizardStep('review');
+  };
+
+  const handleImportConfirm = (drafts: EmailScanImportDraft[]) => {
+    if (importConfirmMutation.isPending) return;
+
+    const selectedDrafts = drafts
+      .map((draft, index) => {
+        const key = getPreviewDraftKey(draft, index);
+        const edit = previewDraftEdits[key];
+
+        return edit?.selected ? applyPreviewDraftEdit(draft, edit) : null;
+      })
+      .filter((draft): draft is EmailScanImportDraft => !!draft);
+
+    if (selectedDrafts.length === 0) {
+      Alert.alert('Wybierz drafty', 'Zaznacz co najmniej jeden draft, żeby zapisać import.');
+      return;
+    }
+
+    importConfirmMutation.mutate({ drafts: selectedDrafts }, {
+      onSuccess: (result) => {
+        const createdCount = result.summary?.created ?? result.created?.length ?? 0;
+        const skippedCount = result.summary?.skipped ?? result.skipped?.length ?? 0;
+        const warnings = Array.isArray(result.warnings) && result.warnings.length > 0
+          ? `\n\nUwagi: ${result.warnings.join(' ')}`
+          : '';
+
+        setImportPreviewResult(null);
+        setPreviewDraftEdits({});
+        setSelectedImportItems({});
+        refresh();
+
+        Alert.alert(
+          'Import zakończony',
+          `Zapisano: ${createdCount}. Pominięto: ${skippedCount}.${warnings}`
+        );
+      },
+      onError: (error: any) => {
+        Alert.alert('Nie udało się zapisać importu', getEmailScanErrorMessage(error, 'preview'));
+      },
+    });
+  };
+
+  const updatePreviewDraftEdit = (
+    key: string,
+    patch: Partial<{ selected: boolean; amount: string; currency: string }>
+  ) => {
+    setPreviewDraftEdits((current) => {
+      const currentEdit = current[key] || { selected: true, amount: '', currency: 'PLN' };
+
+      return {
+        ...current,
+        [key]: {
+          ...currentEdit,
+          ...patch,
+        },
+      };
+    });
   };
 
   const handleIgnore = (detection: DetectedSubscription) => {
@@ -933,7 +1183,7 @@ export const EmailScanScreen = () => {
         onPress={() => setShowAdvanced(!showAdvanced)}
       >
         <Wrench size={16} color={theme.colors.textMuted} />
-        <Text style={styles.advancedTitle}>Opcje zaawansowane / Dev</Text>
+        <Text style={styles.advancedTitle}>Opcje skanu</Text>
         <Settings size={16} color={showAdvanced ? theme.colors.primary : theme.colors.textMuted} />
       </TouchableOpacity>
 
@@ -949,19 +1199,6 @@ export const EmailScanScreen = () => {
               style={[styles.toggle, isDryRun && { backgroundColor: theme.colors.primary }]}
             >
               <View style={[styles.toggleDot, isDryRun && styles.toggleDotActive]} />
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.toggleRow}>
-            <View>
-              <Text style={styles.toggleLabel}>Tryb Debug</Text>
-              <Text style={styles.toggleDesc}>Dodatkowe informacje techniczne</Text>
-            </View>
-            <TouchableOpacity
-              onPress={() => setIsDebug(!isDebug)}
-              style={[styles.toggle, isDebug && { backgroundColor: theme.colors.primary }]}
-            >
-              <View style={[styles.toggleDot, isDebug && styles.toggleDotActive]} />
             </TouchableOpacity>
           </View>
 
@@ -994,7 +1231,7 @@ export const EmailScanScreen = () => {
       <View style={styles.imapHeader}>
         <View>
           <Text style={styles.cardTitle}>Manual IMAP</Text>
-          <Text style={styles.imapSubtitle}>Provider-agnostic: host, port, mailbox i profil skanu. Onet i Interia są potwierdzone backendowo.</Text>
+          <Text style={styles.imapSubtitle}>Host, port, mailbox i dane logowania. Onet i Interia są potwierdzone backendowo.</Text>
         </View>
       </View>
 
@@ -1092,26 +1329,6 @@ export const EmailScanScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>Profil skanu</Text>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled" contentContainerStyle={styles.profileRow}>
-          {IMAP_PROFILE_OPTIONS.map((profile) => {
-            const isActive = imapProfile === profile.id;
-            return (
-              <TouchableOpacity
-                key={profile.id}
-                style={[styles.profileChip, isActive && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary }]}
-                onPress={() => setImapProfile(profile.id)}
-                activeOpacity={0.84}
-              >
-                <Text style={[styles.profileLabel, isActive && { color: theme.colors.darkText }]}>{profile.label}</Text>
-                <Text style={[styles.profileHint, isActive && { color: theme.colors.darkText }]}>{profile.hint}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
       <View style={[styles.imapPrivacyNote, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
         <ShieldCheck size={17} color={theme.colors.primary} />
         <Text style={styles.imapPrivacyText}>
@@ -1126,7 +1343,7 @@ export const EmailScanScreen = () => {
           </View>
           <View style={styles.scanningCopy}>
             <Text style={styles.scanningTitle}>Skanuję skrzynkę IMAP...</Text>
-            <Text style={styles.scanningText}>Profil: {getImapProfileLabel(imapProfile)}. Wyniki podzielimy na czytelne grupy.</Text>
+            <Text style={styles.scanningText}>Wyniki podzielimy na czytelne grupy do sprawdzenia.</Text>
           </View>
         </View>
       )}
@@ -1141,7 +1358,7 @@ export const EmailScanScreen = () => {
         ) : (
           <>
             <Search size={20} color={theme.colors.darkText} />
-            <Text style={styles.connectBtnText}>Skanuj IMAP</Text>
+            <Text style={styles.connectBtnText}>Skanuj skrzynkę</Text>
           </>
         )}
       </TouchableOpacity>
@@ -1165,7 +1382,7 @@ export const EmailScanScreen = () => {
         {dryRunResults.length === 0 ? (
           <Text style={styles.dryRunEmpty}>Nie znaleziono nowych subskrypcji w tym teście.</Text>
         ) : (
-          dryRunResults.map((item) => renderDetectionCard(item, true))
+          dryRunResults.map((item, index) => renderDetectionCard(item, true, index))
         )}
 
         <View style={styles.dryRunDivider} />
@@ -1173,13 +1390,13 @@ export const EmailScanScreen = () => {
     );
   };
 
-  const renderDetectionCard = (item: DetectedSubscription, isPreview = false) => {
+  const renderDetectionCard = (item: DetectedSubscription, isPreview = false, index = 0) => {
     const trialDate = formatDate(item.trialEndDate);
     const nextDate = formatDate(item.nextPaymentDate);
     const confidence = Math.round((item.confidence || 0) * 100);
 
     return (
-      <View key={item.id} style={styles.detectionCard}>
+      <View key={`${item.id || item.sourceMessageId || item.name || item.provider || 'detection'}-${index}`} style={styles.detectionCard}>
         <View style={styles.detectionTop}>
           <View style={[styles.providerIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
             <Text style={[styles.providerIconText, { color: theme.colors.primary }]}>{(item.name || item.provider || '?').charAt(0)}</Text>
@@ -1227,16 +1444,9 @@ export const EmailScanScreen = () => {
     );
   };
 
-  const getProductItemKey = (item: EmailScanProductItem, prefix: string, index: number) =>
-    String(item.id || item.sourceMessageId || `${prefix}-${getProductItemTitle(item)}-${index}`);
-
-  const markProductItemReviewed = (key: string, action: string) => {
-    setLocallyReviewedProductItems((current) => ({ ...current, [key]: action }));
-  };
-
-  const handleProductReviewAction = (key: string, action: string) => {
-    markProductItemReviewed(key, action);
-    setSelectedProductReview(null);
+  const getProductItemKey = (item: EmailScanProductItem, prefix: string, index: number) => {
+    const base = item.id || item.sourceMessageId || getProductItemTitle(item);
+    return `${prefix}-${String(base)}-${index}`;
   };
 
   const renderCoverageBanner = () => {
@@ -1245,7 +1455,7 @@ export const EmailScanScreen = () => {
     const note = getFriendlyScanNote(lastScanProductResult?.scanSummary?.recommendedUserMessage) ||
       lastScanDiagnostics?.userFacingCoverageNote ||
       lastScanDiagnostics?.deepScanReason;
-    const shouldSuggestDeepScan = Boolean(
+    const needsCoverageAttention = Boolean(
       lastScanDiagnostics?.deepScanRecommended ||
       lastScanDiagnostics?.quickScanLikelyIncomplete
     );
@@ -1258,36 +1468,14 @@ export const EmailScanScreen = () => {
           </View>
           <View style={styles.coverageCopy}>
             <Text style={styles.coverageTitle}>
-              {shouldSuggestDeepScan ? 'Szybki skan może być niepełny' : 'Wynik wymaga potwierdzenia'}
+              {needsCoverageAttention ? 'Wynik może być niepełny' : 'Wynik wymaga potwierdzenia'}
             </Text>
             {!!lastScanDiagnostics?.scanReliabilityLevel && (
-              <Text style={styles.coverageMeta}>Wiarygodność skanu: {lastScanDiagnostics.scanReliabilityLevel}</Text>
+              <Text style={styles.coverageMeta}>Wiarygodność skanu: {getScanReliabilityLabel(lastScanDiagnostics.scanReliabilityLevel)}</Text>
             )}
           </View>
         </View>
         {!!note && <Text style={styles.coverageText}>{getFriendlyScanNote(note)}</Text>}
-        {shouldSuggestDeepScan && (
-          <TouchableOpacity
-            style={[styles.deepScanBtn, { backgroundColor: theme.colors.primary }]}
-            activeOpacity={0.84}
-            onPress={() => {
-              if (scanSource === 'imap') {
-                handleImapScan('adaptive');
-                return;
-              }
-
-              handleScan({ scanProfile: 'adaptive', dryRun: isDryRun });
-            }}
-            disabled={
-              isAnyScanPending ||
-              (scanSource === 'imap' && !canRunImapScan) ||
-              (scanSource === 'gmail' && !isConnected)
-            }
-          >
-            <Search size={17} color={theme.colors.darkText} />
-            <Text style={styles.deepScanBtnText}>Uruchom dokładniejszy skan</Text>
-          </TouchableOpacity>
-        )}
       </View>
     );
   };
@@ -1298,13 +1486,15 @@ export const EmailScanScreen = () => {
     index: number
   ) => {
     const key = getProductItemKey(item, bucket, index);
-    const reviewedAction = locallyReviewedProductItems[key];
     const isSelectedForImport = Boolean(selectedImportItems[key]);
     const title = getProductItemTitle(item);
     const action = getProductItemAction(item);
     const evidenceDate = formatProductDate(item);
-    const categoryLabel = getProductCategoryLabel(item.category);
+    const categoryLabel = item.categoryLabel || getProductCategoryLabel(item.category);
     const channelLabel = getBillingChannelLabel(item.billingChannel);
+    const cycleLabel = getBillingCycleLabel(item.billingCycle);
+    const actionLabel = item.primaryActionLabel || getDecisionLabel(action);
+    const amountKindLabel = item.amountKindLabel || (bucket === 'price' ? 'Obecnie / wcześniej' : 'Kwota');
     const amount =
       formatMaybeAmount(item.amount, item.currency) ||
       formatMaybeAmount(item.currentAmount, item.currency) ||
@@ -1336,14 +1526,9 @@ export const EmailScanScreen = () => {
           <View style={styles.productMain}>
             <Text style={styles.productTitle} numberOfLines={1}>{title}</Text>
             <Text style={styles.productMeta} numberOfLines={1}>
-              {[categoryLabel, channelLabel, evidenceDate ? `dowód: ${evidenceDate}` : null].filter(Boolean).join(' · ')}
+              {[categoryLabel, channelLabel, cycleLabel, evidenceDate ? `dowód: ${evidenceDate}` : null].filter(Boolean).join(' · ')}
             </Text>
           </View>
-          {!!reviewedAction && (
-            <View style={styles.reviewedBadge}>
-              <Text style={styles.reviewedBadgeText}>{getDecisionLabel(reviewedAction)}</Text>
-            </View>
-          )}
           <TouchableOpacity
             style={[
               styles.importSelectPill,
@@ -1362,7 +1547,7 @@ export const EmailScanScreen = () => {
           <View style={styles.amountStrip}>
             {amount && (
               <View>
-                <Text style={styles.amountLabel}>{bucket === 'price' ? 'Obecnie / wcześniej' : 'Kwota'}</Text>
+                <Text style={styles.amountLabel}>{amountKindLabel}</Text>
                 <Text style={styles.amountText}>{amount}</Text>
               </View>
             )}
@@ -1379,30 +1564,13 @@ export const EmailScanScreen = () => {
           <Text style={styles.snippet} numberOfLines={3}>{item.evidenceSnippet}</Text>
         )}
 
-        {bucket === 'review' && (
-          <View style={styles.productActions}>
-            <TouchableOpacity style={[styles.productPrimaryAction, { backgroundColor: theme.colors.primary }]} onPress={() => markProductItemReviewed(key, 'nadal aktywne')}>
-              <CheckCircle size={17} color={theme.colors.darkText} />
-              <Text style={styles.productPrimaryActionText}>Nadal aktywne</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.productSecondaryAction} onPress={() => markProductItemReviewed(key, 'anulowane')}>
-              <Text style={styles.productSecondaryActionText}>Anulowane</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.productSecondaryAction} onPress={() => markProductItemReviewed(key, 'nie subskrypcja')}>
-              <Text style={styles.productSecondaryActionText}>Nie subskrypcja</Text>
-            </TouchableOpacity>
-          </View>
+        {!!item.selectionReason && (
+          <Text style={styles.selectionReasonText} numberOfLines={2}>{item.selectionReason}</Text>
         )}
 
-        {bucket !== 'review' && (
-          <View style={styles.productFooter}>
-            <Text style={styles.productActionLabel}>Rekomendacja: {getDecisionLabel(action) || 'sprawdź'}</Text>
-            <TouchableOpacity style={styles.productMiniAction} onPress={() => markProductItemReviewed(key, 'sprawdzone')}>
-              <Text style={[styles.productMiniActionText, { color: theme.colors.primary }]}>Zaznacz</Text>
-              <ChevronRight size={15} color={theme.colors.primary} />
-            </TouchableOpacity>
-          </View>
-        )}
+        <View style={styles.productFooter}>
+          <Text style={styles.productActionLabel}>Rekomendacja: {actionLabel || 'sprawdź'}</Text>
+        </View>
       </TouchableOpacity>
     );
   };
@@ -1488,7 +1656,7 @@ export const EmailScanScreen = () => {
           key,
           bucket: section.bucket,
           item,
-          action: locallyReviewedProductItems[key] || getProductItemAction(item),
+          action: getProductItemAction(item),
         };
       })
     );
@@ -1496,7 +1664,8 @@ export const EmailScanScreen = () => {
   const applyImportSelection = (
     entries: EmailScanImportSelection[],
     predicate: (entry: EmailScanImportSelection) => boolean,
-    emptyMessage: string
+    emptyMessage: string,
+    mode: 'merge' | 'replace' = 'merge'
   ) => {
     const matchingEntries = entries.filter(predicate);
 
@@ -1505,8 +1674,10 @@ export const EmailScanScreen = () => {
       return;
     }
 
+    setImportPreviewResult(null);
+    setPreviewDraftEdits({});
     setSelectedImportItems((current) => {
-      const next = { ...current };
+      const next = mode === 'replace' ? {} : { ...current };
       matchingEntries.forEach((entry) => {
         next[entry.key] = true;
       });
@@ -1515,52 +1686,19 @@ export const EmailScanScreen = () => {
   };
 
   const clearImportSelection = () => {
+    setImportPreviewResult(null);
+    setPreviewDraftEdits({});
     setSelectedImportItems({});
   };
 
   const isRecommendedImportEntry = (entry: EmailScanImportSelection) => {
-    const category = String(entry.item.category || '');
-    const action = String(entry.action || getProductItemAction(entry.item));
-
-    if (entry.bucket === 'history' || category === 'payment_processor' || action === 'ignore') {
-      return false;
-    }
-
-    return (
-      entry.bucket === 'current' ||
-      entry.bucket === 'bill' ||
-      entry.bucket === 'price' ||
-      action === 'show_as_active' ||
-      action === 'create_subscription' ||
-      action === 'create_bill' ||
-      action === 'review_bill' ||
-      action === 'review_price_change'
-    );
+    return entry.item.recommendedSelected === true;
   };
 
   const renderProductResult = () => {
     if (!lastScanProductResult) return null;
 
     const { scanSummary } = lastScanProductResult;
-    const reviewItems = [
-      ...lastScanProductResult.needsReviewSubscriptions.map((item, index) => ({
-        item,
-        bucket: 'review' as ProductBucket,
-        key: getProductItemKey(item, 'review', index),
-      })),
-      ...lastScanProductResult.priceChanges.map((item, index) => ({
-        item,
-        bucket: 'price' as ProductBucket,
-        key: getProductItemKey(item, 'price', index),
-      })),
-      ...lastScanProductResult.billsOrUtilities.map((item, index) => ({
-        item,
-        bucket: 'bill' as ProductBucket,
-        key: getProductItemKey(item, 'bill', index),
-      })),
-    ];
-    const reviewedCount = reviewItems.filter((entry) => locallyReviewedProductItems[entry.key]).length;
-    const progressPercent = reviewItems.length > 0 ? Math.round((reviewedCount / reviewItems.length) * 100) : 0;
     const hasAnyProductFinding =
       lastScanProductResult.currentSubscriptions.length > 0 ||
       lastScanProductResult.needsReviewSubscriptions.length > 0 ||
@@ -1665,7 +1803,8 @@ export const EmailScanScreen = () => {
                 onPress={() => applyImportSelection(
                   allImportEntries,
                   isRecommendedImportEntry,
-                  'Nie ma rekomendowanych pozycji do zaznaczenia.'
+                  'Nie ma rekomendowanych pozycji do zaznaczenia.',
+                  'replace'
                 )}
               >
                 <Text style={styles.bulkSelectButtonText}>Zaznacz rekomendowane</Text>
@@ -1698,26 +1837,6 @@ export const EmailScanScreen = () => {
                 <Text style={styles.bulkSelectButtonText}>Wyczyść wybór</Text>
               </TouchableOpacity>
             </View>
-          </View>
-        )}
-
-        {reviewItems.length > 0 && (
-          <View style={styles.reviewProgressCard}>
-            <View style={styles.reviewProgressTop}>
-              <View>
-                <Text style={styles.reviewProgressTitle}>Decyzje lokalne</Text>
-                <Text style={styles.reviewProgressText}>
-                  {reviewedCount}/{reviewItems.length} decyzji lokalnie oznaczonych
-                </Text>
-              </View>
-              <Text style={[styles.reviewProgressPercent, { color: theme.colors.primary }]}>{progressPercent}%</Text>
-            </View>
-            <View style={styles.reviewProgressTrack}>
-              <View style={[styles.reviewProgressFill, { width: `${progressPercent}%`, backgroundColor: theme.colors.primary }]} />
-            </View>
-            <Text style={styles.reviewProgressHint}>
-              Nie musisz oznaczać każdej pozycji. Wystarczy zaznaczyć te, które chcesz zobaczyć w podglądzie.
-            </Text>
           </View>
         )}
 
@@ -1771,7 +1890,7 @@ export const EmailScanScreen = () => {
             <Inbox size={32} color={theme.colors.textMuted} />
             <Text style={styles.emptyTitle}>Brak pewnych wyników</Text>
             <Text style={styles.emptyText}>
-              Nie traktujemy tego jako dowodu, że nie masz subskrypcji. Jeśli skan był szybki, uruchom dokładniejszy profil.
+              Nie traktujemy tego jako dowodu, że nie masz subskrypcji. Możesz ponowić skan skrzynki za chwilę.
             </Text>
           </View>
         )}
@@ -1798,14 +1917,16 @@ export const EmailScanScreen = () => {
     const title = getProductItemTitle(item);
     const action = getProductItemAction(item);
     const evidenceDate = formatProductDate(item);
-    const categoryLabel = getProductCategoryLabel(item.category);
+    const categoryLabel = item.categoryLabel || getProductCategoryLabel(item.category);
     const channelLabel = getBillingChannelLabel(item.billingChannel || item.provider);
+    const actionLabel = item.primaryActionLabel || getDecisionLabel(action);
+    const amountKindLabel = item.amountKindLabel || (bucket === 'price' ? 'Obecnie / wcześniej' : 'Kwota');
     const amount =
       formatMaybeAmount(item.amount, item.currency) ||
       formatMaybeAmount(item.currentAmount, item.currency) ||
       formatMaybeAmount(item.promoAmount, item.currency);
     const newAmount = formatMaybeAmount(item.newAmount, item.currency) || formatMaybeAmount(item.futureAmount, item.currency);
-    const isReviewBucket = bucket === 'review';
+    const isSelectedForImport = Boolean(selectedImportItems[key]);
 
     return (
       <Modal visible transparent animationType="slide" onRequestClose={() => setSelectedProductReview(null)}>
@@ -1838,7 +1959,7 @@ export const EmailScanScreen = () => {
                 </View>
                 <View style={styles.productModalInfo}>
                   <Text style={styles.productModalInfoLabel}>Akcja</Text>
-                  <Text style={styles.productModalInfoValue}>{getDecisionLabel(action) || 'sprawdź'}</Text>
+                  <Text style={styles.productModalInfoValue}>{actionLabel || 'sprawdź'}</Text>
                 </View>
                 <View style={styles.productModalInfo}>
                   <Text style={styles.productModalInfoLabel}>Dowód</Text>
@@ -1854,7 +1975,7 @@ export const EmailScanScreen = () => {
                 <View style={styles.productModalAmountBox}>
                   {amount && (
                     <View>
-                      <Text style={styles.amountLabel}>{bucket === 'price' ? 'Obecnie / wcześniej' : 'Kwota'}</Text>
+                      <Text style={styles.amountLabel}>{amountKindLabel}</Text>
                       <Text style={styles.productModalAmount}>{amount}</Text>
                     </View>
                   )}
@@ -1871,49 +1992,25 @@ export const EmailScanScreen = () => {
                 <Text style={styles.evidenceLabel}>Dlaczego to pokazujemy?</Text>
                 <Text style={styles.evidenceText}>
                   {item.evidenceSnippet ||
+                    item.selectionReason ||
                     'Ten sygnał wygląda jak subskrypcja, rachunek albo zmiana ceny. Potwierdź go przed dodaniem do listy.'}
                 </Text>
               </View>
 
-              {isDebug && (
-                <View style={[styles.futurePayloadBox, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
-                  <Text style={[styles.futurePayloadTitle, { color: theme.colors.primary }]}>Szczegóły techniczne</Text>
-                  <Text style={styles.futurePayloadText}>
-                    itemId: {String(item.id || item.sourceMessageId || key)}{'\n'}
-                    bucket: {bucket}{'\n'}
-                    primaryAction: {action}{'\n'}
-                    reviewedAt: znacznik czasu z aplikacji
+              <View style={styles.productModalActions}>
+                <TouchableOpacity
+                  style={[styles.productModalPrimary, { backgroundColor: theme.colors.primary }]}
+                  onPress={() => toggleImportSelection(key)}
+                >
+                  <CheckCircle size={18} color={theme.colors.darkText} />
+                  <Text style={styles.productModalPrimaryText}>
+                    {isSelectedForImport ? 'Usuń z podglądu' : 'Dodaj do podglądu'}
                   </Text>
-                </View>
-              )}
-
-              {isReviewBucket ? (
-                <View style={styles.productModalActions}>
-                  <TouchableOpacity style={[styles.productModalPrimary, { backgroundColor: theme.colors.primary }]} onPress={() => handleProductReviewAction(key, 'nadal aktywne')}>
-                    <CheckCircle size={18} color={theme.colors.darkText} />
-                    <Text style={styles.productModalPrimaryText}>Nadal aktywne</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.productModalSecondary} onPress={() => handleProductReviewAction(key, 'anulowane')}>
-                    <Text style={styles.productModalSecondaryText}>Anulowane</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.productModalSecondary} onPress={() => handleProductReviewAction(key, 'nie subskrypcja')}>
-                    <Text style={styles.productModalSecondaryText}>Nie subskrypcja</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.productModalGhost} onPress={() => handleProductReviewAction(key, 'przypomnij później')}>
-                    <Text style={styles.productModalGhostText}>Przypomnij później</Text>
-                  </TouchableOpacity>
-                </View>
-              ) : (
-                <View style={styles.productModalActions}>
-                  <TouchableOpacity style={[styles.productModalPrimary, { backgroundColor: theme.colors.primary }]} onPress={() => handleProductReviewAction(key, 'sprawdzone')}>
-                    <CheckCircle size={18} color={theme.colors.darkText} />
-                    <Text style={styles.productModalPrimaryText}>Zaznacz</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={styles.productModalGhost} onPress={() => handleProductReviewAction(key, 'ignoruj')}>
-                    <Text style={styles.productModalGhostText}>Ignoruj</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.productModalGhost} onPress={() => setSelectedProductReview(null)}>
+                  <Text style={styles.productModalGhostText}>Zamknij</Text>
+                </TouchableOpacity>
+              </View>
             </ScrollView>
           </View>
         </View>
@@ -1924,13 +2021,12 @@ export const EmailScanScreen = () => {
   const renderImportPreviewModal = () => {
     if (!importPreviewResult) return null;
 
-    const previewItems = [
-      ...(Array.isArray(importPreviewResult.drafts) ? importPreviewResult.drafts : []),
-      ...(Array.isArray(importPreviewResult.items) ? importPreviewResult.items : []),
-      ...(Array.isArray(importPreviewResult.subscriptions) ? importPreviewResult.subscriptions : []),
-    ];
-    const dedupedPreviewItems = previewItems.filter((item, index, list) => list.indexOf(item) === index);
-    const previewCount = importPreviewResult.count ?? dedupedPreviewItems.length;
+    const previewDrafts = getPreviewDraftsFromResult(importPreviewResult);
+    const previewCount = importPreviewResult.count ?? previewDrafts.length;
+    const selectedPreviewDraftCount = previewDrafts.filter((draft, index) => {
+      const key = getPreviewDraftKey(draft, index);
+      return previewDraftEdits[key]?.selected;
+    }).length;
     const warnings = Array.isArray(importPreviewResult.warnings) ? importPreviewResult.warnings : [];
 
     return (
@@ -1961,7 +2057,7 @@ export const EmailScanScreen = () => {
                   <Text style={styles.importPreviewSummaryLabel}>pozycji do sprawdzenia</Text>
                 </View>
                 <Text style={styles.importPreviewSummaryText}>
-                  To nadal tylko podgląd. Finalny zapis nastąpi dopiero po Twoim potwierdzeniu.
+                  To nadal tylko podgląd. Do zapisu wybrano {selectedPreviewDraftCount} pozycji; finalny zapis nastąpi dopiero po Twoim potwierdzeniu.
                 </Text>
               </View>
 
@@ -1978,7 +2074,7 @@ export const EmailScanScreen = () => {
                 </View>
               )}
 
-              {dedupedPreviewItems.length === 0 ? (
+              {previewDrafts.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Inbox size={32} color={theme.colors.textMuted} />
                   <Text style={styles.emptyTitle}>Brak pozycji w odpowiedzi</Text>
@@ -1987,25 +2083,30 @@ export const EmailScanScreen = () => {
                   </Text>
                 </View>
               ) : (
-                dedupedPreviewItems.map((rawDraft, index) => {
-                  const draft = rawDraft as any;
-                  const subscription = draft.subscription || {};
-                  const title = draft.name || draft.provider || subscription.name || subscription.provider || `Pozycja ${index + 1}`;
-                  const amount = formatMaybeAmount(
-                    draft.amount ?? draft.monthlyAmount ?? draft.price ?? subscription.amount,
-                    draft.currency ?? subscription.currency
-                  );
-                  const billingCycle = draft.billingCycle || subscription.billingCycle;
-                  const category = draft.category || subscription.category;
-                  const recommendedAction = getDecisionLabel(draft.action || draft.recommendedAction || draft.type);
-                  const recurringBill = draft.isRecurringBill || subscription.isRecurringBill;
-                  const categoryLabel = getProductCategoryLabel(category);
-                  const nextPayment = typeof (draft.nextPaymentDate || subscription.nextPaymentDate) === 'string'
-                    ? formatDate(draft.nextPaymentDate || subscription.nextPaymentDate)
+                previewDrafts.map((rawDraft, index) => {
+                  const draft = rawDraft as EmailScanImportDraft;
+                  const payload = getPreviewDraftPayload(draft);
+                  const key = getPreviewDraftKey(draft, index);
+                  const edit = previewDraftEdits[key] || {
+                    selected: true,
+                    amount: formatEditableAmount(getPreviewDraftAmount(draft)),
+                    currency: payload.currency || 'PLN',
+                  };
+                  const title = getPreviewDraftTitle(draft, index);
+                  const editedAmount = parseEditableAmount(edit.amount);
+                  const amount = formatMaybeAmount(editedAmount ?? getPreviewDraftAmount(draft), edit.currency || payload.currency);
+                  const billingCycle = payload.billingCycle;
+                  const category = payload.category;
+                  const recommendedAction = getDecisionLabel(draft.recommendedAction || draft.action || String(payload.recommendedAction || payload.action || draft.type || ''));
+                  const recurringBill = payload.isRecurringBill;
+                  const categoryLabel = payload.categoryLabel || getProductCategoryLabel(category);
+                  const billingCycleLabel = getBillingCycleLabel(billingCycle);
+                  const nextPayment = typeof payload.nextPaymentDate === 'string'
+                    ? formatDate(payload.nextPaymentDate)
                     : null;
 
                   return (
-                    <View key={`${title}-${index}`} style={styles.importDraftCard}>
+                    <View key={key} style={[styles.importDraftCard, !edit.selected && styles.importDraftCardMuted]}>
                       <View style={styles.importDraftTop}>
                         <View style={[styles.importDraftIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
                           <Text style={[styles.importDraftIconText, { color: theme.colors.primary }]}>
@@ -2015,17 +2116,89 @@ export const EmailScanScreen = () => {
                         <View style={styles.importDraftMain}>
                           <Text style={styles.importDraftTitle} numberOfLines={1}>{title}</Text>
                           <Text style={styles.importDraftMeta} numberOfLines={1}>
-                            {[recommendedAction, categoryLabel, billingCycle, recurringBill ? 'rachunek cykliczny' : null, nextPayment].filter(Boolean).join(' · ') || 'Pozycja do podglądu'}
+                            {[recommendedAction, categoryLabel, billingCycleLabel, recurringBill ? 'rachunek cykliczny' : null, nextPayment].filter(Boolean).join(' · ') || 'Pozycja do podglądu'}
                           </Text>
                         </View>
                         {!!amount && <Text style={styles.importDraftAmount}>{amount}</Text>}
+                        <TouchableOpacity
+                          style={[
+                            styles.importSelectPill,
+                            edit.selected && { backgroundColor: theme.colors.primary, borderColor: theme.colors.primary },
+                          ]}
+                          onPress={() => updatePreviewDraftEdit(key, { selected: !edit.selected })}
+                          activeOpacity={0.84}
+                        >
+                          <Text style={[styles.importSelectText, edit.selected && { color: theme.colors.darkText }]}>
+                            {edit.selected ? 'Zapisz' : 'Pomiń'}
+                          </Text>
+                        </TouchableOpacity>
                       </View>
-                      {!!(draft.notes || draft.evidenceSnippet) && (
-                        <Text style={styles.snippet} numberOfLines={3}>{draft.notes || draft.evidenceSnippet}</Text>
+
+                      {!!(payload.notes || payload.evidenceSnippet) && (
+                        <Text style={styles.snippet} numberOfLines={3}>{payload.notes || payload.evidenceSnippet}</Text>
+                      )}
+
+                      <View style={styles.importDraftControls}>
+                        <View style={styles.importDraftAmountField}>
+                          <Text style={styles.labelOptional}>Kwota</Text>
+                          <TextInput
+                            style={styles.textInput}
+                            value={edit.amount}
+                            onChangeText={(value) => updatePreviewDraftEdit(key, { amount: value })}
+                            keyboardType="decimal-pad"
+                            placeholder="Uzupełnij kwotę"
+                            placeholderTextColor={theme.colors.textSubtle}
+                            editable={edit.selected}
+                          />
+                        </View>
+                        <View style={styles.importDraftCurrencyField}>
+                          <Text style={styles.labelOptional}>Waluta</Text>
+                          <View style={styles.importDraftCurrencyRow}>
+                            {CURRENCIES.map((item) => {
+                              const isActive = edit.currency === item;
+                              return (
+                                <TouchableOpacity
+                                  key={`${key}-${item}`}
+                                  style={[styles.importDraftCurrencyPill, isActive && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
+                                  onPress={() => updatePreviewDraftEdit(key, { currency: item })}
+                                  disabled={!edit.selected}
+                                >
+                                  <Text style={[styles.importDraftCurrencyText, isActive && { color: theme.colors.primary }]}>{item}</Text>
+                                </TouchableOpacity>
+                              );
+                            })}
+                          </View>
+                        </View>
+                      </View>
+
+                      {edit.selected && !parseEditableAmount(edit.amount) && (
+                        <Text style={styles.importPreviewHint}>Brakuje kwoty. Możesz ją uzupełnić teraz albo backend pominie draft przy zapisie.</Text>
                       )}
                     </View>
                   );
                 })
+              )}
+
+              {previewDrafts.length > 0 && (
+                <TouchableOpacity
+                  style={[
+                    styles.scanBtn,
+                    { backgroundColor: theme.colors.primary },
+                    (selectedPreviewDraftCount === 0 || importConfirmMutation.isPending) && styles.acceptBtnDisabled,
+                  ]}
+                  onPress={() => handleImportConfirm(previewDrafts)}
+                  disabled={selectedPreviewDraftCount === 0 || importConfirmMutation.isPending}
+                  activeOpacity={0.86}
+                >
+                  {importConfirmMutation.isPending ? (
+                    <ActivityIndicator color={theme.colors.darkText} />
+                  ) : (
+                    <>
+                      <CheckCircle size={19} color={theme.colors.darkText} />
+                      <Text style={styles.connectBtnText}>Zatwierdź import</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               )}
             </ScrollView>
           </View>
@@ -2239,7 +2412,7 @@ export const EmailScanScreen = () => {
           <Text style={styles.wizardStageTitle}>Uruchom bezpieczny skan</Text>
           <Text style={styles.wizardStageText}>
             {scanSource === 'imap'
-              ? `Źródło: IMAP · ${imapHost || 'brak hosta'} · profil ${getImapProfileLabel(imapProfile)}`
+              ? `Źródło: IMAP · ${imapHost || 'brak hosta'}`
               : 'Źródło: Gmail OAuth · metadata i snippet, bez pełnej treści maili'}
           </Text>
         </View>
@@ -2248,10 +2421,6 @@ export const EmailScanScreen = () => {
       {scanSource === 'imap' ? (
         <>
           <View style={styles.wizardScanSummary}>
-            <View style={styles.wizardScanMetric}>
-              <Text style={styles.wizardScanMetricValue}>{getImapProfileLabel(imapProfile)}</Text>
-              <Text style={styles.wizardScanMetricLabel}>profil</Text>
-            </View>
             <View style={styles.wizardScanMetric}>
               <Text style={styles.wizardScanMetricValue}>{imapSecure ? 'SSL' : 'plain'}</Text>
               <Text style={styles.wizardScanMetricLabel}>połączenie</Text>
@@ -2282,7 +2451,7 @@ export const EmailScanScreen = () => {
             ) : (
               <>
                 <Search size={20} color={theme.colors.darkText} />
-                <Text style={styles.connectBtnText}>Skanuj IMAP</Text>
+                <Text style={styles.connectBtnText}>Skanuj skrzynkę</Text>
               </>
             )}
           </TouchableOpacity>
@@ -2383,7 +2552,9 @@ export const EmailScanScreen = () => {
                 <View style={[styles.previewSelectionDot, { backgroundColor: theme.colors.primary }]} />
                 <View style={styles.previewSelectionCopy}>
                   <Text style={styles.previewSelectionTitle} numberOfLines={1}>{getProductItemTitle(entry.item)}</Text>
-                  <Text style={styles.previewSelectionMeta}>{getProductBucketLabel(entry.bucket)} · {getDecisionLabel(entry.action) || 'sprawdź'}</Text>
+                  <Text style={styles.previewSelectionMeta}>
+                    {entry.item.productBucketLabel || getProductBucketLabel(entry.bucket)} · {entry.item.primaryActionLabel || getDecisionLabel(entry.action) || 'sprawdź'}
+                  </Text>
                 </View>
               </View>
             ))}
@@ -2584,7 +2755,7 @@ export const EmailScanScreen = () => {
             </Text>
           </View>
         ) : (
-          detections.map((item) => renderDetectionCard(item))
+          detections.map((item, index) => renderDetectionCard(item, false, index))
         )}
         </>
         )}
@@ -3008,27 +3179,6 @@ const styles = StyleSheet.create({
   },
   imapField: { flex: 1 },
   imapFieldWide: { flex: 1.65 },
-  profileRow: { gap: 10, paddingRight: 6 },
-  profileChip: {
-    minWidth: 118,
-    borderRadius: 16,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
-  },
-  profileLabel: {
-    color: vibrantTheme.colors.text,
-    fontSize: 13,
-    fontWeight: '900',
-  },
-  profileHint: {
-    color: vibrantTheme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: '800',
-    marginTop: 3,
-  },
   imapPrivacyNote: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -3109,43 +3259,6 @@ const styles = StyleSheet.create({
   coverageTitle: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900' },
   coverageMeta: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 2 },
   coverageText: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, fontWeight: '600' },
-  deepScanBtn: {
-    height: 44,
-    borderRadius: 14,
-    backgroundColor: vibrantTheme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 12,
-  },
-  deepScanBtnText: { color: vibrantTheme.colors.darkText, fontSize: 13, fontWeight: '900' },
-  reviewProgressCard: {
-    backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 22,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
-  },
-  reviewProgressTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 12,
-  },
-  reviewProgressTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
-  reviewProgressText: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', marginTop: 3 },
-  reviewProgressPercent: { color: vibrantTheme.colors.primary, fontSize: 20, fontWeight: '900' },
-  reviewProgressTrack: {
-    height: 10,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    overflow: 'hidden',
-    marginBottom: 10,
-  },
-  reviewProgressFill: { height: '100%', borderRadius: 999, backgroundColor: vibrantTheme.colors.primary },
-  reviewProgressHint: { color: vibrantTheme.colors.textSubtle, fontSize: 11, lineHeight: 16, fontWeight: '700' },
   importPreviewCard: {
     backgroundColor: vibrantTheme.colors.cardStrong,
     borderRadius: 22,
@@ -3366,15 +3479,13 @@ const styles = StyleSheet.create({
   productMain: { flex: 1 },
   productTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
   productMeta: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700', marginTop: 3 },
-  reviewedBadge: {
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    borderRadius: 999,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.22)',
+  selectionReasonText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+    marginTop: 8,
   },
-  reviewedBadgeText: { color: '#CBD5E1', fontSize: 10, fontWeight: '900' },
   importSelectPill: {
     minHeight: 30,
     borderRadius: 999,
@@ -3403,34 +3514,8 @@ const styles = StyleSheet.create({
   amountLabel: { color: vibrantTheme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase' },
   amountText: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900', marginTop: 3 },
   amountTextWarn: { color: vibrantTheme.colors.warning },
-  productActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
-  productPrimaryAction: {
-    flexGrow: 1,
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: vibrantTheme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: 7,
-    paddingHorizontal: 12,
-  },
-  productPrimaryActionText: { color: vibrantTheme.colors.darkText, fontSize: 12, fontWeight: '900' },
-  productSecondaryAction: {
-    minHeight: 42,
-    borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
-  },
-  productSecondaryActionText: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '900' },
   productFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginTop: 12 },
   productActionLabel: { flex: 1, color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '700' },
-  productMiniAction: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  productMiniActionText: { color: vibrantTheme.colors.primary, fontSize: 12, fontWeight: '900' },
   productModalOverlay: {
     flex: 1,
     justifyContent: 'flex-end',
@@ -3502,16 +3587,6 @@ const styles = StyleSheet.create({
     borderColor: vibrantTheme.colors.border,
     marginBottom: 14,
   },
-  futurePayloadBox: {
-    backgroundColor: 'rgba(255,255,255,0.1)',
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 16,
-  },
-  futurePayloadTitle: { color: vibrantTheme.colors.primary, fontSize: 13, fontWeight: '900', marginBottom: 6 },
-  futurePayloadText: { color: vibrantTheme.colors.textMuted, fontSize: 12, lineHeight: 18, fontWeight: '700' },
   productModalActions: { gap: 10, paddingBottom: 10 },
   productModalPrimary: {
     minHeight: 50,
@@ -3595,6 +3670,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
   },
+  importDraftCardMuted: {
+    opacity: 0.58,
+  },
   importDraftTop: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3629,6 +3707,37 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '900',
     marginLeft: 10,
+  },
+  importDraftControls: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 12,
+  },
+  importDraftAmountField: {
+    flex: 1,
+  },
+  importDraftCurrencyField: {
+    width: 132,
+  },
+  importDraftCurrencyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  importDraftCurrencyPill: {
+    minHeight: 34,
+    borderRadius: 12,
+    paddingHorizontal: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  importDraftCurrencyText: {
+    color: vibrantTheme.colors.textMuted,
+    fontSize: 11,
+    fontWeight: '900',
   },
   detectionCard: {
     backgroundColor: vibrantTheme.colors.card,
