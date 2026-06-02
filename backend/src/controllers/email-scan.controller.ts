@@ -12,6 +12,7 @@ import {
 } from "../services/email-scan.service";
 import {
     getGmailAuthUrl,
+    getGmailRedirectDiagnostics,
     GmailOAuthServiceError,
     handleGmailOAuthCallback,
 } from "../services/gmail-oauth.service";
@@ -179,14 +180,29 @@ export async function getGmailAuthUrlHandler(
 
         const authUrl = getGmailAuthUrl(req.appUser.id);
         const redirectUri = new URL(authUrl).searchParams.get("redirect_uri") ?? "";
+        const redirectDiagnostics = getGmailRedirectDiagnostics(redirectUri);
 
         console.info("[email-scan] gmail auth-url", {
             userId: req.appUser.id,
-            redirectUri,
-            redirectUriUsesLocalhost: /localhost|127\.0\.0\.1/i.test(redirectUri),
+            requestIp: req.ip,
+            userAgent: req.get("user-agent") ?? "",
+            ...redirectDiagnostics,
         });
 
-        return res.json({ authUrl });
+        if (
+            process.env.NODE_ENV !== "production" &&
+            redirectDiagnostics.redirectUriUsesLocalhost
+        ) {
+            console.warn(
+                "[email-scan] Gmail OAuth redirect uses localhost; this will not work from a physical phone. Use GMAIL_REDIRECT_BASE_URL with LAN IP or tunnel."
+            );
+        }
+
+        return res.json({
+            authUrl,
+            redirectMode: redirectDiagnostics.redirectMode,
+            redirectUriHost: redirectDiagnostics.redirectUriHost,
+        });
     } catch (error) {
         console.error("Error creating Gmail auth URL:", error);
 

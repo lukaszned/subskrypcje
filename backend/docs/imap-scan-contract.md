@@ -739,6 +739,54 @@ If mobile requests fail, compare backend logs for:
 - Prefer app-password guidance for providers that support it.
 - Browser network tools can still show the submitted password to the user on their own machine; avoid extra frontend logging.
 
+## Gmail OAuth Redirect Configuration
+
+Gmail OAuth uses this callback path:
+
+```text
+/email-scan/gmail/callback
+```
+
+Set `GMAIL_REDIRECT_BASE_URL` to choose the backend host used for OAuth redirects:
+
+```env
+# Desktop local development
+GMAIL_REDIRECT_BASE_URL=http://localhost:3000
+
+# Physical phone / LAN development
+GMAIL_REDIRECT_BASE_URL=http://192.168.18.5:3000
+
+# Public tunnel development
+GMAIL_REDIRECT_BASE_URL=https://example.ngrok-free.app
+```
+
+The final redirect URI is:
+
+```text
+${GMAIL_REDIRECT_BASE_URL}/email-scan/gmail/callback
+```
+
+For mobile LAN development with `http://192.168.18.5:3000`, add this exact URI to Google Cloud Console authorized redirect URIs:
+
+```text
+http://192.168.18.5:3000/email-scan/gmail/callback
+```
+
+If `GMAIL_REDIRECT_BASE_URL` is not set, backend falls back to existing `GOOGLE_REDIRECT_URI`. If neither is set, development defaults to:
+
+```text
+http://localhost:3000/email-scan/gmail/callback
+```
+
+Physical phones cannot complete OAuth through a localhost redirect on the developer machine. If the LAN IP changes, update `GMAIL_REDIRECT_BASE_URL` and the Google Cloud Console URI, or use a stable public tunnel such as ngrok/cloudflared. Production should use the HTTPS public backend domain.
+
+`GET /email-scan/gmail/auth-url` returns `authUrl` plus safe diagnostics:
+
+- `redirectMode`: `localhost` or `lan_or_custom`
+- `redirectUriHost`: host part only, for example `localhost` or `192.168.18.5`
+
+Server logs include redirect base/path/host and whether the redirect uses localhost. They do not log OAuth code, state, access tokens, or refresh tokens.
+
 ## Backend Current Limitations / Next Steps
 
 - `POST /email-scan/import-preview` does not write to the database.

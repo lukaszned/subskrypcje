@@ -8,6 +8,7 @@ import {
 } from "./email-scan-oauth-state.service";
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
+const GMAIL_CALLBACK_PATH = "/email-scan/gmail/callback";
 
 export type GmailOAuthErrorCode =
     | "MISSING_GOOGLE_OAUTH_CONFIG"
@@ -29,7 +30,7 @@ export class GmailOAuthServiceError extends Error {
 function getGoogleOAuthConfig() {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    const redirectUri = resolveGmailRedirectUri();
 
     if (!clientId || !clientSecret || !redirectUri) {
         throw new GmailOAuthServiceError(
@@ -43,6 +44,46 @@ function getGoogleOAuthConfig() {
         clientSecret,
         redirectUri,
     };
+}
+
+export function resolveGmailRedirectUri() {
+    const redirectBase = process.env.GMAIL_REDIRECT_BASE_URL?.trim();
+
+    if (redirectBase) {
+        return `${redirectBase.replace(/\/+$/g, "")}${GMAIL_CALLBACK_PATH}`;
+    }
+
+    return (
+        process.env.GOOGLE_REDIRECT_URI?.trim() ??
+        `http://localhost:3000${GMAIL_CALLBACK_PATH}`
+    );
+}
+
+export function getGmailRedirectDiagnostics(redirectUri: string) {
+    try {
+        const parsed = new URL(redirectUri);
+        const redirectBase = `${parsed.protocol}//${parsed.host}`;
+
+        return {
+            redirectBase,
+            redirectPath: parsed.pathname,
+            redirectUriHost: parsed.hostname,
+            redirectMode: /^(localhost|127\.0\.0\.1)$/i.test(parsed.hostname)
+                ? "localhost"
+                : "lan_or_custom",
+            redirectUriUsesLocalhost: /^(localhost|127\.0\.0\.1)$/i.test(
+                parsed.hostname
+            ),
+        };
+    } catch {
+        return {
+            redirectBase: "",
+            redirectPath: GMAIL_CALLBACK_PATH,
+            redirectUriHost: "",
+            redirectMode: "unknown",
+            redirectUriUsesLocalhost: false,
+        };
+    }
 }
 
 function createOAuthClient() {

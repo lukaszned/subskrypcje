@@ -14,6 +14,10 @@ import {
 } from "../services/imap-scan.service";
 import { calculateGmailDuplicateQueryMatches } from "../services/gmail-scan.service";
 import {
+    getGmailRedirectDiagnostics,
+    resolveGmailRedirectUri,
+} from "../services/gmail-oauth.service";
+import {
     buildProductResult,
     classifyProductBucket,
     ProductBucketInput,
@@ -1421,6 +1425,69 @@ function runImapScanErrorClassifierCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runGmailRedirectConfigCase() {
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const previousBase = process.env.GMAIL_REDIRECT_BASE_URL;
+    const previousRedirect = process.env.GOOGLE_REDIRECT_URI;
+
+    try {
+        delete process.env.GMAIL_REDIRECT_BASE_URL;
+        delete process.env.GOOGLE_REDIRECT_URI;
+        assertField(
+            "Default localhost redirect",
+            "http://localhost:3000/email-scan/gmail/callback",
+            resolveGmailRedirectUri()
+        );
+
+        process.env.GOOGLE_REDIRECT_URI =
+            "http://localhost:3000/email-scan/gmail/callback";
+        assertField(
+            "Legacy GOOGLE_REDIRECT_URI fallback",
+            "http://localhost:3000/email-scan/gmail/callback",
+            resolveGmailRedirectUri()
+        );
+
+        process.env.GMAIL_REDIRECT_BASE_URL = "http://192.168.18.5:3000/";
+        assertField(
+            "GMAIL_REDIRECT_BASE_URL wins",
+            "http://192.168.18.5:3000/email-scan/gmail/callback",
+            resolveGmailRedirectUri()
+        );
+
+        const diagnostics = getGmailRedirectDiagnostics(resolveGmailRedirectUri());
+        assertField("Redirect mode", "lan_or_custom", diagnostics.redirectMode);
+        assertField("Redirect host", "192.168.18.5", diagnostics.redirectUriHost);
+    } finally {
+        if (previousBase === undefined) {
+            delete process.env.GMAIL_REDIRECT_BASE_URL;
+        } else {
+            process.env.GMAIL_REDIRECT_BASE_URL = previousBase;
+        }
+
+        if (previousRedirect === undefined) {
+            delete process.env.GOOGLE_REDIRECT_URI;
+        } else {
+            process.env.GOOGLE_REDIRECT_URI = previousRedirect;
+        }
+    }
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: Gmail redirect config");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("Gmail redirect config");
+    console.log("FAIL productResult: Gmail redirect config");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
 function runPlannerCase(
     name: string,
     profile: "fast" | "balanced" | "deep" | "adaptive",
@@ -2034,6 +2101,7 @@ runImapFrontendContractCase();
 runImportPreviewCase();
 runGmailLegacyQualityCase();
 runImapScanErrorClassifierCase();
+runGmailRedirectConfigCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);

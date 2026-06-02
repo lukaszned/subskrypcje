@@ -13,6 +13,7 @@ import {
     parseTrialEndDateText,
     truncateEvidenceSnippet,
 } from "./email-detection.service";
+import { resolveGmailRedirectUri } from "./gmail-oauth.service";
 
 const GMAIL_READONLY_SCOPE = "https://www.googleapis.com/auth/gmail.readonly";
 
@@ -116,7 +117,7 @@ function buildGmailQueryVariants(sinceDays: number): GmailScanQueryVariant[] {
 function getGoogleOAuthConfig() {
     const clientId = process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    const redirectUri = process.env.GOOGLE_REDIRECT_URI;
+    const redirectUri = resolveGmailRedirectUri();
 
     if (!clientId || !clientSecret || !redirectUri) {
         throw new GmailScanServiceError(
