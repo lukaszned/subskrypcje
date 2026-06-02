@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  AppState,
   Alert,
   Keyboard,
   KeyboardAvoidingView,
@@ -96,10 +97,10 @@ const CYCLE_OPTIONS: { id: BillingCycle; label: string }[] = [
 ];
 
 const IMAP_PROFILE_OPTIONS: { id: EmailScanProfile; label: string; hint: string }[] = [
-  { id: 'fast', label: 'Fast', hint: 'Szybki pierwszy skan' },
-  { id: 'adaptive', label: 'Adaptive', hint: 'Rekomendowany' },
-  { id: 'balanced', label: 'Balanced', hint: 'Kompromis' },
-  { id: 'deep', label: 'Deep', hint: 'Najdokładniejszy' },
+  { id: 'fast', label: 'Szybki', hint: 'Krótki pierwszy skan' },
+  { id: 'adaptive', label: 'Adaptacyjny', hint: 'Rekomendowany' },
+  { id: 'balanced', label: 'Zbalansowany', hint: 'Kompromis' },
+  { id: 'deep', label: 'Dokładny', hint: 'Najdokładniejszy' },
 ];
 
 type ImapProviderPreset = {
@@ -119,7 +120,7 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
     id: 'onet',
     label: 'Onet',
     reliability: 'medium',
-    note: 'Metadata prepass + time buckets',
+    note: 'Szybki start i grupowanie po czasie',
     host: 'imap.poczta.onet.pl',
     port: '993',
     secure: true,
@@ -130,7 +131,7 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
     id: 'interia',
     label: 'Interia',
     reliability: 'high',
-    note: 'BODY targeted search',
+    note: 'Celowane szukanie w treści',
     host: 'poczta.interia.pl',
     port: '993',
     secure: true,
@@ -140,6 +141,11 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
 ];
 
 const DEFAULT_IMAP_PRESET = IMAP_PROVIDER_PRESETS[0];
+
+function getImapProfileLabel(profile?: EmailScanProfile | string | null) {
+  if (!profile) return null;
+  return IMAP_PROFILE_OPTIONS.find((item) => item.id === profile)?.label || humanizeBackendValue(profile);
+}
 
 type ProductBucket = 'current' | 'review' | 'history' | 'price' | 'bill';
 type ProductFilter = 'all' | ProductBucket;
@@ -162,8 +168,8 @@ const EMAIL_SCAN_WIZARD_STEPS: {
 }[] = [
   { id: 'source', label: 'Źródło', caption: 'Wybór skrzynki', icon: Mail },
   { id: 'scan', label: 'Skan', caption: 'Bez zapisu', icon: Search },
-  { id: 'review', label: 'Review', caption: 'Buckety', icon: ShieldCheck },
-  { id: 'preview', label: 'Preview', caption: 'Drafty', icon: FileText },
+  { id: 'review', label: 'Sprawdź wyniki', caption: 'Selekcja', icon: ShieldCheck },
+  { id: 'preview', label: 'Podgląd', caption: 'Przed zapisem', icon: FileText },
 ];
 
 type SelectedProductReview = {
@@ -192,7 +198,134 @@ const PRODUCT_DECISION_LABELS: Record<string, string> = {
   review_old_bill: 'Sprawdź rachunek',
   review_bill: 'Sprawdź rachunek',
   create_subscription: 'Utwórz subskrypcję',
+  show_as_active: 'Dodaj jako aktywną',
+  create_bill: 'Dodaj rachunek',
+  ignore: 'Pomiń',
+  review: 'Sprawdź',
 };
+
+const PRODUCT_BUCKET_LABELS: Record<ProductBucket, string> = {
+  current: 'aktywne subskrypcje',
+  review: 'do sprawdzenia',
+  history: 'historia',
+  price: 'zmiany cen',
+  bill: 'rachunki cykliczne',
+};
+
+const PRODUCT_CATEGORY_LABELS: Record<string, string> = {
+  ai_tools: 'narzędzia AI',
+  billsOrUtilities: 'rachunki cykliczne',
+  currentSubscriptions: 'aktywne subskrypcje',
+  delivery_membership: 'dostawy / membership',
+  internet_isp: 'internet',
+  needsReviewSubscriptions: 'do sprawdzenia',
+  payment_processor: 'operator płatności',
+  priceChanges: 'zmiany cen',
+  telecom_mobile: 'telefon',
+  streaming_video: 'streaming wideo',
+  utilities: 'rachunki',
+};
+
+function humanizeBackendValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return null;
+
+  const raw = String(value).trim();
+  const known = PRODUCT_CATEGORY_LABELS[raw] || PRODUCT_DECISION_LABELS[raw];
+  if (known) return known;
+
+  return raw
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/[_-]+/g, ' ')
+    .toLowerCase();
+}
+
+function getProductBucketLabel(bucket: ProductBucket | string | undefined) {
+  if (!bucket) return 'pozycja';
+  return PRODUCT_BUCKET_LABELS[bucket as ProductBucket] || humanizeBackendValue(bucket) || 'pozycja';
+}
+
+function getProductCategoryLabel(category: unknown) {
+  if (!category) return null;
+
+  const key = String(category);
+  return PRODUCT_CATEGORY_LABELS[key] ||
+    CATEGORY_LABELS[key as SubscriptionCategory] ||
+    humanizeBackendValue(key);
+}
+
+function getBillingChannelLabel(channel: unknown) {
+  if (!channel) return null;
+  return PRODUCT_CATEGORY_LABELS[String(channel)] || humanizeBackendValue(channel);
+}
+
+function getFriendlyScanNote(note?: string | null) {
+  if (!note) return null;
+
+  const normalized = note.toLowerCase();
+  if (normalized.includes('recent active subscription') || normalized.includes('bill evidence')) {
+    return 'Znaleziono świeży dowód aktywnej subskrypcji albo rachunku.';
+  }
+
+  if (normalized.includes('historical') || normalized.includes('old bill')) {
+    return 'Część wyników wymaga potwierdzenia, bo dowody są historyczne.';
+  }
+
+  if (normalized.includes('quick scan')) {
+    return 'Szybki skan może być niepełny. Dla pewności uruchom dokładniejszy tryb.';
+  }
+
+  return note;
+}
+
+function getErrorCode(error: unknown) {
+  if (error instanceof ApiError) {
+    const body = error.body as any;
+    return body?.code || body?.errorCode || body?.error?.code || null;
+  }
+
+  return null;
+}
+
+function getEmailScanErrorMessage(error: unknown, source: 'gmail' | 'imap' | 'preview', showTechnical = false) {
+  const rawMessage = error instanceof Error ? error.message : String(error || '');
+  const code = getErrorCode(error);
+  const status = error instanceof ApiError ? error.status : undefined;
+  const text = `${rawMessage} ${code || ''}`.toLowerCase();
+
+  let message = rawMessage || 'Nie udało się wykonać operacji.';
+
+  if (status === 401 || status === 403 || text.includes('unauthorized') || text.includes('jwt')) {
+    message = 'Sesja wygasła. Zaloguj się ponownie i uruchom skan jeszcze raz.';
+  } else if (text.includes('timeout') || text.includes('abort') || text.includes('timed out')) {
+    message = source === 'imap'
+      ? 'Skanowanie trwało zbyt długo. Spróbuj trybu szybkiego albo ponów próbę za chwilę.'
+      : 'Backend nie odpowiedział na czas. Spróbuj ponownie za chwilę.';
+  } else if (text.includes('network request failed') || text.includes('failed to fetch') || text.includes('brak polaczenia')) {
+    message = 'Nie udało się połączyć z backendem. Sprawdź Wi-Fi, adres API i czy backend działa.';
+  } else if (text.includes('validation') || status === 400) {
+    message = 'Sprawdź wymagane pola formularza i spróbuj ponownie.';
+  } else if (
+    text.includes('credential') ||
+    text.includes('password') ||
+    text.includes('auth') ||
+    text.includes('login') ||
+    text.includes('imap')
+  ) {
+    message = 'Nie udało się połączyć ze skrzynką. Sprawdź login, hasło lub użyj hasła aplikacji.';
+  } else if (text.includes('host') || text.includes('port') || text.includes('enotfound') || text.includes('econnrefused')) {
+    message = 'Nie udało się połączyć z serwerem poczty. Sprawdź host, port i SSL.';
+  } else if (status && status >= 500) {
+    message = source === 'imap'
+      ? 'Provider poczty albo backend chwilowo nie odpowiedział. Spróbuj ponownie za moment.'
+      : 'Backend zgłosił problem po swojej stronie. Spróbuj ponownie za moment.';
+  }
+
+  if (showTechnical && code) {
+    return `${message}\n\nKod techniczny: ${code}`;
+  }
+
+  return message;
+}
 
 function formatDateTime(value: string | null) {
   if (!value) return 'Jeszcze nie skanowano';
@@ -266,7 +399,7 @@ function formatProductDate(item: EmailScanProductItem) {
 
 function getDecisionLabel(action: string | undefined) {
   if (!action) return null;
-  return PRODUCT_DECISION_LABELS[action] || action;
+  return PRODUCT_DECISION_LABELS[action] || humanizeBackendValue(action);
 }
 
 function getScanModeLabel(mode?: string | null) {
@@ -499,6 +632,18 @@ export const EmailScanScreen = () => {
     setSubmitted(false);
   }, [selectedDetection]);
 
+  useEffect(() => {
+    if (scanSource !== 'gmail' || isConnected) return;
+
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') {
+        statusQuery.refetch();
+      }
+    });
+
+    return () => subscription.remove();
+  }, [isConnected, scanSource, statusQuery]);
+
   const parsedAmount = useMemo(() => Number(amount.replace(',', '.')), [amount]);
   const canAccept = selectedDetection && parsedAmount > 0 && currency && category && cycle && nextPaymentDate;
 
@@ -537,7 +682,7 @@ export const EmailScanScreen = () => {
         }
       },
       onError: (error: any) => {
-        Alert.alert('Błąd', error?.message || 'Nie udało się pobrać linku autoryzacji.');
+        Alert.alert('Nie udało się połączyć Gmaila', getEmailScanErrorMessage(error, 'gmail', isDebug));
       },
     });
   };
@@ -590,7 +735,7 @@ export const EmailScanScreen = () => {
         }
       },
       onError: (error: any) => {
-        Alert.alert('Nie udało się przeskanować skrzynki', error?.message || 'Nie udało się przeskanować Gmaila.');
+        Alert.alert('Nie udało się przeskanować Gmaila', getEmailScanErrorMessage(error, 'gmail', isDebug));
       },
     });
   };
@@ -646,7 +791,7 @@ export const EmailScanScreen = () => {
       onError: (error: any) => {
         Alert.alert(
           'Nie udało się przeskanować IMAP',
-          error?.message || 'Sprawdź dane połączenia, hasło aplikacji i ustawienia dostawcy poczty.'
+          getEmailScanErrorMessage(error, 'imap', isDebug)
         );
       },
     });
@@ -679,7 +824,7 @@ export const EmailScanScreen = () => {
       onError: (error: any) => {
         Alert.alert(
           'Nie udało się przygotować podglądu',
-          error?.message || 'Backend nie zwrócił jeszcze draftów importu dla wybranych pozycji.'
+          getEmailScanErrorMessage(error, 'preview', isDebug)
         );
       },
     });
@@ -970,7 +1115,7 @@ export const EmailScanScreen = () => {
       <View style={[styles.imapPrivacyNote, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
         <ShieldCheck size={17} color={theme.colors.primary} />
         <Text style={styles.imapPrivacyText}>
-          Front nie zapisuje hasła. Dane trafiają do endpointu skanu, a wynik wraca jako buckety do review.
+          Front nie zapisuje hasła. Dane trafiają do endpointu skanu, a wynik wraca jako grupy do sprawdzenia.
         </Text>
       </View>
 
@@ -981,7 +1126,7 @@ export const EmailScanScreen = () => {
           </View>
           <View style={styles.scanningCopy}>
             <Text style={styles.scanningTitle}>Skanuję skrzynkę IMAP...</Text>
-            <Text style={styles.scanningText}>Profil {imapProfile}. Wyniki podzielimy na buckety produktowe.</Text>
+            <Text style={styles.scanningText}>Profil: {getImapProfileLabel(imapProfile)}. Wyniki podzielimy na czytelne grupy.</Text>
           </View>
         </View>
       )}
@@ -1097,7 +1242,7 @@ export const EmailScanScreen = () => {
   const renderCoverageBanner = () => {
     if (!lastScanDiagnostics && !lastScanProductResult?.scanSummary?.recommendedUserMessage) return null;
 
-    const note = lastScanProductResult?.scanSummary?.recommendedUserMessage ||
+    const note = getFriendlyScanNote(lastScanProductResult?.scanSummary?.recommendedUserMessage) ||
       lastScanDiagnostics?.userFacingCoverageNote ||
       lastScanDiagnostics?.deepScanReason;
     const shouldSuggestDeepScan = Boolean(
@@ -1113,14 +1258,14 @@ export const EmailScanScreen = () => {
           </View>
           <View style={styles.coverageCopy}>
             <Text style={styles.coverageTitle}>
-              {shouldSuggestDeepScan ? 'Quick scan może być niepełny' : 'Wynik wymaga potwierdzenia'}
+              {shouldSuggestDeepScan ? 'Szybki skan może być niepełny' : 'Wynik wymaga potwierdzenia'}
             </Text>
             {!!lastScanDiagnostics?.scanReliabilityLevel && (
               <Text style={styles.coverageMeta}>Wiarygodność skanu: {lastScanDiagnostics.scanReliabilityLevel}</Text>
             )}
           </View>
         </View>
-        {!!note && <Text style={styles.coverageText}>{note}</Text>}
+        {!!note && <Text style={styles.coverageText}>{getFriendlyScanNote(note)}</Text>}
         {shouldSuggestDeepScan && (
           <TouchableOpacity
             style={[styles.deepScanBtn, { backgroundColor: theme.colors.primary }]}
@@ -1158,6 +1303,8 @@ export const EmailScanScreen = () => {
     const title = getProductItemTitle(item);
     const action = getProductItemAction(item);
     const evidenceDate = formatProductDate(item);
+    const categoryLabel = getProductCategoryLabel(item.category);
+    const channelLabel = getBillingChannelLabel(item.billingChannel);
     const amount =
       formatMaybeAmount(item.amount, item.currency) ||
       formatMaybeAmount(item.currentAmount, item.currency) ||
@@ -1189,7 +1336,7 @@ export const EmailScanScreen = () => {
           <View style={styles.productMain}>
             <Text style={styles.productTitle} numberOfLines={1}>{title}</Text>
             <Text style={styles.productMeta} numberOfLines={1}>
-              {[item.category, item.billingChannel, evidenceDate ? `dowód: ${evidenceDate}` : null].filter(Boolean).join(' · ')}
+              {[categoryLabel, channelLabel, evidenceDate ? `dowód: ${evidenceDate}` : null].filter(Boolean).join(' · ')}
             </Text>
           </View>
           {!!reviewedAction && (
@@ -1206,7 +1353,7 @@ export const EmailScanScreen = () => {
             activeOpacity={0.84}
           >
             <Text style={[styles.importSelectText, isSelectedForImport && { color: theme.colors.darkText }]}>
-              {isSelectedForImport ? 'Wybrane' : 'Do preview'}
+              {isSelectedForImport ? 'W podglądzie' : 'Dodaj do podglądu'}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1249,9 +1396,9 @@ export const EmailScanScreen = () => {
 
         {bucket !== 'review' && (
           <View style={styles.productFooter}>
-            <Text style={styles.productActionLabel}>Akcja: {getDecisionLabel(action) || action}</Text>
+            <Text style={styles.productActionLabel}>Rekomendacja: {getDecisionLabel(action) || 'sprawdź'}</Text>
             <TouchableOpacity style={styles.productMiniAction} onPress={() => markProductItemReviewed(key, 'sprawdzone')}>
-              <Text style={[styles.productMiniActionText, { color: theme.colors.primary }]}>Oznacz jako sprawdzone</Text>
+              <Text style={[styles.productMiniActionText, { color: theme.colors.primary }]}>Zaznacz</Text>
               <ChevronRight size={15} color={theme.colors.primary} />
             </TouchableOpacity>
           </View>
@@ -1301,8 +1448,8 @@ export const EmailScanScreen = () => {
     {
       bucket: 'review',
       label: 'Do sprawdzenia',
-      title: 'Potwierdź, czy nadal aktywne',
-      caption: 'Mocne historyczne dowody, ale za stare, żeby udawać pewność.',
+      title: 'Do sprawdzenia',
+      caption: 'Sygnały, które warto potwierdzić przed dodaniem.',
       icon: History,
       items: productResult.needsReviewSubscriptions,
     },
@@ -1317,8 +1464,8 @@ export const EmailScanScreen = () => {
     {
       bucket: 'bill',
       label: 'Rachunki',
-      title: 'Rachunki i usługi',
-      caption: 'Formalne rachunki i usługi pokazane osobno od subskrypcji.',
+      title: 'Rachunki cykliczne',
+      caption: 'Powtarzalne rachunki pokazane osobno od subskrypcji.',
       icon: FileText,
       items: productResult.billsOrUtilities,
     },
@@ -1345,6 +1492,51 @@ export const EmailScanScreen = () => {
         };
       })
     );
+
+  const applyImportSelection = (
+    entries: EmailScanImportSelection[],
+    predicate: (entry: EmailScanImportSelection) => boolean,
+    emptyMessage: string
+  ) => {
+    const matchingEntries = entries.filter(predicate);
+
+    if (matchingEntries.length === 0) {
+      Alert.alert('Brak pozycji', emptyMessage);
+      return;
+    }
+
+    setSelectedImportItems((current) => {
+      const next = { ...current };
+      matchingEntries.forEach((entry) => {
+        next[entry.key] = true;
+      });
+      return next;
+    });
+  };
+
+  const clearImportSelection = () => {
+    setSelectedImportItems({});
+  };
+
+  const isRecommendedImportEntry = (entry: EmailScanImportSelection) => {
+    const category = String(entry.item.category || '');
+    const action = String(entry.action || getProductItemAction(entry.item));
+
+    if (entry.bucket === 'history' || category === 'payment_processor' || action === 'ignore') {
+      return false;
+    }
+
+    return (
+      entry.bucket === 'current' ||
+      entry.bucket === 'bill' ||
+      entry.bucket === 'price' ||
+      action === 'show_as_active' ||
+      action === 'create_subscription' ||
+      action === 'create_bill' ||
+      action === 'review_bill' ||
+      action === 'review_price_change'
+    );
+  };
 
   const renderProductResult = () => {
     if (!lastScanProductResult) return null;
@@ -1375,7 +1567,6 @@ export const EmailScanScreen = () => {
       lastScanProductResult.historicalSubscriptions.length > 0 ||
       lastScanProductResult.priceChanges.length > 0 ||
       lastScanProductResult.billsOrUtilities.length > 0;
-    const pendingCount = Math.max(0, reviewItems.length - reviewedCount);
     const productSections = getProductSections(lastScanProductResult);
     const visibleSections = productFilter === 'all'
       ? productSections
@@ -1386,6 +1577,7 @@ export const EmailScanScreen = () => {
     ].filter((item) => item.id === 'all' || item.count > 0);
     const allImportEntries = getImportEntries(lastScanProductResult);
     const selectedImportCount = allImportEntries.filter((entry) => selectedImportItems[entry.key]).length;
+    const canPreparePreview = selectedImportCount > 0 && !importPreviewMutation.isPending;
 
     return (
       <View style={styles.productResultWrap}>
@@ -1404,7 +1596,7 @@ export const EmailScanScreen = () => {
               : 'Wynik skanu skrzynki'}
           </Text>
           <Text style={styles.productHeroText}>
-            {scanSummary.recommendedUserMessage ||
+            {getFriendlyScanNote(scanSummary.recommendedUserMessage) ||
               'Wynik jest podzielony na aktywne subskrypcje, rzeczy do potwierdzenia, zmiany cen oraz rachunki.'}
           </Text>
         </View>
@@ -1415,14 +1607,16 @@ export const EmailScanScreen = () => {
           <View style={styles.reviewCockpitCard}>
             <View style={styles.reviewCockpitHeader}>
               <View>
-                <Text style={styles.reviewCockpitEyebrow}>Kolejka decyzji</Text>
+                <Text style={styles.reviewCockpitEyebrow}>Szybka selekcja</Text>
                 <Text style={styles.reviewCockpitTitle}>
-                  {pendingCount > 0 ? `${pendingCount} rzeczy czeka na decyzję` : 'Wszystko lokalnie sprawdzone'}
+                  {selectedImportCount > 0
+                    ? `${selectedImportCount} pozycji wybranych do podglądu`
+                    : 'Wybierz kandydatów do podglądu'}
                 </Text>
               </View>
               <View style={[styles.reviewCockpitScore, { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
-                <Text style={[styles.reviewCockpitScoreValue, { color: theme.colors.primary }]}>{reviewedCount}</Text>
-                <Text style={styles.reviewCockpitScoreLabel}>gotowe</Text>
+                <Text style={[styles.reviewCockpitScoreValue, { color: theme.colors.primary }]}>{selectedImportCount}</Text>
+                <Text style={styles.reviewCockpitScoreLabel}>wybrane</Text>
               </View>
             </View>
             <View style={styles.reviewStatsGrid}>
@@ -1465,6 +1659,45 @@ export const EmailScanScreen = () => {
                 );
               })}
             </ScrollView>
+            <View style={styles.bulkSelectGrid}>
+              <TouchableOpacity
+                style={styles.bulkSelectButton}
+                onPress={() => applyImportSelection(
+                  allImportEntries,
+                  isRecommendedImportEntry,
+                  'Nie ma rekomendowanych pozycji do zaznaczenia.'
+                )}
+              >
+                <Text style={styles.bulkSelectButtonText}>Zaznacz rekomendowane</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bulkSelectButton}
+                onPress={() => applyImportSelection(
+                  allImportEntries,
+                  (entry) => entry.bucket === 'current',
+                  'Nie znaleziono aktywnych subskrypcji.'
+                )}
+              >
+                <Text style={styles.bulkSelectButtonText}>Zaznacz aktywne</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.bulkSelectButton}
+                onPress={() => applyImportSelection(
+                  allImportEntries,
+                  (entry) => entry.bucket === 'bill',
+                  'Nie znaleziono rachunków cyklicznych.'
+                )}
+              >
+                <Text style={styles.bulkSelectButtonText}>Zaznacz rachunki</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.bulkSelectButton, selectedImportCount === 0 && styles.acceptBtnDisabled]}
+                onPress={clearImportSelection}
+                disabled={selectedImportCount === 0}
+              >
+                <Text style={styles.bulkSelectButtonText}>Wyczyść wybór</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         )}
 
@@ -1472,7 +1705,7 @@ export const EmailScanScreen = () => {
           <View style={styles.reviewProgressCard}>
             <View style={styles.reviewProgressTop}>
               <View>
-                <Text style={styles.reviewProgressTitle}>Postęp decyzji</Text>
+                <Text style={styles.reviewProgressTitle}>Decyzje lokalne</Text>
                 <Text style={styles.reviewProgressText}>
                   {reviewedCount}/{reviewItems.length} decyzji lokalnie oznaczonych
                 </Text>
@@ -1483,7 +1716,7 @@ export const EmailScanScreen = () => {
               <View style={[styles.reviewProgressFill, { width: `${progressPercent}%`, backgroundColor: theme.colors.primary }]} />
             </View>
             <Text style={styles.reviewProgressHint}>
-              Decyzje są na razie lokalne. Front przygotowuje UX i przyszły zapis decyzji bez zmian w backendzie.
+              Nie musisz oznaczać każdej pozycji. Wystarczy zaznaczyć te, które chcesz zobaczyć w podglądzie.
             </Text>
           </View>
         )}
@@ -1495,24 +1728,29 @@ export const EmailScanScreen = () => {
                 <FileText size={19} color={theme.colors.primary} />
               </View>
               <View style={styles.importPreviewCopy}>
-                <Text style={styles.importPreviewTitle}>Preview przed zapisem</Text>
+                <Text style={styles.importPreviewTitle}>Podgląd przed zapisem</Text>
                 <Text style={styles.importPreviewText}>
-                  Zaznacz pozycje kartami „Do preview”, a backend przygotuje drafty bez finalnego zapisu.
+                  Skan niczego nie zapisuje. Zaznaczone pozycje trafią do podglądu, a zapis nastąpi dopiero po Twojej decyzji.
                 </Text>
               </View>
             </View>
             <View style={styles.importPreviewFooter}>
-              <Text style={styles.importPreviewCount}>
-                {selectedImportCount}/{allImportEntries.length} wybranych
-              </Text>
+              <View style={styles.importPreviewCountBlock}>
+                <Text style={styles.importPreviewCount}>
+                  {selectedImportCount}/{allImportEntries.length} wybranych
+                </Text>
+                {selectedImportCount === 0 && (
+                  <Text style={styles.importPreviewHint}>Zaznacz przynajmniej jedną pozycję, żeby przygotować podgląd.</Text>
+                )}
+              </View>
               <TouchableOpacity
                 style={[
                   styles.importPreviewButton,
                   { backgroundColor: theme.colors.primary },
-                  (selectedImportCount === 0 || importPreviewMutation.isPending) && styles.acceptBtnDisabled,
+                  !canPreparePreview && styles.acceptBtnDisabled,
                 ]}
                 onPress={() => handleImportPreview(allImportEntries)}
-                disabled={selectedImportCount === 0 || importPreviewMutation.isPending}
+                disabled={!canPreparePreview}
                 activeOpacity={0.86}
               >
                 {importPreviewMutation.isPending ? (
@@ -1520,7 +1758,7 @@ export const EmailScanScreen = () => {
                 ) : (
                   <>
                     <Search size={17} color={theme.colors.darkText} />
-                    <Text style={styles.importPreviewButtonText}>Pokaż preview</Text>
+                    <Text style={styles.importPreviewButtonText}>Pokaż podgląd</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -1537,15 +1775,17 @@ export const EmailScanScreen = () => {
             </Text>
           </View>
         )}
-        {visibleSections.map((section) =>
-          renderProductSection(
-            section.title,
-            section.caption,
-            section.icon,
-            section.items,
-            section.bucket
-          )
-        )}
+        {visibleSections.map((section) => (
+          <React.Fragment key={section.bucket}>
+            {renderProductSection(
+              section.title,
+              section.caption,
+              section.icon,
+              section.items,
+              section.bucket
+            )}
+          </React.Fragment>
+        ))}
       </View>
     );
   };
@@ -1558,6 +1798,8 @@ export const EmailScanScreen = () => {
     const title = getProductItemTitle(item);
     const action = getProductItemAction(item);
     const evidenceDate = formatProductDate(item);
+    const categoryLabel = getProductCategoryLabel(item.category);
+    const channelLabel = getBillingChannelLabel(item.billingChannel || item.provider);
     const amount =
       formatMaybeAmount(item.amount, item.currency) ||
       formatMaybeAmount(item.currentAmount, item.currency) ||
@@ -1592,11 +1834,11 @@ export const EmailScanScreen = () => {
               <View style={styles.productModalInfoGrid}>
                 <View style={styles.productModalInfo}>
                   <Text style={styles.productModalInfoLabel}>Kategoria</Text>
-                  <Text style={styles.productModalInfoValue}>{item.category || 'brak'}</Text>
+                  <Text style={styles.productModalInfoValue}>{categoryLabel || 'brak'}</Text>
                 </View>
                 <View style={styles.productModalInfo}>
                   <Text style={styles.productModalInfoLabel}>Akcja</Text>
-                  <Text style={styles.productModalInfoValue}>{getDecisionLabel(action) || action}</Text>
+                  <Text style={styles.productModalInfoValue}>{getDecisionLabel(action) || 'sprawdź'}</Text>
                 </View>
                 <View style={styles.productModalInfo}>
                   <Text style={styles.productModalInfoLabel}>Dowód</Text>
@@ -1604,7 +1846,7 @@ export const EmailScanScreen = () => {
                 </View>
                 <View style={styles.productModalInfo}>
                   <Text style={styles.productModalInfoLabel}>Kanał</Text>
-                  <Text style={styles.productModalInfoValue}>{item.billingChannel || item.provider || 'email'}</Text>
+                  <Text style={styles.productModalInfoValue}>{channelLabel || 'email'}</Text>
                 </View>
               </View>
 
@@ -1629,19 +1871,21 @@ export const EmailScanScreen = () => {
                 <Text style={styles.evidenceLabel}>Dlaczego to pokazujemy?</Text>
                 <Text style={styles.evidenceText}>
                   {item.evidenceSnippet ||
-                    'Backend sklasyfikował ten sygnał do osobnego bucketu produktowego. Użytkownik powinien go potwierdzić przed dodaniem do aktywnych subskrypcji.'}
+                    'Ten sygnał wygląda jak subskrypcja, rachunek albo zmiana ceny. Potwierdź go przed dodaniem do listy.'}
                 </Text>
               </View>
 
-              <View style={[styles.futurePayloadBox, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
-                <Text style={[styles.futurePayloadTitle, { color: theme.colors.primary }]}>Przyszły payload dla backendu</Text>
-                <Text style={styles.futurePayloadText}>
-                  itemId: {String(item.id || item.sourceMessageId || key)}{'\n'}
-                  bucket: {bucket}{'\n'}
-                  primaryAction: {action}{'\n'}
-                  reviewedAt: znacznik czasu z aplikacji
-                </Text>
-              </View>
+              {isDebug && (
+                <View style={[styles.futurePayloadBox, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
+                  <Text style={[styles.futurePayloadTitle, { color: theme.colors.primary }]}>Szczegóły techniczne</Text>
+                  <Text style={styles.futurePayloadText}>
+                    itemId: {String(item.id || item.sourceMessageId || key)}{'\n'}
+                    bucket: {bucket}{'\n'}
+                    primaryAction: {action}{'\n'}
+                    reviewedAt: znacznik czasu z aplikacji
+                  </Text>
+                </View>
+              )}
 
               {isReviewBucket ? (
                 <View style={styles.productModalActions}>
@@ -1663,7 +1907,7 @@ export const EmailScanScreen = () => {
                 <View style={styles.productModalActions}>
                   <TouchableOpacity style={[styles.productModalPrimary, { backgroundColor: theme.colors.primary }]} onPress={() => handleProductReviewAction(key, 'sprawdzone')}>
                     <CheckCircle size={18} color={theme.colors.darkText} />
-                    <Text style={styles.productModalPrimaryText}>Oznacz jako sprawdzone</Text>
+                    <Text style={styles.productModalPrimaryText}>Zaznacz</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={styles.productModalGhost} onPress={() => handleProductReviewAction(key, 'ignoruj')}>
                     <Text style={styles.productModalGhostText}>Ignoruj</Text>
@@ -1696,8 +1940,8 @@ export const EmailScanScreen = () => {
             <View style={styles.productModalHandle} />
             <View style={styles.productModalHeader}>
               <View style={styles.productModalTitleBlock}>
-                <Text style={styles.productModalEyebrow}>Import preview</Text>
-                <Text style={styles.productModalTitle}>Drafty przed zapisem</Text>
+                <Text style={styles.productModalEyebrow}>Podgląd importu</Text>
+                <Text style={styles.productModalTitle}>Podgląd przed zapisem</Text>
               </View>
               <TouchableOpacity style={styles.closeBtn} onPress={() => setImportPreviewResult(null)}>
                 <X size={21} color={theme.colors.textMuted} />
@@ -1714,10 +1958,10 @@ export const EmailScanScreen = () => {
               <View style={[styles.importPreviewSummary, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
                 <View>
                   <Text style={[styles.importPreviewSummaryValue, { color: theme.colors.primary }]}>{previewCount}</Text>
-                  <Text style={styles.importPreviewSummaryLabel}>draftów do sprawdzenia</Text>
+                  <Text style={styles.importPreviewSummaryLabel}>pozycji do sprawdzenia</Text>
                 </View>
                 <Text style={styles.importPreviewSummaryText}>
-                  To nadal tylko podgląd. Finalny zapis subskrypcji powinien nastąpić dopiero po potwierdzeniu użytkownika.
+                  To nadal tylko podgląd. Finalny zapis nastąpi dopiero po Twoim potwierdzeniu.
                 </Text>
               </View>
 
@@ -1737,24 +1981,25 @@ export const EmailScanScreen = () => {
               {dedupedPreviewItems.length === 0 ? (
                 <View style={styles.emptyState}>
                   <Inbox size={32} color={theme.colors.textMuted} />
-                  <Text style={styles.emptyTitle}>Brak draftów w odpowiedzi</Text>
+                  <Text style={styles.emptyTitle}>Brak pozycji w odpowiedzi</Text>
                   <Text style={styles.emptyText}>
-                    Endpoint odpowiedział, ale nie zwrócił jeszcze listy draftów. To bezpieczny stan przejściowy po stronie integracji.
+                    Endpoint odpowiedział, ale nie zwrócił jeszcze listy pozycji do podglądu. To bezpieczny stan przejściowy po stronie integracji.
                   </Text>
                 </View>
               ) : (
                 dedupedPreviewItems.map((rawDraft, index) => {
                   const draft = rawDraft as any;
                   const subscription = draft.subscription || {};
-                  const title = draft.name || draft.provider || subscription.name || subscription.provider || `Draft ${index + 1}`;
+                  const title = draft.name || draft.provider || subscription.name || subscription.provider || `Pozycja ${index + 1}`;
                   const amount = formatMaybeAmount(
                     draft.amount ?? draft.monthlyAmount ?? draft.price ?? subscription.amount,
                     draft.currency ?? subscription.currency
                   );
                   const billingCycle = draft.billingCycle || subscription.billingCycle;
                   const category = draft.category || subscription.category;
-                  const recommendedAction = draft.action || draft.recommendedAction || draft.type;
+                  const recommendedAction = getDecisionLabel(draft.action || draft.recommendedAction || draft.type);
                   const recurringBill = draft.isRecurringBill || subscription.isRecurringBill;
+                  const categoryLabel = getProductCategoryLabel(category);
                   const nextPayment = typeof (draft.nextPaymentDate || subscription.nextPaymentDate) === 'string'
                     ? formatDate(draft.nextPaymentDate || subscription.nextPaymentDate)
                     : null;
@@ -1770,7 +2015,7 @@ export const EmailScanScreen = () => {
                         <View style={styles.importDraftMain}>
                           <Text style={styles.importDraftTitle} numberOfLines={1}>{title}</Text>
                           <Text style={styles.importDraftMeta} numberOfLines={1}>
-                            {[recommendedAction, category, billingCycle, recurringBill ? 'rachunek cykliczny' : null, nextPayment].filter(Boolean).join(' · ') || 'Draft subskrypcji'}
+                            {[recommendedAction, categoryLabel, billingCycle, recurringBill ? 'rachunek cykliczny' : null, nextPayment].filter(Boolean).join(' · ') || 'Pozycja do podglądu'}
                           </Text>
                         </View>
                         {!!amount && <Text style={styles.importDraftAmount}>{amount}</Text>}
@@ -1945,7 +2190,7 @@ export const EmailScanScreen = () => {
         <View style={styles.wizardTop}>
           <View>
             <Text style={styles.wizardEyebrow}>Import flow</Text>
-            <Text style={styles.wizardTitle}>Od skrzynki do draftów</Text>
+            <Text style={styles.wizardTitle}>Od skrzynki do podglądu</Text>
           </View>
           <Text style={[styles.wizardStepCounter, { color: theme.colors.primary }]}>
             {Math.max(currentIndex + 1, 1)}/{EMAIL_SCAN_WIZARD_STEPS.length}
@@ -1994,7 +2239,7 @@ export const EmailScanScreen = () => {
           <Text style={styles.wizardStageTitle}>Uruchom bezpieczny skan</Text>
           <Text style={styles.wizardStageText}>
             {scanSource === 'imap'
-              ? `Źródło: IMAP · ${imapHost || 'brak hosta'} · profil ${imapProfile}`
+              ? `Źródło: IMAP · ${imapHost || 'brak hosta'} · profil ${getImapProfileLabel(imapProfile)}`
               : 'Źródło: Gmail OAuth · metadata i snippet, bez pełnej treści maili'}
           </Text>
         </View>
@@ -2004,7 +2249,7 @@ export const EmailScanScreen = () => {
         <>
           <View style={styles.wizardScanSummary}>
             <View style={styles.wizardScanMetric}>
-              <Text style={styles.wizardScanMetricValue}>{imapProfile}</Text>
+              <Text style={styles.wizardScanMetricValue}>{getImapProfileLabel(imapProfile)}</Text>
               <Text style={styles.wizardScanMetricLabel}>profil</Text>
             </View>
             <View style={styles.wizardScanMetric}>
@@ -2023,7 +2268,7 @@ export const EmailScanScreen = () => {
               </View>
               <View style={styles.scanningCopy}>
                 <Text style={styles.scanningTitle}>Skanuję skrzynkę IMAP...</Text>
-                <Text style={styles.scanningText}>Wyniki trafią do bucketów: review, ceny, rachunki i historia.</Text>
+                <Text style={styles.scanningText}>Wyniki trafią do grup: do sprawdzenia, ceny, rachunki i historia.</Text>
               </View>
             </View>
           )}
@@ -2098,7 +2343,7 @@ export const EmailScanScreen = () => {
         <View style={styles.emptyState}>
           <FileText size={32} color={theme.colors.textMuted} />
           <Text style={styles.emptyTitle}>Najpierw uruchom skan</Text>
-          <Text style={styles.emptyText}>Preview importu pojawi się po znalezieniu kandydatur i zaznaczeniu pozycji.</Text>
+          <Text style={styles.emptyText}>Podgląd importu pojawi się po znalezieniu kandydatur i zaznaczeniu pozycji.</Text>
           <TouchableOpacity style={[styles.importPreviewButton, { backgroundColor: theme.colors.primary, marginTop: 14 }]} onPress={() => setWizardStep('scan')}>
             <Search size={17} color={theme.colors.darkText} />
             <Text style={styles.importPreviewButtonText}>Przejdź do skanu</Text>
@@ -2117,11 +2362,11 @@ export const EmailScanScreen = () => {
             <FileText size={22} color={theme.colors.primary} />
           </View>
           <View style={styles.wizardStageCopy}>
-            <Text style={styles.wizardStageTitle}>Preview przed finalnym zapisem</Text>
+            <Text style={styles.wizardStageTitle}>Podgląd przed finalnym zapisem</Text>
             <Text style={styles.wizardStageText}>
               {selectedEntries.length > 0
-                ? `${selectedEntries.length} wybranych pozycji czeka na drafty backendu.`
-                : 'Zaznacz pozycje w review, żeby przygotować drafty importu.'}
+                ? `${selectedEntries.length} wybranych pozycji czeka na podgląd.`
+                : 'Zaznacz pozycje w wynikach, żeby przygotować podgląd importu.'}
             </Text>
           </View>
         </View>
@@ -2129,7 +2374,7 @@ export const EmailScanScreen = () => {
         {selectedEntries.length === 0 ? (
           <View style={styles.wizardNotice}>
             <Text style={styles.wizardNoticeTitle}>Nic nie jest zaznaczone</Text>
-            <Text style={styles.wizardNoticeText}>Wróć do review i użyj przycisku „Do preview” na kartach wyników.</Text>
+            <Text style={styles.wizardNoticeText}>Wróć do wyników i zaznacz przynajmniej jedną pozycję do podglądu.</Text>
           </View>
         ) : (
           <View style={styles.previewSelectionList}>
@@ -2138,7 +2383,7 @@ export const EmailScanScreen = () => {
                 <View style={[styles.previewSelectionDot, { backgroundColor: theme.colors.primary }]} />
                 <View style={styles.previewSelectionCopy}>
                   <Text style={styles.previewSelectionTitle} numberOfLines={1}>{getProductItemTitle(entry.item)}</Text>
-                  <Text style={styles.previewSelectionMeta}>{entry.bucket} · {getDecisionLabel(entry.action) || entry.action}</Text>
+                  <Text style={styles.previewSelectionMeta}>{getProductBucketLabel(entry.bucket)} · {getDecisionLabel(entry.action) || 'sprawdź'}</Text>
                 </View>
               </View>
             ))}
@@ -2162,14 +2407,14 @@ export const EmailScanScreen = () => {
           ) : (
             <>
               <FileText size={19} color={theme.colors.darkText} />
-              <Text style={styles.connectBtnText}>Przygotuj drafty</Text>
+              <Text style={styles.connectBtnText}>Przygotuj podgląd</Text>
             </>
           )}
         </TouchableOpacity>
 
         <View style={styles.wizardStageActions}>
           <TouchableOpacity style={styles.wizardSecondaryAction} onPress={() => setWizardStep('review')}>
-            <Text style={styles.wizardSecondaryActionText}>Wróć do review</Text>
+            <Text style={styles.wizardSecondaryActionText}>Wróć do wyników</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -2204,7 +2449,7 @@ export const EmailScanScreen = () => {
           </View>
           <Text style={styles.heroTitle}>Email Scan</Text>
           <Text style={styles.heroText}>
-            Znajdź kandydatury subskrypcji w Gmailu albo przez manualne IMAP. Zawsze pokazujemy wynik do review przed zapisem.
+            Znajdź kandydatury subskrypcji w Gmailu albo przez manualne IMAP. Zawsze pokazujemy wynik do sprawdzenia przed zapisem.
           </Text>
         </View>
 
@@ -2941,10 +3186,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
+  importPreviewCountBlock: {
+    flex: 1,
+    gap: 4,
+  },
   importPreviewCount: {
     color: vibrantTheme.colors.textMuted,
     fontSize: 12,
     fontWeight: '900',
+  },
+  importPreviewHint: {
+    color: vibrantTheme.colors.textSubtle,
+    fontSize: 11,
+    lineHeight: 15,
+    fontWeight: '700',
   },
   importPreviewButton: {
     minHeight: 42,
@@ -3014,6 +3269,27 @@ const styles = StyleSheet.create({
   reviewStatValue: { color: vibrantTheme.colors.text, fontSize: 20, fontWeight: '900' },
   reviewStatLabel: { color: vibrantTheme.colors.textMuted, fontSize: 10, lineHeight: 13, fontWeight: '800' },
   productFilterRow: { gap: 8, paddingRight: 4 },
+  bulkSelectGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  bulkSelectButton: {
+    minHeight: 38,
+    borderRadius: 13,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
+  },
+  bulkSelectButtonText: {
+    color: vibrantTheme.colors.text,
+    fontSize: 11,
+    fontWeight: '900',
+  },
   productFilterChip: {
     minHeight: 38,
     borderRadius: 999,

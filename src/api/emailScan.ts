@@ -27,7 +27,7 @@ export async function runGmailScan(payload: GmailScanRequest = {}): Promise<Gmai
 }
 
 export async function runImapScan(payload: ImapScanRequest): Promise<ImapScanResponse> {
-  return apiPostWithTimeout<ImapScanResponse>('/email-scan/imap/scan', payload, 90000);
+  return apiPostWithTimeout<ImapScanResponse>('/email-scan/imap/scan', payload, 180000);
 }
 
 export async function getEmailScanImportPreview(
