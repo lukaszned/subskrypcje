@@ -167,7 +167,19 @@ const EMAIL_SCAN_USER_MESSAGES: Record<string, string> = {
     GMAIL_API_FAILED:
         "Gmail chwilowo nie odpowiedział poprawnie. Spróbuj ponownie.",
     GMAIL_OAUTH_CONFIG_MISSING: "Konfiguracja Gmail OAuth jest niekompletna.",
+    GMAIL_OAUTH_STATE_INVALID:
+        "Nie udało się potwierdzić sesji logowania Gmail. Spróbuj połączyć konto ponownie.",
+    GMAIL_OAUTH_CALLBACK_FAILED:
+        "Nie udało się zakończyć połączenia Gmail. Spróbuj połączyć konto ponownie.",
+    GMAIL_REDIRECT_UNREACHABLE_HINT:
+        "Adres powrotu Gmail może być niedostępny z telefonu. Użyj publicznego tunelu albo popraw konfigurację backendu.",
     GMAIL_SCAN_FAILED: "Nie udało się przeskanować Gmail. Spróbuj ponownie.",
+    IMPORT_PREVIEW_TOO_MANY_ITEMS:
+        "Wybrano zbyt wiele pozycji naraz. Zmniejsz wybór i spróbuj ponownie.",
+    IMPORT_PREVIEW_TIMEOUT:
+        "Nie udało się przygotować podglądu na czas. Zmniejsz liczbę pozycji i spróbuj ponownie.",
+    IMPORT_PREVIEW_VALIDATION_ERROR:
+        "Nie udało się przygotować podglądu. Wybierz pozycje do importu i spróbuj ponownie.",
     INTERNAL_SERVER_ERROR: "Wystąpił błąd serwera. Spróbuj ponownie za chwilę.",
 };
 
