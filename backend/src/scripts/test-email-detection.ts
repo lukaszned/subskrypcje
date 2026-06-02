@@ -29,6 +29,7 @@ import {
     buildImportPreview,
     confirmScanImportDrafts,
     ImportPreviewServiceError,
+    ImportPreviewValidationError,
 } from "../services/scan-result-import.service";
 
 type AssertionFailure = {
@@ -1239,6 +1240,25 @@ function runProductResultFrontendHelperCase() {
 }
 
 function runImportPreviewCase() {
+    const wrappedProductItem = {
+        id: "wrapped-sub",
+        displayName: "Wrapped Stream",
+        provider: "Wrapped Stream",
+        category: "streaming_video",
+        status: "active",
+        productBucket: "currentSubscriptions",
+        primaryAction: "show_as_active",
+        displayAmount: "19.99 PLN monthly",
+        amount: 19.99,
+        billingCycle: "monthly",
+        categoryLabel: "Streaming",
+        productBucketLabel: "Current",
+        primaryActionLabel: "Add",
+        recommendedSelected: true,
+        selectionReason: "test",
+        selected: true,
+        localDecision: "checked",
+    };
     const payload = {
         items: [
             {
@@ -1323,6 +1343,15 @@ function runImportPreviewCase() {
         ],
     };
     const preview = buildImportPreview(payload);
+    const selectedItemsPreview = buildImportPreview({
+        selectedItems: [wrappedProductItem],
+    });
+    const wrappedItemPreview = buildImportPreview({
+        items: [{ item: wrappedProductItem, selected: true, uiState: "checked" }],
+    });
+    const wrappedProductItemPreview = buildImportPreview({
+        items: [{ productItem: wrappedProductItem, checked: true }],
+    });
     const failures: AssertionFailure[] = [];
     const assertField = (field: string, expected: unknown, value: unknown) => {
         if (value !== expected) {
@@ -1337,7 +1366,12 @@ function runImportPreviewCase() {
     const bill = byId("bill");
     const currentMissingAmount = byId("current-missing-amount");
     const processorOnly = byId("processor-only");
-    const invalidPreview = buildImportPreview({ items: [{ id: "bad-item" }] });
+    const mixedPreview = buildImportPreview({
+        items: [wrappedProductItem, { id: "bad-item" }],
+    });
+    let invalidRejected = false;
+    let invalidUserMessage = false;
+    let invalidReceivedKeys: string[] = [];
     const tooManyItems = Array.from({ length: 51 }, (_, index) => ({
         id: `item-${index}`,
         displayName: `Item ${index}`,
@@ -1352,6 +1386,17 @@ function runImportPreviewCase() {
     let tooManyCode: string | undefined;
 
     try {
+        buildImportPreview({ unknownShape: [{ id: "bad-item" }] });
+    } catch (error) {
+        invalidRejected = true;
+        invalidUserMessage = error instanceof ImportPreviewValidationError;
+        invalidReceivedKeys =
+            error instanceof ImportPreviewValidationError
+                ? error.details.receivedKeys
+                : [];
+    }
+
+    try {
         buildImportPreview({ items: tooManyItems });
     } catch (error) {
         tooManyRejected = true;
@@ -1360,6 +1405,18 @@ function runImportPreviewCase() {
     }
 
     assertField("Draft count", 6, preview.drafts.length);
+    assertField("selectedItems shape works", 1, selectedItemsPreview.drafts.length);
+    assertField("wrapped item shape works", 1, wrappedItemPreview.drafts.length);
+    assertField(
+        "wrapped productItem shape works",
+        1,
+        wrappedProductItemPreview.drafts.length
+    );
+    assertField(
+        "helper fields tolerated",
+        "wrapped-sub",
+        selectedItemsPreview.drafts[0]?.sourceItemId
+    );
     assertField("Stale action", "create_subscription", stale?.recommendedAction);
     assertField("Stale category", "entertainment", stale?.draft?.category);
     assertField("Stale review warning", true, stale?.warnings.some((warning) => warning.includes("confirm")));
@@ -1399,14 +1456,17 @@ function runImportPreviewCase() {
         )
     );
     assertField("No debug in notes", false, /raw|snippet|password|credential|debug/i.test(JSON.stringify(preview)));
-    assertField("Invalid item skipped", "skip", invalidPreview.drafts[0]?.recommendedAction);
+    assertField("Mixed malformed item keeps valid draft", 1, mixedPreview.drafts.length);
     assertField(
-        "Invalid item warning",
+        "Mixed malformed item warning",
         true,
-        invalidPreview.drafts[0]?.warnings.some((warning) =>
-            warning.includes("could not be parsed")
+        mixedPreview.warnings?.some((warning) =>
+            warning.includes("not valid import candidates")
         )
     );
+    assertField("Invalid-only payload rejected", true, invalidRejected);
+    assertField("Invalid-only payload typed error", true, invalidUserMessage);
+    assertField("Invalid-only received keys", "unknownShape", invalidReceivedKeys.join("|"));
     assertField("Too many items rejected", true, tooManyRejected);
     assertField("Too many items code", "IMPORT_PREVIEW_TOO_MANY_ITEMS", tooManyCode);
 
@@ -1782,8 +1842,8 @@ function runImapProfileNormalizationCase() {
             name: "fast",
             input: "fast",
             requested: "fast",
-            normalizedFrom: "fast",
-            hasWarning: true,
+            normalizedFrom: null,
+            hasWarning: false,
         },
         {
             name: "adaptive",
@@ -1793,11 +1853,18 @@ function runImapProfileNormalizationCase() {
             hasWarning: true,
         },
         {
+            name: "deep",
+            input: "deep",
+            requested: "deep",
+            normalizedFrom: "deep",
+            hasWarning: true,
+        },
+        {
             name: "balanced",
             input: "balanced",
             requested: "balanced",
-            normalizedFrom: null,
-            hasWarning: false,
+            normalizedFrom: "balanced",
+            hasWarning: true,
         },
         {
             name: "unknown",
@@ -1810,21 +1877,26 @@ function runImapProfileNormalizationCase() {
 
     for (const testCase of cases) {
         const actual = normalizeImapScanProfile(testCase.input);
-        assertField(`${testCase.name} effective`, "balanced", actual.effectiveProfile);
+        assertField(`${testCase.name} effective`, "fast", actual.effectiveProfile);
         assertField(`${testCase.name} requested`, testCase.requested, actual.requestedProfile);
         assertField(`${testCase.name} normalizedFrom`, testCase.normalizedFrom, actual.normalizedFrom);
         assertField(`${testCase.name} warning`, testCase.hasWarning, Boolean(actual.warning));
+        assertField(
+            `${testCase.name} warning text`,
+            testCase.hasWarning,
+            Boolean(actual.warning?.includes("fast profile"))
+        );
     }
 
     if (failures.length === 0) {
         productResultPassed += 1;
-        console.log("PASS productResult: IMAP MVP profile normalization");
+        console.log("PASS productResult: IMAP MVP fast profile normalization");
         return;
     }
 
     productResultFailed += 1;
-    failedProductResultCases.push("IMAP MVP profile normalization");
-    console.log("FAIL productResult: IMAP MVP profile normalization");
+    failedProductResultCases.push("IMAP MVP fast profile normalization");
+    console.log("FAIL productResult: IMAP MVP fast profile normalization");
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 

@@ -24,6 +24,8 @@ import {
     buildImportPreview,
     confirmScanImportDrafts,
     ImportPreviewServiceError,
+    ImportPreviewValidationError,
+    normalizeImportPreviewItems,
 } from "../services/scan-result-import.service";
 import { getEmailScanUserMessage } from "../services/subscription-product-buckets.service";
 
@@ -97,6 +99,8 @@ function safeImapRequestContext(body: unknown) {
         secure: value.secure,
         mailbox: value.mailbox,
         profile: value.profile,
+        usernamePresent:
+            typeof value.username === "string" && value.username.length > 0,
         username: safeImapUsernameDomain(value.username),
         passwordPresent:
             typeof value.password === "string" && value.password.length > 0,
@@ -110,16 +114,11 @@ function safeBodyKeys(body: unknown) {
 }
 
 function safeImportPreviewContext(body: unknown) {
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
-        return { bodyKeys: safeBodyKeys(body), itemCount: 0 };
-    }
-
-    const value = body as Record<string, unknown>;
-    const items = Array.isArray(value.items) ? value.items : [];
+    const normalized = normalizeImportPreviewItems(body);
     const buckets: Record<string, number> = {};
     const actions: Record<string, number> = {};
 
-    for (const item of items) {
+    for (const item of normalized.items) {
         if (!item || typeof item !== "object" || Array.isArray(item)) continue;
         const record = item as Record<string, unknown>;
         const bucket =
@@ -132,7 +131,10 @@ function safeImportPreviewContext(body: unknown) {
 
     return {
         bodyKeys: safeBodyKeys(body),
-        itemCount: items.length,
+        sourceShape: normalized.sourceShape,
+        rawItemCount: normalized.rawItemCount,
+        normalizedItemCount: normalized.normalizedItemCount,
+        skippedItemCount: normalized.skippedItemCount,
         buckets,
         actions,
     };
@@ -225,22 +227,45 @@ router.post("/import-preview", requireAuth, async (req, res) => {
                     message: error.message,
                     code: error.code,
                     userMessage: getEmailScanUserMessage(error.code),
-                    details: {
-                        expected: "items array",
-                        receivedKeys: context.bodyKeys,
-                        itemCount: context.itemCount,
-                        maxItems: 50,
+                details: {
+                    expected: "items array",
+                    receivedKeys: context.bodyKeys,
+                    itemCount: context.normalizedItemCount,
+                    maxItems: 50,
+                },
+            });
+        }
+
+        if (error instanceof ImportPreviewValidationError) {
+            return res.status(400).json({
+                message: "Validation error",
+                code: "VALIDATION_ERROR",
+                userMessage: getEmailScanUserMessage(
+                    "IMPORT_PREVIEW_VALIDATION_ERROR"
+                ),
+                errors: [
+                    {
+                        field: "items",
+                        message: `${error.message} Received keys: ${error.details.receivedKeys.join(", ") || "(none)"}`,
                     },
-                });
+                ],
+                receivedKeys: error.details.receivedKeys,
+                expectedShape: error.details.expectedShape,
+                sourceShape: error.details.sourceShape,
+                warnings: error.details.warnings ?? [],
+            });
         }
 
         if (error instanceof ZodError) {
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
-                userMessage: getEmailScanUserMessage("VALIDATION_ERROR"),
+                userMessage: getEmailScanUserMessage(
+                    "IMPORT_PREVIEW_VALIDATION_ERROR"
+                ),
                 details: {
-                    expected: "items array",
+                    expected:
+                        "items, selectedItems, selected, draftsCandidates, or an array of productResult items",
                     receivedKeys: context.bodyKeys,
                 },
                 errors: error.issues.map((issue) => ({

@@ -54,6 +54,21 @@ export class ImportPreviewServiceError extends Error {
     }
 }
 
+export class ImportPreviewValidationError extends Error {
+    constructor(
+        message: string,
+        public details: {
+            receivedKeys: string[];
+            expectedShape: string;
+            sourceShape?: string;
+            warnings?: string[];
+        }
+    ) {
+        super(message);
+        this.name = "ImportPreviewValidationError";
+    }
+}
+
 export type ScanImportConfirmCreatedItem = {
     sourceItemId?: string;
     subscriptionId: string;
@@ -99,6 +114,7 @@ type ImportConfirmDependencies = {
 const scanImportItemSchema = z
     .object({
         id: z.string().trim().min(1).optional(),
+        sourceItemId: z.string().trim().min(1).optional(),
         displayName: z.string().trim().min(1).optional(),
         provider: z.string().trim().min(1).optional(),
         name: z.string().trim().min(1).optional(),
@@ -110,7 +126,7 @@ const scanImportItemSchema = z
         productBucket: z.string().trim().min(1).optional(),
         primaryAction: z.string().trim().min(1).optional(),
         userFacingReason: z.string().trim().min(1).optional(),
-        amount: z.string().trim().min(1).optional(),
+        amount: z.union([z.string().trim().min(1), z.number().positive()]).optional(),
         displayAmount: z.string().trim().min(1).optional(),
         amountKind: z.string().trim().min(1).optional(),
         billingCycle: z.string().trim().min(1).optional(),
@@ -136,7 +152,14 @@ const scanImportItemSchema = z
     })
     .passthrough()
     .refine(
-        (item) => Boolean(item.id || item.displayName || item.provider || item.name),
+        (item) =>
+            Boolean(
+                item.id ||
+                    item.sourceItemId ||
+                    item.displayName ||
+                    item.provider ||
+                    item.name
+            ),
         {
             message: "scan item must include id, displayName, provider, or name",
         }
@@ -148,8 +171,32 @@ const scanImportItemSchema = z
 const IMPORT_PREVIEW_MAX_ITEMS = 50;
 
 const importPreviewSchema = z.object({
-    items: z.array(z.unknown()).min(1),
+    items: z.array(z.unknown()),
 });
+
+const IMPORT_PREVIEW_ARRAY_KEYS = [
+    "items",
+    "selectedItems",
+    "selected",
+    "draftsCandidates",
+] as const;
+
+const IMPORT_PREVIEW_WRAPPER_KEYS = [
+    "item",
+    "productItem",
+    "sourceItem",
+    "originalItem",
+    "product",
+    "data",
+] as const;
+
+const UI_ONLY_IMPORT_KEYS = new Set([
+    "selected",
+    "localDecision",
+    "checked",
+    "reviewedAt",
+    "uiState",
+]);
 
 const subscriptionDraftSchema = z
     .object({
@@ -191,20 +238,164 @@ const importConfirmSchema = z.object({
 
 type ScanImportItem = z.infer<typeof scanImportItemSchema> & ProductBucketInput;
 
-export function validateScanImportSelection(payload: unknown) {
-    return importPreviewSchema.parse(payload);
+type ImportPreviewNormalization = {
+    items: unknown[];
+    sourceShape: string;
+    rawItemCount: number;
+    normalizedItemCount: number;
+    skippedItemCount: number;
+    warnings: string[];
+    receivedKeys: string[];
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return Boolean(value && typeof value === "object" && !Array.isArray(value));
 }
 
-function parseAmount(value: string | undefined) {
+function objectKeys(value: unknown) {
+    return isRecord(value) ? Object.keys(value).sort() : [];
+}
+
+function findInputArray(payload: unknown): {
+    items: unknown[];
+    sourceShape: string;
+    receivedKeys: string[];
+} {
+    if (Array.isArray(payload)) {
+        return {
+            items: payload,
+            sourceShape: "array_body",
+            receivedKeys: [],
+        };
+    }
+
+    if (!isRecord(payload)) {
+        return {
+            items: [],
+            sourceShape: "invalid_body",
+            receivedKeys: [],
+        };
+    }
+
+    for (const key of IMPORT_PREVIEW_ARRAY_KEYS) {
+        if (Array.isArray(payload[key])) {
+            return {
+                items: payload[key] as unknown[],
+                sourceShape: key,
+                receivedKeys: objectKeys(payload),
+            };
+        }
+    }
+
+    return {
+        items: [],
+        sourceShape: "missing_items_array",
+        receivedKeys: objectKeys(payload),
+    };
+}
+
+function stripUiOnlyFields(value: Record<string, unknown>) {
+    const sanitized: Record<string, unknown> = {};
+
+    for (const [key, fieldValue] of Object.entries(value)) {
+        if (!UI_ONLY_IMPORT_KEYS.has(key)) {
+            sanitized[key] = fieldValue;
+        }
+    }
+
+    return sanitized;
+}
+
+function unwrapImportPreviewItem(value: unknown): {
+    item?: unknown;
+    wrapperKey?: string;
+} {
+    if (!isRecord(value)) {
+        return {};
+    }
+
+    for (const key of IMPORT_PREVIEW_WRAPPER_KEYS) {
+        if (isRecord(value[key])) {
+            return {
+                item: stripUiOnlyFields(value[key] as Record<string, unknown>),
+                wrapperKey: key,
+            };
+        }
+    }
+
+    return {
+        item: stripUiOnlyFields(value),
+        wrapperKey: "direct",
+    };
+}
+
+export function normalizeImportPreviewItems(
+    payload: unknown
+): ImportPreviewNormalization {
+    const input = findInputArray(payload);
+    const warnings: string[] = [];
+    const items: unknown[] = [];
+    let skippedItemCount = 0;
+    const wrapperShapes = new Set<string>();
+
+    for (const rawItem of input.items) {
+        const unwrapped = unwrapImportPreviewItem(rawItem);
+
+        if (!unwrapped.item) {
+            skippedItemCount += 1;
+            continue;
+        }
+
+        if (unwrapped.wrapperKey) {
+            wrapperShapes.add(unwrapped.wrapperKey);
+        }
+
+        items.push(unwrapped.item);
+    }
+
+    if (skippedItemCount > 0) {
+        warnings.push(
+            "Some selected items were skipped because they were not valid import candidates."
+        );
+    }
+
+    return {
+        items,
+        sourceShape:
+            wrapperShapes.size > 0
+                ? `${input.sourceShape}:${Array.from(wrapperShapes).sort().join("|")}`
+                : input.sourceShape,
+        rawItemCount: input.items.length,
+        normalizedItemCount: items.length,
+        skippedItemCount,
+        warnings,
+        receivedKeys: input.receivedKeys,
+    };
+}
+
+export function validateScanImportSelection(payload: unknown) {
+    const normalized = normalizeImportPreviewItems(payload);
+
+    return {
+        ...importPreviewSchema.parse({ items: normalized.items }),
+        normalization: normalized,
+    };
+}
+
+function parseAmount(value: string | number | undefined) {
     if (!value) return undefined;
+    if (typeof value === "number") {
+        return Number.isFinite(value) && value > 0 ? value : undefined;
+    }
     const match = value.replace(/\s/g, "").match(/\d+(?:[,.]\d{1,2})?/);
     if (!match) return undefined;
     const parsed = Number(match[0].replace(",", "."));
     return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
-function parseCurrency(value: string | undefined) {
+function parseCurrency(value: string | number | undefined) {
     if (!value) return undefined;
+    if (typeof value === "number") return undefined;
     const upper = value.toUpperCase();
 
     if (upper.includes("PLN") || /\bz[łl]\b/i.test(value)) return "PLN";
@@ -446,7 +637,7 @@ export function mapScanItemToSubscriptionDraft(
               };
 
     return {
-        sourceItemId: item.id,
+        sourceItemId: item.id ?? item.sourceItemId,
         recommendedAction,
         draft,
         warnings,
@@ -463,25 +654,44 @@ export function buildImportPreview(payload: unknown) {
         );
     }
 
-    return {
-        drafts: parsed.items.map((item, index) => {
-            const itemResult = scanImportItemSchema.safeParse(item);
+    const warnings = [...parsed.normalization.warnings];
+    const drafts: ScanImportPreviewDraft[] = [];
+    let invalidSchemaItems = 0;
 
-            if (!itemResult.success) {
-                return {
-                    sourceItemId:
-                        item && typeof item === "object" && "id" in item
-                            ? String((item as { id?: unknown }).id ?? "")
-                            : undefined,
-                    recommendedAction: "skip" as ImportRecommendation,
-                    warnings: [
-                        `Selected item ${index + 1} could not be parsed and was skipped.`,
-                    ],
-                };
+    for (const item of parsed.items) {
+        const itemResult = scanImportItemSchema.safeParse(item);
+
+        if (!itemResult.success) {
+            invalidSchemaItems += 1;
+            continue;
+        }
+
+        drafts.push(mapScanItemToSubscriptionDraft(itemResult.data as ScanImportItem));
+    }
+
+    if (invalidSchemaItems > 0) {
+        warnings.push(
+            "Some selected items were skipped because they were not valid import candidates."
+        );
+    }
+
+    if (drafts.length === 0) {
+        throw new ImportPreviewValidationError(
+            "Expected selected productResult items.",
+            {
+                receivedKeys: parsed.normalization.receivedKeys,
+                expectedShape:
+                    "items, selectedItems, selected, draftsCandidates, or an array of productResult items",
+                sourceShape: parsed.normalization.sourceShape,
+                warnings,
             }
+        );
+    }
 
-            return mapScanItemToSubscriptionDraft(itemResult.data as ScanImportItem);
-        }),
+    return {
+        drafts,
+        warnings,
+        sourceShape: parsed.normalization.sourceShape,
     };
 }
 

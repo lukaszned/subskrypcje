@@ -21,7 +21,7 @@ Other IMAP providers are not blocked architecturally, but they are not officiall
 | Provider | Flow type | Endpoint | Tested | Reliability | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Gmail | OAuth / Gmail API | `POST /email-scan/gmail/scan` | Existing flow; contract audited in Phase 63 | Depends on Gmail API path | Does not require IMAP password. Current response is legacy detection-oriented, not `productResult` bucket-oriented yet. |
-| Onet | Manual IMAP | `POST /email-scan/imap/scan` | Yes | Medium | Server-side BODY/HEADER targeted search was not useful; adaptive scan uses metadata prepass plus time-bucket fallback. |
+| Onet | Manual IMAP | `POST /email-scan/imap/scan` | Yes | Medium | Server-side BODY/HEADER targeted search was weak in deep testing. Mobile MVP uses fast-only scan to reduce timeout risk. |
 | Interia | Manual IMAP | `POST /email-scan/imap/scan` | Yes | High | BODY targeted search is useful; payment-processor bill dedupe is handled globally. |
 | Other IMAP | Manual IMAP later | `POST /email-scan/imap/scan` | No | Unknown | Future provider preset/update after real testing. Manual endpoint may work, but frontend should mark it experimental if exposed. |
 
@@ -101,9 +101,10 @@ Backend TODO, post-MVP or before unified UI:
 
 `profile` values for the mobile MVP:
 
-- Frontend may send `balanced`, omit `profile`, or keep older values such as `fast`, `adaptive`, or `deep`.
-- Backend normalizes all requested values to the stable MVP profile: `balanced`.
-- Unknown profile strings are accepted and normalized to `balanced`; they are not rejected for MVP compatibility.
+- Frontend should not expose scan profile choices in the MVP UI.
+- Frontend may send `fast`, omit `profile`, or keep older values such as `balanced`, `adaptive`, or `deep`.
+- Backend normalizes all requested values to the fast MVP profile: `fast`.
+- Unknown profile strings are accepted and normalized to `fast`; they are not rejected for MVP compatibility.
 - The response includes `scanSummary.profileRequested`, `scanSummary.profileEffective`, `scanSummary.profileNormalized`, and `scanSummary.profileNormalizationReason`.
 
 This keeps the mobile app contract simple while preserving the old request field for backward compatibility.
@@ -253,6 +254,9 @@ Useful frontend fields:
 - `profileEffective`
 - `profileNormalized`
 - `profileNormalizationReason`
+- `startedAt`
+- `completedAt`
+- `durationMs`
 - `effectiveScanMode`
 - `effectiveWindowDays`
 - `scanReliabilityLevel`
@@ -317,7 +321,7 @@ IMAP errors are credential-safe and do not include raw server internals:
 
 - IMAP scan results are not auto-saved. The user must review selected items, call `import-preview`, then call `import-confirm`.
 - Price-change notices are not automatically applied to existing records yet.
-- Some providers have weak server-side IMAP search; adaptive/deep scans use metadata prepass and time-bucket fallback.
+- Some providers have weak server-side IMAP search. For MVP mobile stability, the backend uses fast-only IMAP scanning instead of adaptive/deep fallbacks.
 - The scan intentionally avoids returning raw email bodies.
 
 ## Import / Confirmation Flow
@@ -345,7 +349,18 @@ For mobile MVP, send at most 50 selected items at once. If the request exceeds t
 }
 ```
 
-Malformed selected items are skipped item-by-item where possible and returned as `recommendedAction: "skip"` with a warning, so one bad card does not break the entire preview.
+Malformed selected items are skipped item-by-item where possible and reported in top-level `warnings`, so one bad card does not break the entire preview when at least one valid item remains.
+
+Accepted mobile payload shapes:
+
+- `{ "items": [productResultItem] }`
+- `{ "selectedItems": [productResultItem] }`
+- `{ "selected": [productResultItem] }`
+- `{ "draftsCandidates": [productResultItem] }`
+- `[productResultItem]`
+- wrapper entries such as `{ "item": productResultItem }`, `{ "productItem": productResultItem }`, `{ "sourceItem": productResultItem }`, `{ "originalItem": productResultItem }`, `{ "product": productResultItem }`, or `{ "data": productResultItem }`
+
+UI-only wrapper fields such as `selected`, `checked`, `localDecision`, `reviewedAt`, and `uiState` are ignored. Helper display fields such as `categoryLabel`, `productBucketLabel`, `primaryActionLabel`, `recommendedSelected`, and `selectionReason` are tolerated.
 
 Request:
 
@@ -519,7 +534,7 @@ Recommended MVP behavior:
    - `username`
    - `password` or app password
    - `mailbox`, default `INBOX`
-   - `profile`, default `adaptive`
+   - do not show a scan profile picker for MVP; omit `profile` or send `fast`
 4. Call `POST /email-scan/imap/scan` with `includeDebug=false`.
 5. Show scan coverage before results:
    - `scanReliabilityLevel`
@@ -617,7 +632,7 @@ Bills and utilities:
   "username": "user@example.com",
   "password": "app-password",
   "mailbox": "INBOX",
-  "profile": "adaptive",
+  "profile": "fast",
   "includeDebug": false
 }
 ```
@@ -694,12 +709,15 @@ Bills and utilities:
     }
   },
   "scanSummary": {
-    "scanProfile": "balanced",
+    "scanProfile": "fast",
     "profileRequested": "adaptive",
-    "profileEffective": "balanced",
+    "profileEffective": "fast",
     "profileNormalized": true,
-    "profileNormalizationReason": "MVP mobile scan uses the stable balanced profile.",
-    "effectiveScanMode": "deep",
+    "profileNormalizationReason": "MVP mobile scan uses the fast profile to avoid long mailbox scans.",
+    "startedAt": "2026-06-02T12:00:00.000Z",
+    "completedAt": "2026-06-02T12:00:08.000Z",
+    "durationMs": 8000,
+    "effectiveScanMode": "recent_window",
     "scanReliabilityLevel": "medium",
     "recommendedFallbackStrategy": "metadata_prepass_plus_time_buckets",
     "deepScanRecommended": false,
@@ -969,7 +987,7 @@ Recommended implementation:
 1. Build a provider choice screen: Gmail, Onet, Interia.
 2. Gmail starts the existing OAuth/connect flow and uses the existing Gmail scan/detections path.
 3. Onet/Interia show IMAP fields or presets.
-4. Call IMAP scan with `profile="adaptive"` and `includeDebug=false`.
+4. Call IMAP scan with `profile="fast"` or omit `profile`, and keep `includeDebug=false`.
 5. Show reliability/coverage note first.
 6. Render IMAP buckets separately: current subscriptions, needs review, price changes, bills/utilities, historical.
 7. Let the user select IMAP bucket items.

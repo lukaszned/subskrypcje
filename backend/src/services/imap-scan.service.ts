@@ -101,9 +101,12 @@ export type ScanImapSubscriptionsInput = {
 export type ImapScanSummary = {
     scanProfile: ImapProductScanProfile;
     profileRequested?: string | null;
-    profileEffective: "balanced";
+    profileEffective: "fast";
     profileNormalized: boolean;
     profileNormalizationReason?: string;
+    startedAt?: string;
+    completedAt?: string;
+    durationMs?: number;
     scanMode: ImapScanMode;
     effectiveScanMode: ImapScanMode;
     effectiveWindowDays: number;
@@ -198,7 +201,7 @@ export type ImapScanSummary = {
 
 export function normalizeImapScanProfile(inputProfile: unknown): {
     requestedProfile: string | null;
-    effectiveProfile: "balanced";
+    effectiveProfile: "fast";
     normalizedFrom: string | null;
     warning?: string;
 } {
@@ -209,17 +212,17 @@ export function normalizeImapScanProfile(inputProfile: unknown): {
 
     return {
         requestedProfile,
-        effectiveProfile: "balanced",
+        effectiveProfile: "fast",
         normalizedFrom:
-            requestedProfile && requestedProfile !== "balanced"
+            requestedProfile && requestedProfile !== "fast"
                 ? requestedProfile
                 : null,
         warning:
-            requestedProfile && requestedProfile !== "balanced"
-                ? "MVP mobile scan uses the stable balanced profile."
+            requestedProfile && requestedProfile !== "fast"
+                ? "MVP mobile scan uses the fast profile to avoid long mailbox scans."
                 : requestedProfile
                 ? undefined
-                : "MVP mobile scan uses the stable balanced profile.",
+                : "MVP mobile scan uses the fast profile to avoid long mailbox scans.",
     };
 }
 
@@ -2738,6 +2741,7 @@ export async function scanImapSubscriptions(
     const defaults = profileDefaults(profile);
     const mailbox = input.mailbox?.trim() || "INBOX";
     const now = input.now ?? new Date();
+    const startedAt = new Date();
     const client = new ImapFlow({
         host: input.host,
         port: input.port,
@@ -2814,12 +2818,16 @@ export async function scanImapSubscriptions(
             stats.metadataPrepassFetched > 0
                 ? " Targeted IMAP search returned 0; metadata prepass was used."
                 : "");
+        const completedAt = new Date();
         const scanSummary: ImapScanSummary = {
             scanProfile: profile,
             profileRequested: profileNormalization.requestedProfile,
             profileEffective: profileNormalization.effectiveProfile,
             profileNormalized: Boolean(profileNormalization.warning),
             profileNormalizationReason: profileNormalization.warning,
+            startedAt: startedAt.toISOString(),
+            completedAt: completedAt.toISOString(),
+            durationMs: completedAt.getTime() - startedAt.getTime(),
             scanMode: defaults.scanMode,
             effectiveScanMode: plan.effectiveScanMode,
             effectiveWindowDays: plan.effectiveWindowDays,
