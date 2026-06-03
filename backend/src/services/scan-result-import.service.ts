@@ -38,6 +38,11 @@ export type ScanImportPreviewDraft = {
     recommendedAction: ImportRecommendation;
     draft?: SubscriptionDraft;
     warnings: string[];
+    previewTitle?: string;
+    previewSubtitle?: string;
+    previewWarnings: string[];
+    canConfirm: boolean;
+    missingFields: string[];
 };
 
 export type ImportPreviewServiceErrorCode =
@@ -80,7 +85,10 @@ export type ScanImportConfirmCreatedItem = {
 export type ScanImportConfirmSkippedItem = {
     sourceItemId?: string;
     reason: "duplicate" | "unsupported_action" | "missing_required_field";
+    message: string;
+    userMessage: string;
     duplicateSubscriptionId?: string;
+    existingSubscriptionId?: string;
     missingFields?: string[];
 };
 
@@ -115,6 +123,7 @@ const scanImportItemSchema = z
     .object({
         id: z.string().trim().min(1).optional(),
         sourceItemId: z.string().trim().min(1).optional(),
+        itemSelectionKey: z.string().trim().min(1).optional(),
         displayName: z.string().trim().min(1).optional(),
         provider: z.string().trim().min(1).optional(),
         name: z.string().trim().min(1).optional(),
@@ -150,18 +159,12 @@ const scanImportItemSchema = z
         selectedAmountSourceDate: z.string().trim().min(1).optional(),
         selectedAmountSourceSubject: z.string().trim().min(1).optional(),
     })
-    .passthrough()
+        .passthrough()
     .refine(
         (item) =>
-            Boolean(
-                item.id ||
-                    item.sourceItemId ||
-                    item.displayName ||
-                    item.provider ||
-                    item.name
-            ),
+            Boolean(item.displayName || item.provider || item.name),
         {
-            message: "scan item must include id, displayName, provider, or name",
+            message: "scan item must include displayName, provider, or name",
         }
     )
     .refine((item) => Boolean(item.productBucket || item.primaryAction || item.status), {
@@ -244,6 +247,7 @@ type ImportPreviewNormalization = {
     rawItemCount: number;
     normalizedItemCount: number;
     skippedItemCount: number;
+    acceptedWrapperKeys: string[];
     warnings: string[];
     receivedKeys: string[];
 };
@@ -368,6 +372,7 @@ export function normalizeImportPreviewItems(
         rawItemCount: input.items.length,
         normalizedItemCount: items.length,
         skippedItemCount,
+        acceptedWrapperKeys: Array.from(wrapperShapes).sort(),
         warnings,
         receivedKeys: input.receivedKeys,
     };
@@ -635,12 +640,45 @@ export function mapScanItemToSubscriptionDraft(
                   status: "pending",
                   notes: buildNotes(item, warnings, recommendedAction),
               };
+    const missingFields: string[] = [];
+
+    if (
+        ["create_subscription", "review_bill"].includes(recommendedAction) &&
+        !amount
+    ) {
+        missingFields.push("amount");
+    }
+
+    if (
+        ["create_subscription", "review_bill"].includes(recommendedAction) &&
+        !nextPaymentDate
+    ) {
+        missingFields.push("nextPaymentDate");
+    }
+
+    const canConfirm = Boolean(
+        draft &&
+            ["create_subscription", "review_bill"].includes(recommendedAction) &&
+            missingFields.length === 0
+    );
 
     return {
-        sourceItemId: item.id ?? item.sourceItemId,
+        sourceItemId: item.sourceItemId ?? item.id ?? item.itemSelectionKey,
         recommendedAction,
         draft,
         warnings,
+        previewTitle: item.displayName ?? item.name ?? item.provider ?? "Scan item",
+        previewSubtitle:
+            recommendedAction === "review_bill"
+                ? "Recurring bill"
+                : recommendedAction === "review_price_change"
+                ? "Price change"
+                : recommendedAction === "create_subscription"
+                ? "Subscription draft"
+                : "Skipped",
+        previewWarnings: warnings,
+        canConfirm,
+        missingFields,
     };
 }
 
@@ -677,11 +715,10 @@ export function buildImportPreview(payload: unknown) {
 
     if (drafts.length === 0) {
         throw new ImportPreviewValidationError(
-            "Expected selected productResult items.",
+            "No valid import candidates found.",
             {
                 receivedKeys: parsed.normalization.receivedKeys,
-                expectedShape:
-                    "items, selectedItems, selected, draftsCandidates, or an array of productResult items",
+                expectedShape: "{ items: [productResultItem] }",
                 sourceShape: parsed.normalization.sourceShape,
                 warnings,
             }
@@ -692,6 +729,14 @@ export function buildImportPreview(payload: unknown) {
         drafts,
         warnings,
         sourceShape: parsed.normalization.sourceShape,
+        previewDebug: {
+            rawItemCount: parsed.normalization.rawItemCount,
+            normalizedItemCount: parsed.normalization.normalizedItemCount,
+            skippedItemCount:
+                parsed.normalization.skippedItemCount + invalidSchemaItems,
+            receivedKeys: parsed.normalization.receivedKeys,
+            acceptedWrapperKeys: parsed.normalization.acceptedWrapperKeys,
+        },
     };
 }
 
@@ -711,6 +756,12 @@ function normalizeConfirmStatus(value: string | undefined) {
     return "pending";
 }
 
+function normalizeConfirmCurrency(value: string | undefined) {
+    const normalized = (value ?? "PLN").trim().toUpperCase();
+
+    return /^[A-Z]{3,5}$/.test(normalized) ? normalized : "PLN";
+}
+
 function sanitizeDraftNotes(notes: string | null | undefined) {
     if (!notes) return null;
 
@@ -718,12 +769,50 @@ function sanitizeDraftNotes(notes: string | null | undefined) {
         .split(/\r?\n/)
         .filter(
             (line) =>
-                !/\b(raw|body|snippet|debug|credential|password|token|secret)\b/i.test(
+                !/\b(raw|body|snippet|debug|credential|password|token|secret|oauth|authorization)\b/i.test(
                     line
-                )
+                ) &&
+                !/\b(access|refresh)\s+token\b/i.test(line)
         );
 
     return safeLines.join("\n").slice(0, 1000) || null;
+}
+
+function buildSkippedImportItem(args: {
+    sourceItemId?: string;
+    reason: ScanImportConfirmSkippedItem["reason"];
+    missingFields?: string[];
+    duplicateSubscriptionId?: string;
+}): ScanImportConfirmSkippedItem {
+    const hasMissingAmount = args.missingFields?.includes("draft.amount");
+    const userMessage =
+        args.reason === "duplicate"
+            ? "Ta pozycja wygląda na już dodaną."
+            : args.reason === "missing_required_field" && hasMissingAmount
+            ? "Uzupełnij kwotę przed zapisaniem tej pozycji."
+            : args.reason === "missing_required_field"
+            ? "Uzupełnij brakujące dane przed zapisaniem tej pozycji."
+            : "Ten typ wyniku wymaga ręcznego sprawdzenia.";
+    const message =
+        args.reason === "duplicate"
+            ? "Duplicate subscription skipped."
+            : args.reason === "missing_required_field"
+            ? "Required subscription fields are missing."
+            : "Unsupported import action skipped.";
+
+    return {
+        sourceItemId: args.sourceItemId,
+        reason: args.reason,
+        message,
+        userMessage,
+        ...(args.missingFields ? { missingFields: args.missingFields } : {}),
+        ...(args.duplicateSubscriptionId
+            ? {
+                  duplicateSubscriptionId: args.duplicateSubscriptionId,
+                  existingSubscriptionId: args.duplicateSubscriptionId,
+              }
+            : {}),
+    };
 }
 
 function toCreateSubscriptionInput(
@@ -747,7 +836,7 @@ function toCreateSubscriptionInput(
         provider: draft.provider ?? null,
         planName: draft.planName ?? null,
         amount: draft.amount,
-        currency: draft.currency ?? "PLN",
+        currency: normalizeConfirmCurrency(draft.currency),
         category: normalizeConfirmCategory(draft.category),
         billingCycle: normalizeConfirmBillingCycle(draft.billingCycle),
         nextPaymentDate: new Date(draft.nextPaymentDate).toISOString(),
@@ -785,27 +874,27 @@ export async function confirmScanImportDrafts(
 
     for (const item of parsed.drafts) {
         if (item.recommendedAction === "skip") {
-            skipped.push({
+            skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
                 reason: "unsupported_action",
-            });
+            }));
             continue;
         }
 
         if (item.recommendedAction === "review_price_change") {
             warnings.add("Price-change items require manual review before saving.");
-            skipped.push({
+            skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
                 reason: "unsupported_action",
-            });
+            }));
             continue;
         }
 
         if (!["create_subscription", "review_bill"].includes(item.recommendedAction)) {
-            skipped.push({
+            skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
                 reason: "unsupported_action",
-            });
+            }));
             continue;
         }
 
@@ -819,22 +908,22 @@ export async function confirmScanImportDrafts(
         );
 
         if (!input) {
-            skipped.push({
+            skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
                 reason: "missing_required_field",
                 missingFields,
-            });
+            }));
             continue;
         }
 
         const duplicate = await dependencies.findPotentialDuplicate(userId, input);
 
         if (duplicate) {
-            skipped.push({
+            skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
                 reason: "duplicate",
                 duplicateSubscriptionId: duplicate.id,
-            });
+            }));
             continue;
         }
 

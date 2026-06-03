@@ -94,7 +94,7 @@ Backend TODO, post-MVP or before unified UI:
   "username": "user@example.com",
   "password": "app-password-or-imap-password",
   "mailbox": "INBOX",
-  "profile": "adaptive",
+  "profile": "fast",
   "includeDebug": false
 }
 ```
@@ -108,6 +108,10 @@ Backend TODO, post-MVP or before unified UI:
 - The response includes `scanSummary.profileRequested`, `scanSummary.profileEffective`, `scanSummary.profileNormalized`, and `scanSummary.profileNormalizationReason`.
 
 This keeps the mobile app contract simple while preserving the old request field for backward compatibility.
+
+The IMAP scan endpoint does not write subscriptions, bills, price changes, or raw email content to the database. The user must review results, call `POST /email-scan/import-preview`, and only then call `POST /email-scan/import-confirm` for selected drafts.
+
+Never commit real scan artifacts such as `imap-*.json`, `gmail-*.json`, `import-preview-*.json`, or `confirm-debug-body.json`.
 
 ## Response
 
@@ -153,6 +157,8 @@ Bucket items use stable field names. Fields are omitted when not applicable.
 Common fields:
 
 - `id`
+- `sourceItemId`
+- `itemSelectionKey`
 - `displayName`
 - `provider`
 - `billingChannel`
@@ -218,6 +224,8 @@ Frontend helper fields are additive. Existing technical fields remain the source
 - `amountKindLabel`: Polish amount label such as `Kwota do zapłaty`, or `null` when no amount kind exists.
 - `recommendedSelected`: backend suggestion for "Zaznacz rekomendowane".
 - `selectionReason`: short Polish explanation shown near bulk-selection decisions.
+
+Frontend should use `sourceItemId` or `itemSelectionKey` for stable React keys and selection maps. Send the full productResult item to `POST /email-scan/import-preview`; raw debug data is not required.
 
 Recommended selection policy:
 
@@ -481,7 +489,9 @@ Response:
   "skipped": [
     {
       "sourceItemId": "amazon|price_change|ecommerce_membership",
-      "reason": "unsupported_action"
+      "reason": "unsupported_action",
+      "message": "Unsupported import action skipped.",
+      "userMessage": "Ten typ wyniku wymaga ręcznego sprawdzenia."
     }
   ],
   "warnings": [
@@ -501,10 +511,15 @@ Persistence policy:
 - `review_bill`: creates a recurring bill using the current `Subscription` model with `isRecurringBill=true`.
 - `review_price_change`: skipped for now with `unsupported_action`; frontend should show it as a manual review/update task.
 - `skip`: skipped.
-- Duplicate protection checks existing non-canceled subscriptions for the same user/name/provider/plan.
+- Duplicate protection checks existing non-canceled subscriptions for the same authenticated user using normalized provider, name, category, amount, and currency. Re-sending the same confirmed draft should create it once and then skip it with `reason: "duplicate"`.
 - The authenticated user id is always used; any client-provided `userId` is ignored.
 - Drafts missing required model fields such as `amount` or `nextPaymentDate` are skipped item-by-item with `missing_required_field`.
+- Skipped items include frontend-safe messages:
+  - Missing amount: `Uzupełnij kwotę przed zapisaniem tej pozycji.`
+  - Duplicate: `Ta pozycja wygląda na już dodaną.`
+  - Unsupported action: `Ten typ wyniku wymaga ręcznego sprawdzenia.`
 - Raw bodies, credentials, tokens, debug payloads, and unknown client fields are not persisted.
+- Unsupported scan metadata is preserved only in safe `notes` lines when useful. Lines containing raw body, password, token, OAuth, secret, credential, or debug payload wording are stripped before persistence.
 
 ## Frontend Implementation Checklist
 
@@ -772,14 +787,28 @@ Send the selected product items as returned by the scan response:
       },
       "warnings": [
         "User should confirm this historical subscription is still active."
-      ]
+      ],
+      "previewTitle": "Streaming Service on Marketplace",
+      "previewSubtitle": "Subscription draft",
+      "previewWarnings": [
+        "User should confirm this historical subscription is still active."
+      ],
+      "canConfirm": true,
+      "missingFields": []
     },
     {
       "sourceItemId": "membership|ecommerce_membership",
       "recommendedAction": "review_price_change",
       "warnings": [
         "Price-change notices should be applied to an existing subscription after user review."
-      ]
+      ],
+      "previewTitle": "Membership",
+      "previewSubtitle": "Price change",
+      "previewWarnings": [
+        "Price-change notices should be applied to an existing subscription after user review."
+      ],
+      "canConfirm": false,
+      "missingFields": []
     },
     {
       "sourceItemId": "utility-provider|utilities_energy",
@@ -796,11 +825,29 @@ Send the selected product items as returned by the scan response:
       },
       "warnings": [
         "Bill-like items should be reviewed separately before adding as recurring bills."
-      ]
+      ],
+      "previewTitle": "Utility Provider",
+      "previewSubtitle": "Recurring bill",
+      "previewWarnings": [
+        "Bill-like items should be reviewed separately before adding as recurring bills."
+      ],
+      "canConfirm": true,
+      "missingFields": []
     }
-  ]
+  ],
+  "warnings": [],
+  "sourceShape": "items:direct",
+  "previewDebug": {
+    "rawItemCount": 3,
+    "normalizedItemCount": 3,
+    "skippedItemCount": 0,
+    "receivedKeys": ["items"],
+    "acceptedWrapperKeys": ["direct"]
+  }
 }
 ```
+
+`previewDebug` contains only safe metadata about the payload shape. It never includes raw selected items, credentials, tokens, OAuth code/state, or raw email content.
 
 ## Endpoint Error Handling For Frontend
 

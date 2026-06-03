@@ -4,3 +4,13 @@ dist/
 .env.local
 
 /src/generated/prisma
+
+# Local scan/debug artifacts. Never commit real mailbox scan output.
+imap-*.json
+gmail-*.json
+import-preview-*.json
+confirm-debug-body.json
+expo-web*.log
+*.tunnel.log
+cloudflared*.log
+ngrok*.log

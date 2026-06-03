@@ -135,7 +135,35 @@ function safeImportPreviewContext(body: unknown) {
         rawItemCount: normalized.rawItemCount,
         normalizedItemCount: normalized.normalizedItemCount,
         skippedItemCount: normalized.skippedItemCount,
+        acceptedWrapperKeys: normalized.acceptedWrapperKeys,
         buckets,
+        actions,
+    };
+}
+
+function safeImportConfirmContext(body: unknown) {
+    const bodyKeys = safeBodyKeys(body);
+    const drafts =
+        body &&
+        typeof body === "object" &&
+        !Array.isArray(body) &&
+        Array.isArray((body as Record<string, unknown>).drafts)
+            ? ((body as Record<string, unknown>).drafts as unknown[])
+            : [];
+    const actions: Record<string, number> = {};
+
+    for (const item of drafts) {
+        if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+        const action =
+            typeof (item as Record<string, unknown>).recommendedAction === "string"
+                ? ((item as Record<string, unknown>).recommendedAction as string)
+                : "unknown";
+        actions[action] = (actions[action] ?? 0) + 1;
+    }
+
+    return {
+        bodyKeys,
+        draftCount: drafts.length,
         actions,
     };
 }
@@ -202,16 +230,20 @@ router.post("/import-preview", requireAuth, async (req, res) => {
     const startedAt = Date.now();
     const appUser = (req as AuthenticatedRequest).appUser;
     const context = safeImportPreviewContext(req.body);
+    let responseCode: string | undefined;
 
     console.info("[email-scan] import-preview received", {
+        path: req.originalUrl,
         userId: appUser?.id,
         ...context,
     });
 
     res.on("finish", () => {
         console.info("[email-scan] import-preview finished", {
+            path: req.originalUrl,
             userId: appUser?.id,
             statusCode: res.statusCode,
+            responseCode,
             durationMs: Date.now() - startedAt,
             ...context,
         });
@@ -221,22 +253,24 @@ router.post("/import-preview", requireAuth, async (req, res) => {
         return res.json(buildImportPreview(req.body ?? {}));
     } catch (error) {
         if (error instanceof ImportPreviewServiceError) {
+            responseCode = error.code;
             return res
                 .status(error.code === "IMPORT_PREVIEW_TOO_MANY_ITEMS" ? 400 : 504)
                 .json({
                     message: error.message,
                     code: error.code,
                     userMessage: getEmailScanUserMessage(error.code),
-                details: {
-                    expected: "items array",
-                    receivedKeys: context.bodyKeys,
-                    itemCount: context.normalizedItemCount,
-                    maxItems: 50,
-                },
-            });
+                    details: {
+                        expected: "items array",
+                        receivedKeys: context.bodyKeys,
+                        itemCount: context.normalizedItemCount,
+                        maxItems: 50,
+                    },
+                });
         }
 
         if (error instanceof ImportPreviewValidationError) {
+            responseCode = "VALIDATION_ERROR";
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
@@ -246,7 +280,7 @@ router.post("/import-preview", requireAuth, async (req, res) => {
                 errors: [
                     {
                         field: "items",
-                        message: `${error.message} Received keys: ${error.details.receivedKeys.join(", ") || "(none)"}`,
+                        message: error.message,
                     },
                 ],
                 receivedKeys: error.details.receivedKeys,
@@ -257,6 +291,7 @@ router.post("/import-preview", requireAuth, async (req, res) => {
         }
 
         if (error instanceof ZodError) {
+            responseCode = "VALIDATION_ERROR";
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
@@ -275,6 +310,7 @@ router.post("/import-preview", requireAuth, async (req, res) => {
             });
         }
 
+        responseCode = "INTERNAL_SERVER_ERROR";
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",
@@ -283,10 +319,39 @@ router.post("/import-preview", requireAuth, async (req, res) => {
     }
 });
 router.post("/import-confirm", requireAuth, async (req, res) => {
-    try {
-        const appUser = (req as AuthenticatedRequest).appUser;
+    const startedAt = Date.now();
+    const appUser = (req as AuthenticatedRequest).appUser;
+    const context = safeImportConfirmContext(req.body);
+    let responseCode: string | undefined;
+    let resultSummary:
+        | {
+              created: number;
+              skipped: number;
+              skippedReasons: Record<string, number>;
+          }
+        | undefined;
 
+    console.info("[email-scan] import-confirm received", {
+        path: req.originalUrl,
+        userId: appUser?.id,
+        ...context,
+    });
+
+    res.on("finish", () => {
+        console.info("[email-scan] import-confirm finished", {
+            path: req.originalUrl,
+            userId: appUser?.id,
+            statusCode: res.statusCode,
+            responseCode,
+            durationMs: Date.now() - startedAt,
+            ...context,
+            resultSummary,
+        });
+    });
+
+    try {
         if (!appUser) {
+            responseCode = "UNAUTHORIZED";
             return res.status(401).json({
                 message: "Unauthorized",
                 code: "UNAUTHORIZED",
@@ -298,10 +363,22 @@ router.post("/import-confirm", requireAuth, async (req, res) => {
             appUser.id,
             req.body ?? {}
         );
+        resultSummary = {
+            created: result.created.length,
+            skipped: result.skipped.length,
+            skippedReasons: result.skipped.reduce<Record<string, number>>(
+                (summary, item) => {
+                    summary[item.reason] = (summary[item.reason] ?? 0) + 1;
+                    return summary;
+                },
+                {}
+            ),
+        };
 
         return res.status(201).json(result);
     } catch (error) {
         if (error instanceof ZodError) {
+            responseCode = "VALIDATION_ERROR";
             return res.status(400).json({
                 message: "Validation error",
                 code: "VALIDATION_ERROR",
@@ -313,6 +390,7 @@ router.post("/import-confirm", requireAuth, async (req, res) => {
             });
         }
 
+        responseCode = "INTERNAL_SERVER_ERROR";
         return res.status(500).json({
             message: "Internal server error",
             code: "INTERNAL_SERVER_ERROR",

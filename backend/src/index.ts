@@ -9,8 +9,10 @@ import emailScanRouter from "./routes/email-scan";
 import { emailScanDebugMiddleware } from "./middlewares/email-scan-debug.middleware";
 import { prisma } from "./lib/prisma";
 import { startExchangeRateRefreshJob } from "./services/exchange-rate.service";
+import { logStartupEnvironmentDiagnostics } from "./config/env";
 
 dotenv.config();
+logStartupEnvironmentDiagnostics();
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;

@@ -1157,6 +1157,13 @@ function runProductResultFrontendHelperCase() {
             failures.push({ field, expected, actual: value });
         }
     };
+    const allItems = [
+        ...result.currentSubscriptions,
+        ...result.needsReviewSubscriptions,
+        ...result.historicalSubscriptions,
+        ...result.priceChanges,
+        ...result.billsOrUtilities,
+    ];
     const strong = result.currentSubscriptions.find(
         (item) => item.displayName === "Strong Current"
     );
@@ -1181,6 +1188,26 @@ function runProductResultFrontendHelperCase() {
     assertField("Current action label", "Dodaj jako aktywną", strong?.primaryActionLabel);
     assertField("Current amount kind label", "Pobrano", strong?.amountKindLabel);
     assertField("Current recommended selected", true, strong?.recommendedSelected);
+    assertField(
+        "Every item has sourceItemId",
+        true,
+        allItems.every((item) => Boolean(item.sourceItemId))
+    );
+    assertField(
+        "Every item has itemSelectionKey",
+        true,
+        allItems.every((item) => Boolean(item.itemSelectionKey))
+    );
+    assertField(
+        "Every item has helper labels",
+        true,
+        allItems.every(
+            (item) =>
+                Boolean(item.productBucketLabel) &&
+                Boolean(item.categoryLabel) &&
+                Boolean(item.primaryActionLabel)
+        )
+    );
     assertField("Current missing amount recommended", false, missing?.recommendedSelected);
     assertField(
         "Current missing amount reason",
@@ -1242,6 +1269,8 @@ function runProductResultFrontendHelperCase() {
 function runImportPreviewCase() {
     const wrappedProductItem = {
         id: "wrapped-sub",
+        sourceItemId: "wrapped-source",
+        itemSelectionKey: "wrapped-selection-key",
         displayName: "Wrapped Stream",
         provider: "Wrapped Stream",
         category: "streaming_video",
@@ -1346,11 +1375,27 @@ function runImportPreviewCase() {
     const selectedItemsPreview = buildImportPreview({
         selectedItems: [wrappedProductItem],
     });
+    const selectedPreview = buildImportPreview({
+        selected: [wrappedProductItem],
+    });
+    const directArrayPreview = buildImportPreview([wrappedProductItem]);
     const wrappedItemPreview = buildImportPreview({
-        items: [{ item: wrappedProductItem, selected: true, uiState: "checked" }],
+        items: [
+            {
+                item: wrappedProductItem,
+                selected: true,
+                decision: "preview",
+                localDecision: "selected",
+                reviewedAt: "2026-06-03T10:00:00.000Z",
+                uiState: "checked",
+            },
+        ],
     });
     const wrappedProductItemPreview = buildImportPreview({
         items: [{ productItem: wrappedProductItem, checked: true }],
+    });
+    const wrappedSourceItemPreview = buildImportPreview({
+        items: [{ sourceItem: wrappedProductItem }],
     });
     const failures: AssertionFailure[] = [];
     const assertField = (field: string, expected: unknown, value: unknown) => {
@@ -1372,6 +1417,8 @@ function runImportPreviewCase() {
     let invalidRejected = false;
     let invalidUserMessage = false;
     let invalidReceivedKeys: string[] = [];
+    let idOnlyRejected = false;
+    let idOnlyMessage: string | undefined;
     const tooManyItems = Array.from({ length: 51 }, (_, index) => ({
         id: `item-${index}`,
         displayName: `Item ${index}`,
@@ -1397,6 +1444,21 @@ function runImportPreviewCase() {
     }
 
     try {
+        buildImportPreview({
+            items: [
+                {
+                    id: "only-id",
+                    selected: true,
+                    localDecision: "selected",
+                },
+            ],
+        });
+    } catch (error) {
+        idOnlyRejected = error instanceof ImportPreviewValidationError;
+        idOnlyMessage = error instanceof Error ? error.message : undefined;
+    }
+
+    try {
         buildImportPreview({ items: tooManyItems });
     } catch (error) {
         tooManyRejected = true;
@@ -1406,16 +1468,34 @@ function runImportPreviewCase() {
 
     assertField("Draft count", 6, preview.drafts.length);
     assertField("selectedItems shape works", 1, selectedItemsPreview.drafts.length);
+    assertField("selected shape works", 1, selectedPreview.drafts.length);
+    assertField("direct array shape works", 1, directArrayPreview.drafts.length);
     assertField("wrapped item shape works", 1, wrappedItemPreview.drafts.length);
     assertField(
         "wrapped productItem shape works",
         1,
         wrappedProductItemPreview.drafts.length
     );
+    assertField("wrapped sourceItem shape works", 1, wrappedSourceItemPreview.drafts.length);
     assertField(
         "helper fields tolerated",
-        "wrapped-sub",
+        "wrapped-source",
         selectedItemsPreview.drafts[0]?.sourceItemId
+    );
+    assertField(
+        "Preview debug source shape",
+        "selectedItems:direct",
+        selectedItemsPreview.sourceShape
+    );
+    assertField(
+        "Preview debug raw count",
+        1,
+        selectedItemsPreview.previewDebug?.rawItemCount
+    );
+    assertField(
+        "Preview debug accepted wrapper",
+        "direct",
+        selectedItemsPreview.previewDebug?.acceptedWrapperKeys.join("|")
     );
     assertField("Stale action", "create_subscription", stale?.recommendedAction);
     assertField("Stale category", "entertainment", stale?.draft?.category);
@@ -1430,6 +1510,9 @@ function runImportPreviewCase() {
     assertField("Bill category", "utilities", bill?.draft?.category);
     assertField("Bill amount", 123.45, bill?.draft?.amount);
     assertField("Bill nextPaymentDate", "2025-04-15T00:00:00.000Z", bill?.draft?.nextPaymentDate);
+    assertField("Bill can confirm", true, bill?.canConfirm);
+    assertField("Bill missing fields", "", bill?.missingFields.join("|"));
+    assertField("Bill recurring", true, bill?.draft?.isRecurringBill);
     assertField(
         "Bill notes import recommendation",
         true,
@@ -1447,6 +1530,12 @@ function runImportPreviewCase() {
             warning.includes("Confirm amount before saving")
         )
     );
+    assertField("Current missing amount canConfirm", false, currentMissingAmount?.canConfirm);
+    assertField(
+        "Current missing amount missingFields",
+        "amount",
+        currentMissingAmount?.missingFields.filter((field) => field === "amount").join("|")
+    );
     assertField("Processor-only action", "create_subscription", processorOnly?.recommendedAction);
     assertField(
         "Processor-only warning",
@@ -1455,7 +1544,13 @@ function runImportPreviewCase() {
             warning.includes("Payment processor detected")
         )
     );
-    assertField("No debug in notes", false, /raw|snippet|password|credential|debug/i.test(JSON.stringify(preview)));
+    assertField(
+        "No unsafe raw content in notes",
+        false,
+        /raw|snippet|password|credential|token|secret/i.test(
+            JSON.stringify(preview.drafts.map((draft) => draft.draft?.notes ?? ""))
+        )
+    );
     assertField("Mixed malformed item keeps valid draft", 1, mixedPreview.drafts.length);
     assertField(
         "Mixed malformed item warning",
@@ -1467,6 +1562,8 @@ function runImportPreviewCase() {
     assertField("Invalid-only payload rejected", true, invalidRejected);
     assertField("Invalid-only payload typed error", true, invalidUserMessage);
     assertField("Invalid-only received keys", "unknownShape", invalidReceivedKeys.join("|"));
+    assertField("ID-only payload rejected", true, idOnlyRejected);
+    assertField("ID-only message", "No valid import candidates found.", idOnlyMessage);
     assertField("Too many items rejected", true, tooManyRejected);
     assertField("Too many items code", "IMPORT_PREVIEW_TOO_MANY_ITEMS", tooManyCode);
 
@@ -1507,7 +1604,7 @@ async function runImportConfirmCase() {
         paymentMethodLabel: null,
         status: "pending",
         notes:
-            "Imported from IMAP scan preview.\nRaw body: secret\nPassword: nope\nUseful note",
+            "Imported from IMAP scan preview.\nRaw body: secret\nPassword: nope\nOAuth token: nope\nUseful note",
     };
     const result = await confirmScanImportDrafts(
         "auth-user",
@@ -1565,6 +1662,16 @@ async function runImportConfirmCase() {
                     },
                     warnings: [],
                 },
+                {
+                    sourceItemId: "invalid||date",
+                    recommendedAction: "create_subscription",
+                    draft: {
+                        ...baseDraft,
+                        name: "Invalid Date",
+                        nextPaymentDate: "not-a-date",
+                    },
+                    warnings: [],
+                },
             ],
         },
         {
@@ -1583,8 +1690,11 @@ async function runImportConfirmCase() {
     );
 
     assertField("Created count", 2, result.summary.created);
-    assertField("Skipped count", 4, result.summary.skipped);
+    assertField("Skipped count", 5, result.summary.skipped);
     assertField("Create subscription persisted", "sub-1", result.created[0]?.subscriptionId);
+    assertField("Created item name", "ChatGPT Plus", result.created[0]?.name);
+    assertField("Created item provider", "OpenAI", result.created[0]?.provider);
+    assertField("Created item recurring flag", false, result.created[0]?.isRecurringBill);
     assertField("Review bill persisted", true, result.created[1]?.isRecurringBill);
     assertField(
         "Price change skipped unsupported",
@@ -1606,11 +1716,34 @@ async function runImportConfirmCase() {
         "missing_required_field",
         result.skipped.find((item) => item.sourceItemId === "missing||amount")?.reason
     );
+    assertField(
+        "Invalid date skipped",
+        "missing_required_field",
+        result.skipped.find((item) => item.sourceItemId === "invalid||date")?.reason
+    );
+    assertField(
+        "Missing amount user message",
+        "Uzupełnij kwotę przed zapisaniem tej pozycji.",
+        result.skipped.find((item) => item.sourceItemId === "missing||amount")
+            ?.userMessage
+    );
+    assertField(
+        "Duplicate user message",
+        "Ta pozycja wygląda na już dodaną.",
+        result.skipped.find((item) => item.sourceItemId === "duplicate||service")
+            ?.userMessage
+    );
+    assertField(
+        "Unsupported user message",
+        "Ten typ wyniku wymaga ręcznego sprawdzenia.",
+        result.skipped.find((item) => item.sourceItemId === "price||change")
+            ?.userMessage
+    );
     assertField("Client userId ignored", true, createdInputs.every((item) => item.userId === "auth-user"));
     assertField(
         "Unsafe notes stripped",
         false,
-        /raw body|password|secret|credential|token|debug/i.test(
+        /raw body|password|secret|credential|token|oauth|debug/i.test(
             String(createdInputs[0]?.data.notes ?? "")
         )
     );
@@ -1618,6 +1751,82 @@ async function runImportConfirmCase() {
         "Useful notes preserved",
         true,
         String(createdInputs[0]?.data.notes ?? "").includes("Useful note")
+    );
+    assertField("Bill category normalized", "utilities", createdInputs[1]?.data.category);
+    assertField("Bill status normalized", "pending", createdInputs[1]?.data.status);
+    assertField("Currency normalized", "USD", createdInputs[0]?.data.currency);
+
+    const persistedKeys = new Set<string>();
+    const idempotentPayload = {
+        drafts: [
+            {
+                sourceItemId: "idempotent||subscription",
+                recommendedAction: "create_subscription",
+                draft: {
+                    ...baseDraft,
+                    name: "Idempotent Service",
+                    provider: "IdempotentCo",
+                    amount: 19.99,
+                    currency: "pln",
+                },
+                warnings: [],
+            },
+        ],
+    };
+    const idempotentDependencies = {
+        findPotentialDuplicate: async (_userId: string, data: Record<string, unknown>) => {
+            const key = [
+                data.provider,
+                data.name,
+                data.category,
+                data.amount,
+                data.currency,
+            ]
+                .join("|")
+                .toLowerCase();
+            return persistedKeys.has(key) ? { id: "existing-after-first-import" } : null;
+        },
+        createSubscription: async (_userId: string, data: Record<string, unknown>) => {
+            const key = [
+                data.provider,
+                data.name,
+                data.category,
+                data.amount,
+                data.currency,
+            ]
+                .join("|")
+                .toLowerCase();
+            persistedKeys.add(key);
+            return {
+                id: "created-once",
+                name: String(data.name),
+                provider: (data.provider as string | null) ?? null,
+                isRecurringBill: Boolean(data.isRecurringBill),
+            };
+        },
+    };
+    const firstIdempotent = await confirmScanImportDrafts(
+        "auth-user",
+        idempotentPayload,
+        idempotentDependencies
+    );
+    const secondIdempotent = await confirmScanImportDrafts(
+        "auth-user",
+        idempotentPayload,
+        idempotentDependencies
+    );
+
+    assertField("First idempotent import creates", 1, firstIdempotent.summary.created);
+    assertField("Second idempotent import skips", 1, secondIdempotent.summary.skipped);
+    assertField(
+        "Second idempotent duplicate reason",
+        "duplicate",
+        secondIdempotent.skipped[0]?.reason
+    );
+    assertField(
+        "Second idempotent existing id",
+        "existing-after-first-import",
+        secondIdempotent.skipped[0]?.existingSubscriptionId
     );
 
     if (failures.length === 0) {

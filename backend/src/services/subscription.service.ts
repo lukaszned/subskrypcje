@@ -97,32 +97,80 @@ export async function findPotentialDuplicateSubscription(
     userId: string,
     data: CreateSubscriptionInput
 ) {
-    return prisma.subscription.findFirst({
+    const candidates = await prisma.subscription.findMany({
         where: {
             userId,
             status: {
                 not: SubscriptionStatus.canceled,
             },
-            name: {
-                equals: data.name,
-                mode: "insensitive",
-            },
-            provider:
-                data.provider && data.provider.trim().length > 0
-                    ? {
-                        equals: data.provider,
-                        mode: "insensitive",
-                    }
-                    : null,
-            planName:
-                data.planName && data.planName.trim().length > 0
-                    ? {
-                        equals: data.planName,
-                        mode: "insensitive",
-                    }
-                    : null,
+        },
+        select: {
+            id: true,
+            name: true,
+            provider: true,
+            planName: true,
+            category: true,
+            amount: true,
+            currency: true,
+            status: true,
         },
     });
+
+    const inputProvider = normalizeDuplicateText(data.provider ?? data.name);
+    const inputName = normalizeDuplicateText(data.name);
+    const inputCategory = normalizeDuplicateText(data.category);
+    const inputCurrency = normalizeDuplicateText(data.currency);
+    const inputAmount = normalizeDuplicateAmount(data.amount);
+
+    return (
+        candidates.find((candidate) => {
+            const candidateProvider = normalizeDuplicateText(
+                candidate.provider ?? candidate.name
+            );
+            const candidateName = normalizeDuplicateText(candidate.name);
+            const candidateCategory = normalizeDuplicateText(candidate.category);
+            const candidateCurrency = normalizeDuplicateText(candidate.currency);
+            const candidateAmount = normalizeDuplicateAmount(candidate.amount);
+
+            return (
+                candidateProvider === inputProvider &&
+                candidateName === inputName &&
+                candidateCategory === inputCategory &&
+                candidateCurrency === inputCurrency &&
+                candidateAmount === inputAmount
+            );
+        }) ?? null
+    );
+}
+
+function normalizeDuplicateText(value: unknown) {
+    return String(value ?? "")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .replace(/&/g, " and ")
+        .replace(/[^a-z0-9]+/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+}
+
+function normalizeDuplicateAmount(value: unknown) {
+    if (typeof value === "number") {
+        return Math.round(value * 100);
+    }
+
+    if (
+        typeof value === "object" &&
+        value !== null &&
+        "toString" in value &&
+        typeof value.toString === "function"
+    ) {
+        const parsed = Number(value.toString());
+        return Number.isFinite(parsed) ? Math.round(parsed * 100) : null;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Math.round(parsed * 100) : null;
 }
 
 export async function createSubscription(

@@ -16,6 +16,9 @@ export type ProductPrimaryAction =
     | "skip";
 
 export type ProductBucketInput = {
+    id?: string;
+    sourceItemId?: string;
+    itemSelectionKey?: string;
     displayName?: string;
     provider?: string;
     billingChannel?: string;
@@ -50,6 +53,8 @@ export type ProductBucketDecision = {
 };
 
 export type ProductResultItem<T extends ProductBucketInput> = T & {
+    sourceItemId: string;
+    itemSelectionKey: string;
     productBucket: ProductBucket;
     primaryAction: ProductPrimaryAction;
     userFacingReason: string;
@@ -76,6 +81,7 @@ export type ProductResult<T extends ProductBucketInput> = {
         totalCanonicalSubscriptions: number;
         recommendedDefaultMode: string;
         recommendedUserMessage: string;
+        recommendedUserMessagePl?: string;
         hasCurrentSubscriptions: boolean;
         hasOnlyHistoricalEvidence: boolean;
         hasPriceChanges: boolean;
@@ -190,6 +196,27 @@ function normalizeAsciiText(text: string) {
         .replace(/\u0142/g, "l")
         .replace(/\u0141/g, "L")
         .toLowerCase();
+}
+
+function stableKeyPart(value: unknown) {
+    const normalized = normalizeAsciiText(String(value ?? ""))
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "")
+        .slice(0, 80);
+
+    return normalized || "unknown";
+}
+
+function buildProductItemSelectionKey(
+    item: ProductBucketInput,
+    bucket: ProductBucket
+) {
+    return [
+        stableKeyPart(item.sourceItemId ?? item.id),
+        stableKeyPart(item.displayName ?? item.provider ?? "item"),
+        stableKeyPart(item.category ?? "unknown"),
+        stableKeyPart(bucket),
+    ].join("|");
 }
 
 export function getProductBucketLabel(bucket: string | undefined) {
@@ -641,6 +668,8 @@ export function buildProductResult<T extends ProductBucketInput>(
             totalCanonicalSubscriptions: items.length,
             recommendedDefaultMode: "review",
             recommendedUserMessage: "Review detected subscriptions and bills before showing them as active.",
+            recommendedUserMessagePl:
+                "Sprawdź wykryte subskrypcje i rachunki przed importem.",
             hasCurrentSubscriptions: false,
             hasOnlyHistoricalEvidence: false,
             hasPriceChanges: false,
@@ -657,6 +686,14 @@ export function buildProductResult<T extends ProductBucketInput>(
         );
         const productItem: ProductResultItem<T> = {
             ...item,
+            sourceItemId:
+                item.sourceItemId ??
+                item.id ??
+                buildProductItemSelectionKey(item, productDecision.bucket),
+            itemSelectionKey: buildProductItemSelectionKey(
+                item,
+                productDecision.bucket
+            ),
             productBucket: productDecision.bucket,
             primaryAction: productDecision.primaryAction,
             userFacingReason: productDecision.userFacingReason,
@@ -705,10 +742,14 @@ export function buildProductResult<T extends ProductBucketInput>(
         productResult.scanSummary.recommendedDefaultMode = "current";
         productResult.scanSummary.recommendedUserMessage =
             "We found recent active subscriptions. Review any older or bill-like items separately.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Znaleźliśmy aktualne subskrypcje. Starsze wyniki i rachunki sprawdź osobno.";
     } else if (productResult.currentSubscriptions.length > 0) {
         productResult.scanSummary.recommendedDefaultMode = "review";
         productResult.scanSummary.recommendedUserMessage =
             "We found possible subscriptions and recurring bills. Please review the results before importing.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Znaleźliśmy możliwe subskrypcje i rachunki cykliczne. Sprawdź wyniki przed importem.";
     } else if (
         productResult.needsReviewSubscriptions.length > 0 &&
         productResult.priceChanges.length > 0
@@ -716,22 +757,32 @@ export function buildProductResult<T extends ProductBucketInput>(
         productResult.scanSummary.recommendedDefaultMode = "review";
         productResult.scanSummary.recommendedUserMessage =
             "We found historical subscription evidence and one price-change notice, but no recent active subscription payments. Please confirm which historical subscriptions are still active.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Znaleźliśmy historyczne sygnały subskrypcji i zmianę ceny. Potwierdź, które pozycje są nadal aktywne.";
     } else if (productResult.needsReviewSubscriptions.length > 0) {
         productResult.scanSummary.recommendedDefaultMode = "review";
         productResult.scanSummary.recommendedUserMessage =
             "We found historical subscription evidence, but no recent active subscription payments. Please confirm which subscriptions are still active.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Znaleźliśmy historyczne sygnały subskrypcji. Potwierdź, które subskrypcje są nadal aktywne.";
     } else if (productResult.priceChanges.length > 0) {
         productResult.scanSummary.recommendedDefaultMode = "price_changes";
         productResult.scanSummary.recommendedUserMessage =
             "We found price-change notices, but no recent active subscription payments in this scan window.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Znaleźliśmy powiadomienia o zmianie ceny. Sprawdź je przed aktualizacją subskrypcji.";
     } else if (productResult.billsOrUtilities.length > 0) {
         productResult.scanSummary.recommendedDefaultMode = "bills";
         productResult.scanSummary.recommendedUserMessage =
             "We found bill or utility evidence. Review stale bills before treating them as current.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Znaleźliśmy rachunki lub faktury. Sprawdź je przed dodaniem jako cykliczne.";
     } else {
         productResult.scanSummary.recommendedDefaultMode = "empty";
         productResult.scanSummary.recommendedUserMessage =
             "No current subscription evidence was found in this scan window.";
+        productResult.scanSummary.recommendedUserMessagePl =
+            "Nie znaleziono aktualnych sygnałów subskrypcji w tym skanie.";
     }
 
     return productResult;
