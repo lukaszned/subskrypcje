@@ -254,7 +254,7 @@ async function request<T>(
       const canTryNextHost =
         attempt < API_BASE_URLS.length - 1 &&
         isRetriableConnectionError(normalizedError) &&
-        (method === 'GET' || !isTimeoutError(normalizedError));
+        method === 'GET';
 
       if (canTryNextHost) {
         console.warn(

@@ -519,9 +519,23 @@ export interface EmailScanImportSelection {
   item: EmailScanProductItem;
 }
 
+export interface EmailScanImportPreviewItemWrapper {
+  selected?: boolean;
+  bucket?: string;
+  action?: string;
+  item?: EmailScanProductItem;
+  productItem?: EmailScanProductItem;
+  sourceItem?: EmailScanProductItem;
+  originalItem?: EmailScanProductItem;
+  product?: EmailScanProductItem;
+  data?: EmailScanProductItem;
+  [key: string]: unknown;
+}
+
 export interface EmailScanImportPreviewRequest {
   sourceProvider?: EmailScanProvider | string;
-  selections: EmailScanImportSelection[];
+  items: Array<EmailScanProductItem | EmailScanImportPreviewItemWrapper>;
+  selections?: EmailScanImportSelection[];
 }
 
 export interface EmailScanImportPreviewResponse {
@@ -535,6 +549,9 @@ export interface EmailScanImportPreviewResponse {
 }
 
 export interface EmailScanImportDraftPayload {
+  id?: string | null;
+  sourceItemId?: string | null;
+  itemSelectionKey?: string | null;
   name?: string | null;
   displayName?: string | null;
   provider?: string | null;
@@ -601,6 +618,8 @@ export type EmailScanPrimaryAction =
 
 export interface EmailScanProductItem {
   id?: string;
+  sourceItemId?: string;
+  itemSelectionKey?: string;
   sourceMessageId?: string;
   displayName?: string | null;
   provider?: string | null;

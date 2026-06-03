@@ -19,7 +19,6 @@ import {
   GmailScanRequest,
   ImapScanRequest,
 } from '../types/api';
-import { SUBSCRIPTIONS_KEY } from './useSubscriptions';
 
 export const EMAIL_SCAN_STATUS_KEY = ['email-scan', 'status'] as const;
 export const EMAIL_DETECTIONS_KEY = (params?: GetEmailDetectionsParams) =>
@@ -88,7 +87,7 @@ export function useEmailScanImportConfirm() {
     mutationFn: (payload: EmailScanImportConfirmRequest) => confirmEmailScanImport(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-scan'] });
-      queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
+      queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
@@ -102,7 +101,7 @@ export function useAcceptDetection() {
       acceptDetectedSubscription(id, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['email-scan'] });
-      queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
+      queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
     },
   });
