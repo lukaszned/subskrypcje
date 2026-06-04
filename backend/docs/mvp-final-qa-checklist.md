@@ -142,6 +142,19 @@ Expected: `200` with safe redirect/config diagnostics, no secrets.
 - Created items appear in subscriptions list.
 - Repeated confirm skips duplicates.
 
+Manual post-import visibility check:
+
+1. Run an IMAP scan or use a previously sanitized productResult item.
+2. Call `POST /email-scan/import-preview` with `{ "items": [fullProductResultItem] }`.
+3. Choose a draft with `canConfirm=true`.
+4. Call `POST /email-scan/import-confirm` with `{ "drafts": [draftFromPreview] }`.
+5. Confirm the response contains `created[].subscriptionId`, list-ready fields, and `refreshHints.createdSubscriptionIds`.
+6. Call `GET /subscriptions` with the same Bearer token.
+7. Confirm the created `subscriptionId` appears in the list response.
+8. Call dashboard endpoints such as `GET /dashboard/summary` and `GET /dashboard/health-score`.
+9. Confirm dashboard responses do not crash.
+10. Repeat the same import-confirm request and confirm it is skipped with `reason: "duplicate"` and `existingSubscriptionId`.
+
 ## Security QA
 
 - Do not log IMAP passwords.

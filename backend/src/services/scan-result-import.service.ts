@@ -79,14 +79,29 @@ export type ScanImportConfirmCreatedItem = {
     subscriptionId: string;
     name: string;
     provider?: string | null;
+    amount: number;
+    currency: string;
+    billingCycle: string;
+    category: string;
+    status: string;
     isRecurringBill: boolean;
+    nextPaymentDate: string;
+    createdAt?: string;
+    visibilityHint: "created_active_subscription" | "created_recurring_bill";
 };
 
 export type ScanImportConfirmSkippedItem = {
     sourceItemId?: string;
+    name?: string;
+    provider?: string | null;
     reason: "duplicate" | "unsupported_action" | "missing_required_field";
     message: string;
     userMessage: string;
+    visibilityHint:
+        | "skipped_duplicate"
+        | "skipped_missing_amount"
+        | "skipped_invalid_field"
+        | "skipped_unsupported_action";
     duplicateSubscriptionId?: string;
     existingSubscriptionId?: string;
     missingFields?: string[];
@@ -100,6 +115,10 @@ export type ScanImportConfirmResult = {
         requested: number;
         created: number;
         skipped: number;
+    };
+    refreshHints: {
+        invalidateQueries: string[];
+        createdSubscriptionIds: string[];
     };
 };
 
@@ -115,7 +134,14 @@ type ImportConfirmDependencies = {
         id: string;
         name: string;
         provider: string | null;
+        amount: unknown;
+        currency: string;
+        billingCycle: string;
+        category: string;
+        status: string;
         isRecurringBill: boolean;
+        nextPaymentDate: Date | string;
+        createdAt?: Date | string;
     }>;
 };
 
@@ -780,11 +806,20 @@ function sanitizeDraftNotes(notes: string | null | undefined) {
 
 function buildSkippedImportItem(args: {
     sourceItemId?: string;
+    draft?: Partial<SubscriptionDraft>;
     reason: ScanImportConfirmSkippedItem["reason"];
     missingFields?: string[];
     duplicateSubscriptionId?: string;
 }): ScanImportConfirmSkippedItem {
     const hasMissingAmount = args.missingFields?.includes("draft.amount");
+    const visibilityHint =
+        args.reason === "duplicate"
+            ? "skipped_duplicate"
+            : args.reason === "unsupported_action"
+            ? "skipped_unsupported_action"
+            : hasMissingAmount
+            ? "skipped_missing_amount"
+            : "skipped_invalid_field";
     const userMessage =
         args.reason === "duplicate"
             ? "Ta pozycja wygląda na już dodaną."
@@ -802,9 +837,12 @@ function buildSkippedImportItem(args: {
 
     return {
         sourceItemId: args.sourceItemId,
+        name: args.draft?.name,
+        provider: args.draft?.provider ?? undefined,
         reason: args.reason,
         message,
         userMessage,
+        visibilityHint,
         ...(args.missingFields ? { missingFields: args.missingFields } : {}),
         ...(args.duplicateSubscriptionId
             ? {
@@ -813,6 +851,35 @@ function buildSkippedImportItem(args: {
               }
             : {}),
     };
+}
+
+function createdVisibilityHint(subscription: { isRecurringBill: boolean }) {
+    return subscription.isRecurringBill
+        ? "created_recurring_bill"
+        : "created_active_subscription";
+}
+
+function normalizeCreatedAmount(value: unknown) {
+    if (typeof value === "number") return Number(value.toFixed(2));
+
+    if (
+        value &&
+        typeof value === "object" &&
+        "toString" in value &&
+        typeof value.toString === "function"
+    ) {
+        const parsed = Number(value.toString());
+        return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+    }
+
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? Number(parsed.toFixed(2)) : 0;
+}
+
+function normalizeCreatedDate(value: Date | string | undefined) {
+    if (!value) return undefined;
+    const date = value instanceof Date ? value : new Date(value);
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
 }
 
 function toCreateSubscriptionInput(
@@ -876,6 +943,7 @@ export async function confirmScanImportDrafts(
         if (item.recommendedAction === "skip") {
             skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
+                draft: item.draft,
                 reason: "unsupported_action",
             }));
             continue;
@@ -885,6 +953,7 @@ export async function confirmScanImportDrafts(
             warnings.add("Price-change items require manual review before saving.");
             skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
+                draft: item.draft,
                 reason: "unsupported_action",
             }));
             continue;
@@ -893,6 +962,7 @@ export async function confirmScanImportDrafts(
         if (!["create_subscription", "review_bill"].includes(item.recommendedAction)) {
             skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
+                draft: item.draft,
                 reason: "unsupported_action",
             }));
             continue;
@@ -910,6 +980,7 @@ export async function confirmScanImportDrafts(
         if (!input) {
             skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
+                draft: item.draft,
                 reason: "missing_required_field",
                 missingFields,
             }));
@@ -921,6 +992,7 @@ export async function confirmScanImportDrafts(
         if (duplicate) {
             skipped.push(buildSkippedImportItem({
                 sourceItemId: item.sourceItemId,
+                draft: item.draft,
                 reason: "duplicate",
                 duplicateSubscriptionId: duplicate.id,
             }));
@@ -934,7 +1006,17 @@ export async function confirmScanImportDrafts(
             subscriptionId: subscription.id,
             name: subscription.name,
             provider: subscription.provider,
+            amount: normalizeCreatedAmount(subscription.amount),
+            currency: subscription.currency,
+            billingCycle: subscription.billingCycle,
+            category: subscription.category,
+            status: subscription.status,
             isRecurringBill: subscription.isRecurringBill,
+            nextPaymentDate:
+                normalizeCreatedDate(subscription.nextPaymentDate) ??
+                input.nextPaymentDate,
+            createdAt: normalizeCreatedDate(subscription.createdAt),
+            visibilityHint: createdVisibilityHint(subscription),
         });
     }
 
@@ -946,6 +1028,10 @@ export async function confirmScanImportDrafts(
             requested: parsed.drafts.length,
             created: created.length,
             skipped: skipped.length,
+        },
+        refreshHints: {
+            invalidateQueries: ["subscriptions", "dashboard"],
+            createdSubscriptionIds: created.map((item) => item.subscriptionId),
         },
     };
 }

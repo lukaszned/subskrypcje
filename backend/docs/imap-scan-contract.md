@@ -521,6 +521,34 @@ Persistence policy:
 - Raw bodies, credentials, tokens, debug payloads, and unknown client fields are not persisted.
 - Unsupported scan metadata is preserved only in safe `notes` lines when useful. Lines containing raw body, password, token, OAuth, secret, credential, or debug payload wording are stripped before persistence.
 
+Created items include list-ready fields in addition to the original `subscriptionId`, `name`, `provider`, and `isRecurringBill` fields:
+
+- `amount`
+- `currency`
+- `billingCycle`
+- `category`
+- `status`
+- `nextPaymentDate`
+- `createdAt`
+- `visibilityHint`: `created_active_subscription` or `created_recurring_bill`
+
+Skipped items include `name`, `provider`, `reason`, `missingFields`, `existingSubscriptionId` when a duplicate was found, `userMessage`, and `visibilityHint`. Skipped visibility hints are `skipped_duplicate`, `skipped_missing_amount`, `skipped_invalid_field`, and `skipped_unsupported_action`.
+
+The response also includes:
+
+```json
+{
+  "refreshHints": {
+    "invalidateQueries": ["subscriptions", "dashboard"],
+    "createdSubscriptionIds": ["sub_123"]
+  }
+}
+```
+
+After import-confirm, frontend should show created/skipped/warnings, invalidate or refetch every query listed in `refreshHints.invalidateQueries`, then refetch the subscription list and dashboard. A "Zobacz dodane pozycje" action can use `refreshHints.createdSubscriptionIds`.
+
+Created records use the same model and visible status conventions as manual subscriptions. The current Prisma enum is `pending`, `paid`, `overdue`, and `canceled`; there is no `active` value to set.
+
 ## Frontend Implementation Checklist
 
 This is the suggested end-to-end frontend flow for the first IMAP scan UI. Frontend code is expected to stay responsible for UX, confirmation, editing, and final save decisions.

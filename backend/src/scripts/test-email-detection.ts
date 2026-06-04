@@ -1683,7 +1683,14 @@ async function runImportConfirmCase() {
                     id: `sub-${createdInputs.length}`,
                     name: data.name,
                     provider: data.provider ?? null,
+                    amount: data.amount,
+                    currency: data.currency,
+                    billingCycle: data.billingCycle,
+                    category: data.category,
+                    status: data.status ?? "pending",
                     isRecurringBill: data.isRecurringBill ?? true,
+                    nextPaymentDate: data.nextPaymentDate,
+                    createdAt: "2026-04-23T10:34:28.000Z",
                 };
             },
         }
@@ -1694,7 +1701,42 @@ async function runImportConfirmCase() {
     assertField("Create subscription persisted", "sub-1", result.created[0]?.subscriptionId);
     assertField("Created item name", "ChatGPT Plus", result.created[0]?.name);
     assertField("Created item provider", "OpenAI", result.created[0]?.provider);
+    assertField("Created item amount", 20, result.created[0]?.amount);
+    assertField("Created item currency", "USD", result.created[0]?.currency);
+    assertField("Created item billing cycle", "monthly", result.created[0]?.billingCycle);
+    assertField("Created item category", "productivity", result.created[0]?.category);
+    assertField("Created item status visible convention", "pending", result.created[0]?.status);
     assertField("Created item recurring flag", false, result.created[0]?.isRecurringBill);
+    assertField(
+        "Created item visibility hint",
+        "created_active_subscription",
+        result.created[0]?.visibilityHint
+    );
+    assertField(
+        "Bill visibility hint",
+        "created_recurring_bill",
+        result.created[1]?.visibilityHint
+    );
+    assertField(
+        "Created item next payment date",
+        "2026-04-23T10:34:28.000Z",
+        result.created[0]?.nextPaymentDate
+    );
+    assertField(
+        "Refresh hints include subscriptions",
+        true,
+        result.refreshHints.invalidateQueries.includes("subscriptions")
+    );
+    assertField(
+        "Refresh hints include dashboard",
+        true,
+        result.refreshHints.invalidateQueries.includes("dashboard")
+    );
+    assertField(
+        "Refresh hints created ids",
+        "sub-1|sub-2",
+        result.refreshHints.createdSubscriptionIds.join("|")
+    );
     assertField("Review bill persisted", true, result.created[1]?.isRecurringBill);
     assertField(
         "Price change skipped unsupported",
@@ -1717,9 +1759,21 @@ async function runImportConfirmCase() {
         result.skipped.find((item) => item.sourceItemId === "missing||amount")?.reason
     );
     assertField(
+        "Missing amount visibility hint",
+        "skipped_missing_amount",
+        result.skipped.find((item) => item.sourceItemId === "missing||amount")
+            ?.visibilityHint
+    );
+    assertField(
         "Invalid date skipped",
         "missing_required_field",
         result.skipped.find((item) => item.sourceItemId === "invalid||date")?.reason
+    );
+    assertField(
+        "Invalid date visibility hint",
+        "skipped_invalid_field",
+        result.skipped.find((item) => item.sourceItemId === "invalid||date")
+            ?.visibilityHint
     );
     assertField(
         "Missing amount user message",
@@ -1732,6 +1786,12 @@ async function runImportConfirmCase() {
         "Ta pozycja wygląda na już dodaną.",
         result.skipped.find((item) => item.sourceItemId === "duplicate||service")
             ?.userMessage
+    );
+    assertField(
+        "Duplicate skipped name",
+        "Duplicate Service",
+        result.skipped.find((item) => item.sourceItemId === "duplicate||service")
+            ?.name
     );
     assertField(
         "Unsupported user message",
@@ -1801,7 +1861,14 @@ async function runImportConfirmCase() {
                 id: "created-once",
                 name: String(data.name),
                 provider: (data.provider as string | null) ?? null,
+                amount: data.amount,
+                currency: String(data.currency),
+                billingCycle: String(data.billingCycle),
+                category: String(data.category),
+                status: String(data.status ?? "pending"),
                 isRecurringBill: Boolean(data.isRecurringBill),
+                nextPaymentDate: String(data.nextPaymentDate),
+                createdAt: "2026-04-23T10:34:28.000Z",
             };
         },
     };
