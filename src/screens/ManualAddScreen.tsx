@@ -27,7 +27,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { 
   X, Edit2, Calendar, LayoutGrid, RotateCw, Banknote, ChevronDown,
   Film, Wifi, Heart, GraduationCap, Briefcase, ShoppingBag, 
-  PiggyBank, Truck, Globe, AlertCircle, ArrowRight, ShieldCheck, Sparkles, Wand2
+  PiggyBank, Truck, Globe, AlertCircle, ArrowRight, Sparkles, Wand2
 } from 'lucide-react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -202,7 +202,6 @@ export const ManualAddScreen = () => {
   const [trialEndDate, setTrialEndDate] = useState(new Date());
   const [showTrialPicker, setShowTrialPicker] = useState(false);
   const [notes, setNotes] = useState('');
-  const [cancelUrl, setCancelUrl] = useState('');
   const [isSeasonal, setIsSeasonal] = useState(false);
   const [seasonEndDate, setSeasonEndDate] = useState(() => addMonthsClamped(new Date(), 3));
   const [showSeasonPicker, setShowSeasonPicker] = useState(false);
@@ -373,7 +372,6 @@ export const ManualAddScreen = () => {
       setCategory(existingSub.category);
       setCurrency(existingSub.currency || 'PLN');
       setIsTrial(existingSub.isTrial);
-      setCancelUrl(existingSub.cancelUrl || '');
 
       const parsed = parseSubscriptionNotes(existingSub.notes);
       let parsedText = parsed.text;
@@ -390,7 +388,6 @@ export const ManualAddScreen = () => {
         setAmount((existingSub.amount * parsed.peopleCount).toString());
       }
       setNotes(parsedText);
-      setCancelUrl(existingSub.cancelUrl || '');
       if (existingSub.nextPaymentDate) {
         setDate(parseAppDate(existingSub.nextPaymentDate) || new Date());
         setHasManualDate(true);
@@ -509,7 +506,6 @@ export const ManualAddScreen = () => {
       isTrial,
       trialEndDate: isTrial ? formatInputDate(trialEndDate) : undefined,
       notes: notesPayload,
-      cancelUrl: cancelUrl.trim() || undefined,
       reminderDaysBefore: 1,
     };
 
@@ -1110,18 +1106,6 @@ export const ManualAddScreen = () => {
 
                   {isAdditionalOptionsOpen && (
                     <>
-                      <View style={styles.optionalGroup}>
-                        <View style={[styles.cancelAssistantHint, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
-                          <ShieldCheck size={18} color={theme.colors.primary} />
-                          <View style={{ flex: 1 }}>
-                            <Text style={styles.cancelAssistantHintTitle}>Anulowanie obsłuży Cancel Assistant</Text>
-                            <Text style={styles.cancelAssistantHintText}>
-                              Nie musisz wklejać linku ręcznie. Instrukcje i linki anulowania pokażemy w szczegółach subskrypcji.
-                            </Text>
-                          </View>
-                        </View>
-                      </View>
-
                       <View style={styles.optionalGroup}>
                         <Text style={styles.labelOptional}>Notatki</Text>
                         <TextInput
@@ -1921,28 +1905,6 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontSize: 11,
     lineHeight: 16,
     marginTop: 2,
-    fontWeight: '600',
-  },
-  cancelAssistantHint: {
-    flexDirection: 'row',
-    gap: 12,
-    alignItems: 'flex-start',
-    backgroundColor: withAlpha(theme.colors.text, 0.1),
-    borderRadius: 18,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: withAlpha(theme.colors.text, 0.22),
-  },
-  cancelAssistantHintTitle: {
-    color: theme.colors.text,
-    fontSize: 14,
-    fontWeight: '900',
-    marginBottom: 4,
-  },
-  cancelAssistantHintText: {
-    color: theme.colors.textMuted,
-    fontSize: 12,
-    lineHeight: 18,
     fontWeight: '600',
   },
   stepperBtn: {

@@ -17,7 +17,6 @@ import {
   CheckCircle2,
   ChevronRight,
   Clock3,
-  HelpCircle,
   ShieldCheck,
   Sparkles,
   XCircle,
@@ -43,7 +42,7 @@ if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental
 
 type Navigation = NativeStackNavigationProp<AppStackParamList>;
 type Decision = 'keep' | 'cancel' | 'later';
-type ReviewType = 'overdue' | 'trial' | 'due' | 'missingCancel' | 'expensive';
+type ReviewType = 'overdue' | 'trial' | 'due' | 'expensive';
 
 type ReviewItem = {
   id: string;
@@ -106,18 +105,6 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
       });
     }
 
-    if (!subscription.cancelUrl) {
-      items.push({
-        id: `missing-cancel-${subscription.id}`,
-        type: 'missingCancel',
-        subscription,
-        title: 'Brak szybkiej ścieżki anulowania',
-        description: `${displayName} nie ma jeszcze zapisanego linku lub instrukcji anulowania.`,
-        meta: 'Warto uzupełnić później',
-        tone: 'primary',
-      });
-    }
-
     if (getMonthlyAmount(subscription) >= 45) {
       items.push({
         id: `expensive-${subscription.id}`,
@@ -136,7 +123,6 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
     trial: 1,
     due: 2,
     expensive: 3,
-    missingCancel: 4,
   };
 
   return items.sort((a, b) => priority[a.type] - priority[b.type]).slice(0, 24);
@@ -169,7 +155,7 @@ export function SubscriptionReviewQueueScreen() {
     if (type === 'trial') return Clock3;
     if (type === 'due') return CalendarDays;
     if (type === 'expensive') return Sparkles;
-    return HelpCircle;
+    return Sparkles;
   };
 
   const renderContent = () => {

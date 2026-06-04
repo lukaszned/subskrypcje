@@ -323,7 +323,6 @@ function buildTrialsFromSubscriptions(subscriptions: Subscription[], days: numbe
         trialEndDate: subscription.trialEndDate || '',
         nextPaymentDate: subscription.nextPaymentDate,
         status: subscription.status,
-        cancelUrl: subscription.cancelUrl,
         reminderDaysBefore: subscription.reminderDaysBefore,
         daysLeft: Math.max(0, daysLeft),
       };

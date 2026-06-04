@@ -7,9 +7,7 @@
 // =============================================================
 
 import {
-  apiGet,
   apiGetWithTimeout,
-  apiPost,
   apiPostWithTimeout,
   apiPatchWithTimeout,
   apiDeleteWithTimeout,
@@ -23,9 +21,6 @@ import {
   UpdateSubscriptionPayload,
   SubscriptionHistoryResponse,
   SubscriptionPaymentsResponse,
-  CancelGuide,
-  CancelGuideLookupResponse,
-  CancelGuideRequestResponse,
 } from '../types/api';
 
 const SUBSCRIPTIONS_CACHE_KEY = 'sub-sentry.subscriptions.v1';
@@ -249,21 +244,4 @@ export async function cancelSubscription(id: string): Promise<Subscription> {
 
 export async function deleteSubscription(id: string): Promise<void> {
   return apiDeleteWithTimeout(`/subscriptions/${id}`, SUBSCRIPTION_ACTION_TIMEOUT_MS);
-}
-
-export async function getSubscriptionCancelGuideLookup(id: string): Promise<CancelGuideLookupResponse> {
-  return apiGet<CancelGuideLookupResponse>(`/subscriptions/${id}/cancel-guide`);
-}
-
-export async function getSubscriptionCancelGuide(id: string): Promise<CancelGuide | null> {
-  const data = await getSubscriptionCancelGuideLookup(id);
-
-  return data.hasGuide ? data.guide : null;
-}
-
-/**
- * POST /subscriptions/:id/cancel-guide-request
- */
-export async function requestCancelGuide(id: string): Promise<CancelGuideRequestResponse> {
-  return apiPost<CancelGuideRequestResponse>(`/subscriptions/${id}/cancel-guide-request`, {});
 }

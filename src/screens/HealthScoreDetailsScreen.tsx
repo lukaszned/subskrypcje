@@ -36,7 +36,6 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
     const days = daysUntilDate(item.nextPaymentDate);
     return days !== null && days >= 0 && days <= 7;
   }).length;
-  const missingCancelGuides = active.filter((item) => !item.cancelUrl).length;
 
   const score = Math.max(
     35,
@@ -45,7 +44,6 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
       100 -
         overdue * 14 -
         trialsEndingSoon * 9 -
-        missingCancelGuides * 3 -
         Math.max(0, active.length - 10) * 2
     )
   );
@@ -53,14 +51,13 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
   return {
     score,
     label: score >= 85 ? 'Bardzo dobra' : score >= 70 ? 'Stabilna' : score >= 55 ? 'Wymaga uwagi' : 'Ryzykowna',
-    summary: 'Szacunek lokalny oparty na aktywnych usługach, trialach, zaległościach i brakujących linkach anulowania.',
+    summary: 'Szacunek lokalny oparty na aktywnych usługach, trialach, zaległościach i liczbie aktywnych planów.',
     metrics: {
       activeSubscriptionsCount: active.length,
       trialsCount: trials,
       overdueCount: overdue,
       trialsEndingSoonCount: trialsEndingSoon,
       upcomingPaymentsSoonCount: upcomingSoon,
-      missingCancelGuidesCount: missingCancelGuides,
       monthlySubscriptionsTotal: summary?.monthlyTotal ?? 0,
       subscriptionsIncomePercentage: null,
     },
@@ -76,12 +73,6 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
         title: trialsEndingSoon > 0 ? 'Kończące się triale' : 'Triale pod kontrolą',
         description: trialsEndingSoon > 0 ? `${trialsEndingSoon} triali kończy się w najbliższych 7 dniach.` : 'Brak triali kończących się w tym tygodniu.',
         impact: trialsEndingSoon > 0 ? -trialsEndingSoon * 9 : 6,
-      },
-      {
-        type: missingCancelGuides > 0 ? 'neutral' : 'positive',
-        title: 'Gotowość do anulowania',
-        description: missingCancelGuides > 0 ? `${missingCancelGuides} usług nie ma zapisanego linku anulowania.` : 'Najważniejsze usługi mają zapisane ścieżki anulowania.',
-        impact: missingCancelGuides > 0 ? -missingCancelGuides * 3 : 5,
       },
     ],
   };
@@ -117,7 +108,6 @@ export function HealthScoreDetailsScreen() {
     ['Zaległe', health.metrics.overdueCount],
     ['Do 7 dni', health.metrics.upcomingPaymentsSoonCount],
     ['Trial kończy się', health.metrics.trialsEndingSoonCount],
-    ['Brak cancel linku', health.metrics.missingCancelGuidesCount],
   ];
 
   const onRefresh = () => {
@@ -169,7 +159,7 @@ export function HealthScoreDetailsScreen() {
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Co to jest?</Text>
           </View>
           <Text style={[styles.bodyText, { color: theme.colors.textMuted }]}>
-            Kondycja subskrypcji pokazuje, czy Twoje usługi są pod kontrolą. Im mniej zaległości, kończących się triali, bliskich płatności i usług bez ścieżki anulowania, tym wyższy wynik.
+            Kondycja subskrypcji pokazuje, czy Twoje usługi są pod kontrolą. Im mniej zaległości, kończących się triali, bliskich płatności i nadmiarowych aktywnych planów, tym wyższy wynik.
           </Text>
         </View>
 
@@ -189,7 +179,7 @@ export function HealthScoreDetailsScreen() {
           </View>
           <View style={styles.formulaRow}>
             <Text style={[styles.formulaStrong, { color: theme.colors.primary }]}>100</Text>
-            <Text style={[styles.formulaText, { color: theme.colors.textMuted }]}>minus punkty ryzyka za zaległości, triale do 7 dni, płatności do 7 dni i brak przygotowanej ścieżki anulowania.</Text>
+            <Text style={[styles.formulaText, { color: theme.colors.textMuted }]}>minus punkty ryzyka za zaległości, triale do 7 dni, płatności do 7 dni i nadmiar aktywnych planów.</Text>
           </View>
           <View style={[styles.scoreBarTrack, { borderColor: scoreColor }]}>
             <View style={[styles.scoreBarFill, { width: `${health.score}%`, backgroundColor: scoreColor }]} />

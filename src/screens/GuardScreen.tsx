@@ -19,7 +19,6 @@ import {
   CalendarDays,
   ChevronRight,
   Clock,
-  FileText,
   ShieldCheck,
   Sparkles,
   TrendingDown,
@@ -121,7 +120,6 @@ export const GuardScreen = () => {
     const overdue: GuardIssue[] = [];
     const trials: GuardIssue[] = [];
     const dueSoon: GuardIssue[] = [];
-    const missingCancelHelp: GuardIssue[] = [];
     const priceAlerts: PriceAlert[] = [];
 
     for (const subscription of activeSubscriptions) {
@@ -156,16 +154,6 @@ export const GuardScreen = () => {
         });
       }
 
-      if (!subscription.cancelUrl) {
-        missingCancelHelp.push({
-          id: `cancel-${subscription.id}`,
-          title: subscription.name,
-          desc: 'Brakuje linku anulowania. Warto uzupełnić zanim będzie potrzebny.',
-          severity: 'info',
-          subscriptionId: subscription.id,
-        });
-      }
-
       const catalog = findCatalogPlan(subscription);
       if (catalog?.plan) {
         const currentMonthly = toMonthlyAmount(Number(subscription.amount || 0), subscription.billingCycle);
@@ -191,7 +179,6 @@ export const GuardScreen = () => {
       overdue.length * 18 +
       trials.length * 14 +
       dueSoon.length * 6 +
-      missingCancelHelp.length * 3 +
       priceAlerts.length * 10;
     const score = Math.max(0, Math.min(100, 100 - riskPoints));
     const totalDueSoon = activeSubscriptions.reduce((sum, subscription) => {
@@ -206,7 +193,6 @@ export const GuardScreen = () => {
       overdue,
       trials,
       dueSoon,
-      missingCancelHelp,
       priceAlerts,
       score,
       totalDueSoon,
@@ -349,7 +335,7 @@ export const GuardScreen = () => {
           </View>
           <View style={styles.paywallBody}>
             <Text style={[styles.paywallTitle, { color: theme.colors.text }]}>Guard jako pakiet za 5 zł / mies.</Text>
-            <Text style={[styles.paywallDesc, { color: theme.colors.textMuted }]}>Triale, radar płatności, price watch i cancel readiness w jednym miejscu.</Text>
+            <Text style={[styles.paywallDesc, { color: theme.colors.textMuted }]}>Triale, radar płatności i price watch w jednym miejscu.</Text>
           </View>
         </View>
 
@@ -375,14 +361,6 @@ export const GuardScreen = () => {
           TrendingDown,
           guardData.priceAlerts,
           'Nie widzę cen wyższych niż katalog dla rozpoznanych usług.'
-        )}
-
-        {renderSection(
-          'Cancel Readiness',
-          'Subskrypcje, którym brakuje linku anulowania',
-          FileText,
-          guardData.missingCancelHelp,
-          'Najważniejsze usługi mają zapisany link lub są już anulowane.'
         )}
 
         <TouchableOpacity

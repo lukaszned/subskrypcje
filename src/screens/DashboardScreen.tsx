@@ -1905,7 +1905,7 @@ export const DashboardScreen = () => {
         id: 'guard',
         icon: ShieldCheck,
         title: 'Guard wykrył ryzyko',
-        desc: `${riskCount} rzeczy wymaga uwagi: triale, zaległości albo brak gotowej ścieżki anulowania.`,
+        desc: `${riskCount} rzeczy wymaga uwagi: triale, zaległości albo nadchodzące płatności.`,
         cta: 'Otwórz Guard',
         onPress: () => navigation.navigate('Guard'),
       } : {

@@ -13,20 +13,16 @@ import {
   ScrollView,
   Alert,
   ActivityIndicator,
-  Linking,
-  Animated,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
   ArrowLeft, Edit, Trash2, Calendar, CreditCard,
-  Tag, Clock, ExternalLink, CheckCircle, XCircle, ArrowRight, Users, AlertCircle,
-  ShieldCheck, FileText, Link as LinkIcon
+  Tag, Clock, CheckCircle, XCircle, ArrowRight, Users,
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../types/navigation';
-import { CancelAssistantModal } from '../components/CancelAssistantModal';
 import { Skeleton, SkeletonList } from '../components/LoadingState';
 
 // Hooks
@@ -36,8 +32,6 @@ import { useSubscriptionPayments } from '../hooks/useSubscriptionPayments';
 import { useDeleteSubscription } from '../hooks/useDeleteSubscription';
 import { usePaySubscription } from '../hooks/usePaySubscription';
 import { useCancelSubscription } from '../hooks/useCancelSubscription';
-import { useSubscriptionCancelGuide } from '../hooks/useSubscriptionCancelGuide';
-import { useCancelGuideRequest } from '../hooks/useCancelGuideRequest';
 import { CATEGORY_LABELS, SubscriptionEvent } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
@@ -59,11 +53,6 @@ export const SubscriptionDetailScreen = () => {
   const deleteMutation = useDeleteSubscription();
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
-  const requestGuideMutation = useCancelGuideRequest();
-
-  const { data: cancelGuideLookup } = useSubscriptionCancelGuide(id);
-
-  const [isCancelModalVisible, setIsCancelModalVisible] = React.useState(false);
 
   const showDetailActionError = (error: unknown, fallback: string) => {
     Alert.alert('Nie udało się wykonać akcji', getSafeMutationErrorMessage(error, fallback));
@@ -89,14 +78,6 @@ export const SubscriptionDetailScreen = () => {
     );
   }
 
-  const openCancelUrl = () => {
-    if (sub.cancelUrl) {
-      Linking.openURL(sub.cancelUrl).catch(() => {
-        Alert.alert('Błąd', 'Nie można otworzyć linku rezygnacji.');
-      });
-    }
-  };
-
   const handleDelete = () => {
     Alert.alert('Usuń subskrypcję', 'Czy na pewno chcesz trwale usunąć tę subskrypcję?', [
       { text: 'Anuluj', style: 'cancel' },
@@ -119,27 +100,17 @@ export const SubscriptionDetailScreen = () => {
   };
 
   const handleCancel = () => {
-    setIsCancelModalVisible(true);
-  };
-
-  const handleRequestGuide = () => {
-    requestGuideMutation.mutate(id, {
-      onSuccess: (data) => {
-        Alert.alert(
-          data.alreadyExisted ? 'Zgłoszenie już istnieje' : 'Dziękujemy',
-          data.message || (data.alreadyExisted ? 'To zgłoszenie jest już zapisane.' : 'Zapisaliśmy zgłoszenie.')
-        );
+    Alert.alert('Anulować subskrypcję?', `Czy na pewno chcesz oznaczyć "${sub.name}" jako anulowaną?`, [
+      { text: 'Nie', style: 'cancel' },
+      {
+        text: 'Tak, anuluj',
+        style: 'destructive',
+        onPress: () => cancelMutation.mutate(id, {
+          onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została anulowana.'),
+          onError: (error) => showDetailActionError(error, 'Nie udało się anulować subskrypcji.'),
+        }),
       },
-      onError: (err: any) => {
-        if (err?.status === 409 && err?.body?.code === 'CANCEL_GUIDE_ALREADY_EXISTS') {
-          Alert.alert('Informacja', 'Instrukcja dla tej usługi właśnie się pojawiła!');
-        } else if (err?.status === 404) {
-          Alert.alert('Nie znaleziono subskrypcji', 'Nie udało się znaleźć tej subskrypcji dla aktualnego konta.');
-        } else {
-          showDetailActionError(err, 'Nie udało się wysłać zgłoszenia.');
-        }
-      }
-    });
+    ]);
   };
 
   const nextDate = parseAppDate(sub.nextPaymentDate);
@@ -158,44 +129,6 @@ export const SubscriptionDetailScreen = () => {
     if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
     return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}24` };
   })();
-
-  const cancelReadiness = (() => {
-    if (sub.status === 'canceled') {
-      return {
-        title: 'Subskrypcja anulowana',
-        desc: 'Ta usługa nie powinna już generować kolejnych płatności.',
-        icon: CheckCircle,
-        color: theme.colors.primary,
-        bg: `${theme.colors.primary}18`,
-      };
-    }
-    if (cancelGuideLookup?.hasGuide) {
-      return {
-        title: 'Instrukcja anulowania gotowa',
-        desc: 'Możesz przejść przez Cancel Assistant i zamknąć usługę krok po kroku.',
-        icon: ShieldCheck,
-        color: theme.colors.primary,
-        bg: `${theme.colors.primary}22`,
-      };
-    }
-    if (sub.cancelUrl) {
-      return {
-        title: 'Link anulowania zapisany',
-        desc: 'Masz bezpośredni skrót do strony rezygnacji u dostawcy.',
-        icon: LinkIcon,
-        color: theme.colors.cyan,
-        bg: `${theme.colors.cyan}18`,
-      };
-    }
-    return {
-      title: 'Brakuje instrukcji anulowania',
-      desc: 'Możesz zgłosić brak poradnika, a na razie anulować usługę u dostawcy.',
-      icon: FileText,
-      color: theme.colors.warning,
-      bg: `${theme.colors.warning}18`,
-    };
-  })();
-  const CancelReadinessIcon = cancelReadiness.icon;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
@@ -287,21 +220,6 @@ export const SubscriptionDetailScreen = () => {
           </View>
         </View>
 
-        <TouchableOpacity
-          style={[styles.readinessCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
-          activeOpacity={0.86}
-          onPress={sub.status === 'canceled' ? undefined : handleCancel}
-        >
-          <View style={[styles.readinessIcon, { backgroundColor: cancelReadiness.bg }]}>
-            <CancelReadinessIcon size={21} color={cancelReadiness.color} />
-          </View>
-          <View style={styles.readinessBody}>
-            <Text style={styles.readinessTitle}>{cancelReadiness.title}</Text>
-            <Text style={styles.readinessDesc}>{cancelReadiness.desc}</Text>
-          </View>
-          {sub.status !== 'canceled' && <ArrowRight size={18} color={theme.colors.textMuted} />}
-        </TouchableOpacity>
-
         {seasonalStatus.isSeasonal && (
           <TouchableOpacity
             style={[styles.seasonalCard, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}
@@ -366,32 +284,6 @@ export const SubscriptionDetailScreen = () => {
             </View>
           )}
 
-          {sub.cancelUrl && (
-            <TouchableOpacity
-              style={styles.cancelUrlBtn}
-              onPress={openCancelUrl}
-            >
-              <ExternalLink size={20} color={theme.colors.primary} />
-              <Text style={[styles.cancelUrlBtnText, { color: theme.colors.primary }]}>Otwórz stronę rezygnacji</Text>
-            </TouchableOpacity>
-          )}
-
-          {cancelGuideLookup?.hasGuide === false && cancelGuideLookup.source === 'none' && (
-            <TouchableOpacity
-              style={[styles.cancelUrlBtn, { borderTopWidth: sub.cancelUrl ? 1 : 0 }]}
-              onPress={handleRequestGuide}
-              disabled={requestGuideMutation.isPending}
-            >
-              {requestGuideMutation.isPending ? (
-                <ActivityIndicator size="small" color={theme.colors.primary} />
-              ) : (
-                <>
-                  <AlertCircle size={20} color={theme.colors.primary} />
-                  <Text style={[styles.cancelUrlBtnText, { color: theme.colors.primary }]}>Zgłoś brak instrukcji anulowania</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          )}
         </View>
 
         {parsedNotes.text ? (
@@ -484,19 +376,6 @@ export const SubscriptionDetailScreen = () => {
         </TouchableOpacity>
       </ScrollView>
 
-      <CancelAssistantModal
-        isVisible={isCancelModalVisible}
-        onClose={() => setIsCancelModalVisible(false)}
-        subscriptionId={id}
-        subscriptionName={sub.name}
-        onConfirmCancel={() => cancelMutation.mutate(id, {
-          onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została anulowana.'),
-          onError: (error) => showDetailActionError(error, 'Nie udało się anulować subskrypcji.'),
-        })}
-        onRequestGuide={handleRequestGuide}
-        isRequestingGuide={requestGuideMutation.isPending}
-        isConfirmingCancel={cancelMutation.isPending}
-      />
     </SafeAreaView>
   );
 };
@@ -556,11 +435,6 @@ const styles = StyleSheet.create({
   decisionText: { flex: 1 },
   decisionTitle: { color: vibrantTheme.colors.text, fontSize: 13, fontWeight: '900' },
   decisionDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 5 },
-  readinessCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
-  readinessIcon: { width: 46, height: 46, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
-  readinessBody: { flex: 1 },
-  readinessTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
-  readinessDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '600', lineHeight: 18, marginTop: 4 },
   seasonalCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
   seasonalIcon: { width: 46, height: 46, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
   seasonalBody: { flex: 1 },
@@ -573,8 +447,6 @@ const styles = StyleSheet.create({
   infoTextContainer: { marginLeft: 16 },
   infoLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase' },
   infoValue: { fontSize: 16, color: vibrantTheme.colors.text, fontWeight: '700', marginTop: 2 },
-  cancelUrlBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 12, borderTopWidth: 1, borderTopColor: vibrantTheme.colors.border },
-  cancelUrlBtnText: { color: '#6366F1', fontWeight: '600' },
   notesText: { fontSize: 15, color: vibrantTheme.colors.textMuted, marginTop: 8, lineHeight: 22 },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   historyBadge: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },

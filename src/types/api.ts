@@ -62,7 +62,6 @@ export interface Subscription {
   isRecurringBill: boolean;
   reminderDaysBefore: number;
   paymentMethodLabel: string | null;
-  cancelUrl: string | null;
   notes: string | null;
   status: SubscriptionStatus;
   isShared?: boolean;
@@ -87,7 +86,6 @@ export interface CreateSubscriptionPayload {
   isRecurringBill?: boolean;
   reminderDaysBefore?: number;
   paymentMethodLabel?: string;
-  cancelUrl?: string;
   notes?: string;
   isShared?: boolean;
   peopleCount?: number;
@@ -135,7 +133,6 @@ export interface TrialItem {
   trialEndDate: string;
   nextPaymentDate: string | null;
   status: SubscriptionStatus;
-  cancelUrl: string | null;
   reminderDaysBefore: number;
   daysLeft: number;
 }
@@ -313,7 +310,6 @@ export interface HealthScoreResponse {
     overdueCount: number;
     trialsEndingSoonCount: number;
     upcomingPaymentsSoonCount: number;
-    missingCancelGuidesCount: number;
   };
   factors: {
     type: 'positive' | 'negative' | 'neutral';
@@ -327,19 +323,6 @@ export interface HealthScoreResponse {
     title: string;
     description: string;
   }[];
-}
-
-export interface CancelGuideRequestResponse {
-  id: string;
-  status: 'pending' | 'reviewed' | 'completed';
-  alreadyExisted: boolean;
-  message: string;
-  subscription: {
-    id: string;
-    name: string;
-    provider: string | null;
-  };
-  createdAt: string;
 }
 
 export interface UserSettings {
@@ -734,26 +717,4 @@ export interface IgnoreDetectedSubscriptionResponse {
   id: string;
   status: DetectedSubscriptionStatus;
   message: string;
-}
-
-export interface CancelGuide {
-  id: string | null;
-  providerName: string;
-  providerSlug: string | null;
-  category: SubscriptionCategory | null;
-  logoKey: string | null;
-  cancelUrl: string | null;
-  supportUrl: string | null;
-  difficulty: 'easy' | 'medium' | 'hard' | null;
-  estimatedTimeMinutes: number | null;
-  instructions: string[];
-  notes: string | null;
-  matchingKeywords?: string[];
-  isActive?: boolean;
-}
-
-export interface CancelGuideLookupResponse {
-  hasGuide: boolean;
-  source: 'catalog' | 'subscription' | 'none';
-  guide: CancelGuide | null;
 }
