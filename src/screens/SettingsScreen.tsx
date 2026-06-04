@@ -15,6 +15,7 @@ import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet, User, 
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
+import { usePersistentIncome, useSavePersistentIncome } from '../hooks/usePersistentIncome';
 import { useEmailScanStatus } from '../hooks/useEmailScan';
 import { useAuth } from '../context/AuthContext';
 import type { AppStackParamList } from '../types/navigation';
@@ -29,8 +30,10 @@ export const SettingsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Settings'>>();
   const { user, signOut } = useAuth();
   const { data: settings, isLoading } = useUserSettings();
+  const { data: localIncome } = usePersistentIncome();
   const { data: emailScanStatus } = useEmailScanStatus();
   const updateMutation = useUpdateUserSettings();
+  const savePersistentIncome = useSavePersistentIncome();
   const { theme, themeName, setThemeName, themes } = useTheme();
   const themeOptions = Object.values(themes);
 
@@ -48,11 +51,18 @@ export const SettingsScreen = () => {
       setReminderDays(settings.defaultReminderDaysBefore);
       setNotifsEnabled(settings.notificationsEnabled);
       setEmailsEnabled(settings.emailReportsEnabled);
-      setIncome(settings.monthlyIncome?.toString() || '');
-      const nextIncomeCurrency = settings.incomeCurrency || settings.baseCurrency;
+      const nextIncome = settings.monthlyIncome ?? localIncome?.monthlyIncome ?? null;
+      setIncome(nextIncome ? nextIncome.toString() : '');
+      const nextIncomeCurrency = settings.incomeCurrency || localIncome?.incomeCurrency || settings.baseCurrency;
       setIncomeCurrency(USER_SETTING_CURRENCIES.includes(nextIncomeCurrency) ? nextIncomeCurrency : 'PLN');
+      return;
     }
-  }, [settings]);
+
+    if (localIncome) {
+      setIncome(localIncome.monthlyIncome ? localIncome.monthlyIncome.toString() : '');
+      setIncomeCurrency(USER_SETTING_CURRENCIES.includes(localIncome.incomeCurrency) ? localIncome.incomeCurrency : 'PLN');
+    }
+  }, [settings, localIncome]);
 
   const getErrorMessage = (error: any) => {
     const validationErrors = error?.body?.errors;
@@ -82,6 +92,11 @@ export const SettingsScreen = () => {
       monthlyIncome: parsedIncome,
       incomeCurrency: incomeCurrency,
     };
+
+    savePersistentIncome.mutate({
+      monthlyIncome: parsedIncome,
+      incomeCurrency,
+    });
 
     updateMutation.mutate(payload, {
       onSuccess: (updatedSettings) => {
@@ -118,7 +133,7 @@ export const SettingsScreen = () => {
     </View>
   );
 
-  if (isLoading) {
+  if (isLoading && !localIncome) {
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
         <View style={styles.loadingContainer}>
@@ -232,8 +247,8 @@ export const SettingsScreen = () => {
                 <Wallet size={20} color={theme.colors.cyan} />
               </View>
               <View>
-                <Text style={styles.settingTitle}>Miesięczny dochód</Text>
-                <Text style={styles.settingDesc}>Dla udziału subskrypcji w dochodzie</Text>
+                <Text style={styles.settingTitle}>Miesięczny dochód netto</Text>
+                <Text style={styles.settingDesc}>Zapisywany lokalnie i używany na Dashboardzie</Text>
               </View>
             </View>
             <View style={styles.incomeInputRow}>

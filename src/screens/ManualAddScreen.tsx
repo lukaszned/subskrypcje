@@ -506,7 +506,10 @@ export const ManualAddScreen = () => {
       isTrial,
       trialEndDate: isTrial ? formatInputDate(trialEndDate) : undefined,
       notes: notesPayload,
-      reminderDaysBefore: 1,
+      isShared,
+      peopleCount: isShared ? peopleCount : undefined,
+      includeInStats,
+      reminderDaysBefore: 2,
     };
 
     if (subscriptionId) {

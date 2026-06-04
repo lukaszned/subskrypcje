@@ -4,6 +4,7 @@
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createSubscription } from '../api/subscriptions';
+import { clearCachedDashboardSummary, getCachedUserSettings } from '../api/dashboard';
 import { CreateSubscriptionPayload, Subscription } from '../types/api';
 import { SUBSCRIPTIONS_KEY } from './useSubscriptions';
 import { DASHBOARD_SUMMARY_KEY } from './useDashboardSummary';
@@ -19,7 +20,7 @@ import { DASHBOARD_SUMMARY_KEY } from './useDashboardSummary';
  * przez onError callback lub przez sprawdzenie error.status w ApiError.
  */
 // Notifications
-import { scheduleSubscriptionReminder } from '../utils/notifications';
+import { cancelSubscriptionReminder, scheduleSubscriptionReminder } from '../utils/notifications';
 
 export function useCreateSubscription() {
   const queryClient = useQueryClient();
@@ -30,16 +31,26 @@ export function useCreateSubscription() {
       // Invalidate queries
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
       queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
+      clearCachedDashboardSummary();
       
       if (data.nextPaymentDate) {
-        scheduleSubscriptionReminder(
-          data.id,
-          data.name,
-          data.amount,
-          data.currency,
-          data.nextPaymentDate,
-          data.reminderDaysBefore
-        );
+        getCachedUserSettings()
+          .then(async (settings) => {
+            if (settings?.notificationsEnabled === false) {
+              await cancelSubscriptionReminder(data.id);
+              return null;
+            }
+
+            return scheduleSubscriptionReminder(
+              data.id,
+              data.name,
+              data.amount,
+              data.currency,
+              data.nextPaymentDate!,
+              data.reminderDaysBefore
+            );
+          })
+          .catch(() => undefined);
       }
     },
   });

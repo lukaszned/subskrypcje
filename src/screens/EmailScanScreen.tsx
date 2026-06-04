@@ -61,6 +61,7 @@ import {
   DetectedSubscription,
   EmailScanImportDraft,
   EmailScanImportDraftPayload,
+  EmailScanImportConfirmResponse,
   EmailScanImportPreviewResponse,
   EmailScanImportSelection,
   EmailScanProductItem,
@@ -545,6 +546,48 @@ function parseEditableAmount(value: string) {
   const parsed = Number(match?.[0] ?? normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
+
+const getCreatedImportNoun = (count: number) => (
+  count === 1 ? 'pozycję' : count >= 2 && count <= 4 ? 'pozycje' : 'pozycji'
+);
+
+const getSkippedImportReason = (item: NonNullable<EmailScanImportConfirmResponse['skipped']>[number]) => {
+  if (item.userMessage) return item.userMessage;
+  if (item.visibilityHint) return item.visibilityHint;
+  if (item.reason === 'missing_required_field' && item.missingFields?.length) {
+    return `Brakuje danych: ${item.missingFields.join(', ')}`;
+  }
+  return item.reason || 'Pominięto pozycję bez dodatkowego opisu.';
+};
+
+const logImportConfirmResponse = (result: EmailScanImportConfirmResponse) => {
+  if (!__DEV__) return;
+
+  const created = Array.isArray(result.created) ? result.created : [];
+  const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+
+  console.log('[EmailScan/import-confirm]', {
+    createdLength: created.length,
+    skippedLength: skipped.length,
+    summary: result.summary,
+    refreshHintsCreatedSubscriptionIds: result.refreshHints?.createdSubscriptionIds || [],
+    refreshHintsInvalidateQueries: result.refreshHints?.invalidateQueries || [],
+    visibilityHints: {
+      created: created.map((item) => ({
+        subscriptionId: item.subscriptionId,
+        name: item.name,
+        status: item.status,
+        visibilityHint: item.visibilityHint,
+      })),
+      skipped: skipped.map((item) => ({
+        sourceItemId: item.sourceItemId,
+        name: item.name,
+        reason: item.reason,
+        visibilityHint: item.visibilityHint,
+      })),
+    },
+  });
+};
 
 function buildPreviewDraftEdits(result: EmailScanImportPreviewResponse | null) {
   return getPreviewDraftsFromResult(result).reduce<Record<string, { selected: boolean; amount: string; currency: string }>>((acc, draft, index) => {
@@ -1127,17 +1170,22 @@ export const EmailScanScreen = () => {
 
     importConfirmMutation.mutate({ drafts: selectedDrafts }, {
       onSuccess: (result) => {
-        const createdCount = result.summary?.created ?? result.created?.length ?? 0;
-        const skippedCount = result.summary?.skipped ?? result.skipped?.length ?? 0;
-        const createdNoun = createdCount === 1 ? 'pozycję' : createdCount >= 2 && createdCount <= 4 ? 'pozycje' : 'pozycji';
-        const skippedText = skippedCount === 1
-          ? '1 pozycja wymaga uzupełnienia danych.'
-          : skippedCount >= 2 && skippedCount <= 4
-            ? `${skippedCount} pozycje wymagają uzupełnienia danych.`
-          : `${skippedCount} pozycji wymaga uzupełnienia danych.`;
-        const createdLine = `Dodano ${createdCount} ${createdNoun}.`;
+        logImportConfirmResponse(result);
+
+        const created = Array.isArray(result.created) ? result.created : [];
+        const skipped = Array.isArray(result.skipped) ? result.skipped : [];
+        const createdCount = created.length;
+        const skippedCount = skipped.length;
+        const createdLine = `Dodano ${createdCount} ${getCreatedImportNoun(createdCount)}.`;
+        const skippedReasons = skipped
+          .slice(0, 5)
+          .map((item) => {
+            const label = item.name || item.provider || item.sourceItemId || 'Pozycja';
+            return `• ${label}: ${getSkippedImportReason(item)}`;
+          })
+          .join('\n');
         const skippedLine = skippedCount > 0
-          ? `\n${skippedText}`
+          ? `\n\nPominięto ${skippedCount} ${getCreatedImportNoun(skippedCount)}:\n${skippedReasons}${skippedCount > 5 ? '\n• ...' : ''}`
           : '';
         const warnings = Array.isArray(result.warnings) && result.warnings.length > 0
           ? `\n\nUwagi: ${result.warnings.join(' ')}`
@@ -1148,9 +1196,32 @@ export const EmailScanScreen = () => {
         setSelectedImportItems({});
         refresh();
 
+        if (createdCount > 0) {
+          Alert.alert(
+            'Dodano pozycje',
+            `${createdLine}${skippedLine}${warnings}`,
+            [
+              {
+                text: 'Zobacz dodane pozycje',
+                onPress: () => navigation.navigate('SubscriptionList'),
+              },
+              { text: 'OK' },
+            ]
+          );
+          return;
+        }
+
+        if (skippedCount > 0) {
+          Alert.alert(
+            'Nie zapisano żadnej pozycji',
+            `${skippedReasons || 'Backend pominął wybrane pozycje.'}${warnings}`
+          );
+          return;
+        }
+
         Alert.alert(
-          'Import zakończony',
-          `${createdLine}${skippedLine}${warnings}`
+          'Nie zapisano żadnej pozycji',
+          result.message || 'Import nie zwrócił żadnych utworzonych subskrypcji.'
         );
       },
       onError: (error: any) => {

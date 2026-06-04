@@ -47,13 +47,15 @@ import { useTrials } from '../hooks/useTrials';
 import { useDashboardSavings } from '../hooks/useDashboardSavings';
 import { useDashboardTrends } from '../hooks/useDashboardTrends';
 import { useReminders } from '../hooks/useReminders';
-import { syncReminders } from '../utils/notifications';
+import { getNotificationPermissionStatus, syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
 import { NetworkStatusBanner } from '../components/NetworkStatusBanner';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
 import { useHealthScore } from '../hooks/useHealthScore';
 import { useDashboardActivity } from '../hooks/useDashboardActivity';
+import { usePersistentIncome } from '../hooks/usePersistentIncome';
+import { useSubscriptions } from '../hooks/useSubscriptions';
 import { 
   UpcomingPaymentItem, 
   CategoryBreakdownItem,
@@ -63,6 +65,7 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { getCategoryTone, getStatusTone, withAlpha } from '../theme/themeUtils';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
+import { buildUpcomingPaymentsFromSubscriptions, getCountedMonthlyTotal } from '../utils/subscriptionCalculations';
 
 const { width } = Dimensions.get('window');
 
@@ -183,6 +186,8 @@ export const DashboardScreen = () => {
   const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10, stageThreeEnabled);
 
   const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(stageTwoEnabled);
+  const { data: persistentIncome } = usePersistentIncome();
+  const { data: subscriptions = [], refetch: refetchSubscriptions } = useSubscriptions();
   useNotificationPreview(false);
 
   useEffect(() => {
@@ -213,10 +218,79 @@ export const DashboardScreen = () => {
   const isError = isSummaryError;
   const hasData = !!summaryData;
 
-  const monthlyTotal = summaryData?.monthlyTotal ?? 0;
-  const yearlyTotal = summaryData?.yearlyTotal ?? 0;
   const baseCurrency = summaryData?.baseCurrency ?? 'PLN';
+  const summaryMonthlyTotal = summaryData?.monthlyTotal ?? 0;
+  const localMonthlyTotal = useMemo(
+    () => getCountedMonthlyTotal(subscriptions),
+    [subscriptions]
+  );
+  const countedCurrencies = useMemo(
+    () => Array.from(new Set(
+      subscriptions
+        .filter((subscription) => subscription.status !== 'canceled' && subscription.includeInStats !== false)
+        .map((subscription) => subscription.currency || baseCurrency)
+    )),
+    [baseCurrency, subscriptions]
+  );
+  const canUseLocalMonthlyTotal = subscriptions.length > 0 &&
+    countedCurrencies.length <= 1 &&
+    (countedCurrencies[0] || baseCurrency) === baseCurrency;
+  const monthlyTotal = canUseLocalMonthlyTotal ? localMonthlyTotal : summaryMonthlyTotal;
+  const yearlyTotal = monthlyTotal * 12;
   const overdueCount = summaryData?.overdueCount ?? 0;
+  const reliableUpcomingItems = useMemo(() => {
+    const localItems = buildUpcomingPaymentsFromSubscriptions(subscriptions, 30);
+    const source = subscriptions.length > 0 ? localItems : (upcomingData?.items ?? []);
+
+    return [...source]
+      .map((item) => ({ item, daysLeft: daysUntilDate(item.nextPaymentDate) }))
+      .filter((entry): entry is { item: UpcomingPaymentItem; daysLeft: number } =>
+        entry.daysLeft !== null && entry.daysLeft >= 0 && entry.daysLeft <= 30
+      )
+      .sort((a, b) => {
+        if (a.daysLeft !== b.daysLeft) return a.daysLeft - b.daysLeft;
+        return a.item.name.localeCompare(b.item.name, 'pl');
+      })
+      .map((entry) => entry.item);
+  }, [subscriptions, upcomingData]);
+  const upcomingPaymentsCount = reliableUpcomingItems.length;
+  const effectiveBudgetImpact = useMemo(() => {
+    const localIncome = persistentIncome?.monthlyIncome ?? null;
+    const localIncomeCurrency = persistentIncome?.incomeCurrency || baseCurrency;
+    const hasLocalIncome = Number(localIncome || 0) > 0;
+    const localCurrencyMatches = localIncomeCurrency === baseCurrency;
+
+    if (hasLocalIncome && localCurrencyMatches) {
+      const percentage = monthlyTotal > 0 && localIncome
+        ? Math.round((monthlyTotal / localIncome) * 1000) / 10
+        : 0;
+
+      return {
+        hasIncome: true,
+        monthlyIncome: localIncome,
+        incomeCurrency: localIncomeCurrency,
+        monthlySubscriptionsTotal: monthlyTotal,
+        subscriptionsIncomePercentage: percentage,
+        currencyMismatch: false,
+      };
+    }
+
+    if (budgetImpact?.hasIncome) {
+      return {
+        ...budgetImpact,
+        currencyMismatch: false,
+      };
+    }
+
+    return {
+      hasIncome: false,
+      monthlyIncome: localIncome,
+      incomeCurrency: localIncomeCurrency,
+      monthlySubscriptionsTotal: monthlyTotal,
+      subscriptionsIncomePercentage: null,
+      currencyMismatch: hasLocalIncome && !localCurrencyMatches,
+    };
+  }, [baseCurrency, budgetImpact, monthlyTotal, persistentIncome]);
 
   // Memoized Category Breakdown Data
   const memoizedBreakdownItems = useMemo(() => {
@@ -256,22 +330,23 @@ export const DashboardScreen = () => {
   // Sync Notifications
   useEffect(() => {
     const reminderItems = remindersData?.items;
-    if (reminderItems && Array.isArray(reminderItems) && reminderItems.length > 0) {
-      // Synchronizujemy powiadomienia w tle, nie blokujemy UI
-      (async () => {
-        try {
-          await syncReminders(reminderItems);
-        } catch {
-          // Local notifications are best-effort; the dashboard should stay responsive.
+    if (!reminderItems || !Array.isArray(reminderItems)) return;
+
+    (async () => {
+      try {
+        await syncReminders(reminderItems);
+      } catch (error) {
+        if (__DEV__) {
+          console.warn('[DashboardScreen] Reminder sync failed:', error);
         }
-      })();
-    }
+      }
+    })();
   }, [remindersData]);
 
   useEffect(() => {
     const checkPermissions = async () => {
-      // W Expo Go notifications działają inaczej, ale zostawiamy logikę
-      setNotifPermission('granted');
+      const status = await getNotificationPermissionStatus();
+      setNotifPermission(status);
     };
     checkPermissions();
   }, []);
@@ -282,6 +357,7 @@ export const DashboardScreen = () => {
       await Promise.allSettled([
         refetchSummary(),
         refetchUpcoming(),
+        refetchSubscriptions(),
       ]);
 
       await Promise.allSettled([
@@ -1238,12 +1314,12 @@ export const DashboardScreen = () => {
       });
     }
 
-    const subscriptionsIncomePercentage = budgetImpact?.subscriptionsIncomePercentage ?? 0;
-    if (budgetImpact?.hasIncome && subscriptionsIncomePercentage > 20) {
+    const subscriptionsIncomePercentage = effectiveBudgetImpact.subscriptionsIncomePercentage ?? 0;
+    if (effectiveBudgetImpact.hasIncome && subscriptionsIncomePercentage > 20) {
       list.push({
         id: 'budget',
         title: 'Wysoki udział subskrypcji',
-        desc: `Subskrypcje odpowiadają za ${subscriptionsIncomePercentage}% miesięcznego dochodu.`,
+        desc: `Subskrypcje odpowiadają za ${subscriptionsIncomePercentage.toFixed(1)}% miesięcznego dochodu.`,
         icon: TrendingUp,
         color: theme.primary
       });
@@ -1260,12 +1336,12 @@ export const DashboardScreen = () => {
     }
 
     return list;
-  }, [overdueCount, trialsData, budgetImpact, savingsData, theme, baseCurrency]);
+  }, [overdueCount, trialsData, effectiveBudgetImpact, savingsData, theme, baseCurrency]);
 
   const renderBudgetCard = () => {
-    if (!budgetImpact || !budgetImpact.hasIncome) return null;
-    const subscriptionsIncomePercentage = budgetImpact.subscriptionsIncomePercentage ?? 0;
-    const monthlyIncome = budgetImpact.monthlyIncome ?? 0;
+    if (!effectiveBudgetImpact.hasIncome) return null;
+    const subscriptionsIncomePercentage = effectiveBudgetImpact.subscriptionsIncomePercentage ?? 0;
+    const monthlyIncome = effectiveBudgetImpact.monthlyIncome ?? 0;
 
     return (
       <View style={[dynamicStyles.budgetCard, dynamicStyles.shadowSm]}>
@@ -1284,12 +1360,12 @@ export const DashboardScreen = () => {
             />
           </View>
           <Text style={dynamicStyles.budgetPercentage}>
-            {subscriptionsIncomePercentage}%
+            {subscriptionsIncomePercentage.toFixed(1)}%
           </Text>
         </View>
         
         <Text style={dynamicStyles.budgetDesc}>
-          Subskrypcje kosztują {budgetImpact.monthlySubscriptionsTotal.toFixed(2)} {baseCurrency} miesięcznie przy dochodzie {monthlyIncome.toFixed(2)} {budgetImpact.incomeCurrency}.
+          Subskrypcje kosztują {effectiveBudgetImpact.monthlySubscriptionsTotal.toFixed(2)} {baseCurrency} miesięcznie przy dochodzie {monthlyIncome.toFixed(2)} {effectiveBudgetImpact.incomeCurrency}.
         </Text>
       </View>
     );
@@ -1475,7 +1551,7 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.statLabel}>Zaległe</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: theme.primary }]}>{summaryData?.upcomingPaymentsCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: theme.primary }]}>{upcomingPaymentsCount}</Text>
             <Text style={dynamicStyles.statLabel}>Wkrótce</Text>
           </View>
         </View>
@@ -1759,7 +1835,7 @@ export const DashboardScreen = () => {
   };
 
   const renderUpcomingWidget = () => {
-    const items = (upcomingData?.items ?? []).slice(0, 2);
+    const items = reliableUpcomingItems.slice(0, 2);
 
     return (
       <TouchableOpacity
@@ -1826,6 +1902,7 @@ export const DashboardScreen = () => {
     const bars = memoizedTrends.items.length > 0
       ? memoizedTrends.items.slice(-6).map(item => Math.max(0.18, item.amount / memoizedTrends.maxAmount))
       : [0.35, 0.54, 0.42, 0.7, 0.58, 0.82];
+    const incomePercentage = effectiveBudgetImpact.subscriptionsIncomePercentage ?? 0;
 
     return (
       <TouchableOpacity
@@ -1840,22 +1917,42 @@ export const DashboardScreen = () => {
           <TrendingUp size={18} color={theme.primary} />
         </View>
         <Text style={dynamicStyles.widgetTitle}>Statystyki</Text>
-        <View style={dynamicStyles.miniChart}>
-          {bars.map((height, index) => (
-            <View key={`${height}-${index}`} style={dynamicStyles.miniChartTrack}>
-              <View
-                style={[
-                  dynamicStyles.miniChartBar,
-                  {
-                    height: `${Math.min(1, height) * 100}%`,
-                    opacity: index === bars.length - 1 ? 1 : 0.28 + index * 0.08,
-                  },
-                ]}
-              />
+        {effectiveBudgetImpact.hasIncome ? (
+          <>
+            <Text style={[dynamicStyles.subscriptionMetric, { color: theme.primary }]}>
+              {incomePercentage.toFixed(1)}%
+            </Text>
+            <Text style={dynamicStyles.widgetCaption}>
+              Twoje subskrypcje pochłaniają tyle miesięcznej wypłaty.
+            </Text>
+          </>
+        ) : effectiveBudgetImpact.currencyMismatch ? (
+          <>
+            <Text style={[dynamicStyles.subscriptionMetric, { color: theme.warning }]}>Waluta</Text>
+            <Text style={dynamicStyles.widgetCaption}>
+              Dopasuj dochód do {baseCurrency}, aby policzyć procent.
+            </Text>
+          </>
+        ) : (
+          <>
+            <View style={dynamicStyles.miniChart}>
+              {bars.map((height, index) => (
+                <View key={`${height}-${index}`} style={dynamicStyles.miniChartTrack}>
+                  <View
+                    style={[
+                      dynamicStyles.miniChartBar,
+                      {
+                        height: `${Math.min(1, height) * 100}%`,
+                        opacity: index === bars.length - 1 ? 1 : 0.28 + index * 0.08,
+                      },
+                    ]}
+                  />
+                </View>
+              ))}
             </View>
-          ))}
-        </View>
-        <Text style={dynamicStyles.widgetCaption}>{hasHistory ? 'Trend kosztów' : 'Zbieramy historię'}</Text>
+            <Text style={dynamicStyles.widgetCaption}>{hasHistory ? 'Trend kosztów' : 'Dodaj dochód w Ustawieniach'}</Text>
+          </>
+        )}
       </TouchableOpacity>
     );
   };
@@ -1883,7 +1980,7 @@ export const DashboardScreen = () => {
   };
 
   const renderTodayFocus = () => {
-    const nextPayment = upcomingData?.items?.[0];
+    const nextPayment = reliableUpcomingItems[0];
     const riskCount = (summaryData?.trialsCount ?? 0) + overdueCount;
     const focusCards = [
       nextPayment ? {
@@ -1969,7 +2066,7 @@ export const DashboardScreen = () => {
     const savingsLabel = savingsData && savingsData.monthlySavings > 0
       ? `Oszczędzasz ok. ${savingsData.monthlySavings.toFixed(2)} ${savingsData.baseCurrency} / mc`
       : 'Zobacz anulowane koszty i miesięczny efekt';
-    const incomePercentage = budgetImpact?.subscriptionsIncomePercentage ?? null;
+    const incomePercentage = effectiveBudgetImpact.subscriptionsIncomePercentage ?? null;
 
     return (
       <View style={dynamicStyles.insightStrip}>
@@ -2003,7 +2100,7 @@ export const DashboardScreen = () => {
           <ChevronRight size={17} color={theme.textDim} />
         </TouchableOpacity>
 
-        {budgetImpact?.hasIncome && (
+        {effectiveBudgetImpact.hasIncome && (
           <View style={dynamicStyles.insightRow}>
             <View style={dynamicStyles.widgetIcon}>
               <Wallet size={18} color={theme.primary} />
@@ -2011,17 +2108,35 @@ export const DashboardScreen = () => {
             <View style={dynamicStyles.insightTextBlock}>
               <Text style={dynamicStyles.insightTitle}>Wpływ na budżet</Text>
               <Text style={dynamicStyles.insightDesc}>
-                Subskrypcje to {incomePercentage ?? 0}% miesięcznego dochodu.
+                Subskrypcje pochłaniają {(incomePercentage ?? 0).toFixed(1)}% Twojej wypłaty.
               </Text>
             </View>
           </View>
+        )}
+        {effectiveBudgetImpact.currencyMismatch && (
+          <TouchableOpacity
+            style={dynamicStyles.insightRow}
+            activeOpacity={0.84}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <View style={dynamicStyles.widgetIcon}>
+              <Wallet size={18} color={theme.warning} />
+            </View>
+            <View style={dynamicStyles.insightTextBlock}>
+              <Text style={dynamicStyles.insightTitle}>Dochód zapisany w innej walucie</Text>
+              <Text style={dynamicStyles.insightDesc}>
+                Ustaw dochód w {baseCurrency}, aby liczyć procent wypłaty bez zgadywania kursu.
+              </Text>
+            </View>
+            <ChevronRight size={17} color={theme.textDim} />
+          </TouchableOpacity>
         )}
       </View>
     );
   };
 
   const renderDecisionCenter = () => {
-    const nextPayment = upcomingData?.items?.[0];
+    const nextPayment = reliableUpcomingItems[0];
     const nextTrial = trialsData?.items?.[0];
     const cards = [
       nextPayment ? {

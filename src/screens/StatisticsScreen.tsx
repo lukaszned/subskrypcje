@@ -14,6 +14,7 @@ import type { AppStackParamList } from '../types/navigation';
 import { useDashboardSummary } from '../hooks/useDashboardSummary';
 import { useDashboardTrends } from '../hooks/useDashboardTrends';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
+import { usePersistentIncome } from '../hooks/usePersistentIncome';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
@@ -26,6 +27,7 @@ function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCyc
   if (cycle === 'yearly') return amount / 12;
   if (cycle === 'weekly') return amount * 4.345;
   if (cycle === 'one_time') return 0;
+  if (cycle === 'custom') return 0;
   return amount;
 }
 
@@ -35,6 +37,7 @@ export const StatisticsScreen = () => {
   const { data: summary } = useDashboardSummary();
   const { data: trends } = useDashboardTrends(6, 'planned');
   const { data: budget } = useBudgetImpact();
+  const { data: persistentIncome } = usePersistentIncome();
   const { data: subscriptions = [] } = useSubscriptions();
 
   const trendItems = (trends?.items ?? []).slice(-6);
@@ -59,6 +62,33 @@ export const StatisticsScreen = () => {
       currency: summary?.baseCurrency || top?.subscription.currency || 'PLN',
     };
   }, [subscriptions, summary]);
+  const budgetView = useMemo(() => {
+    const baseCurrency = summary?.baseCurrency || savingSimulation.currency;
+    const income = persistentIncome?.monthlyIncome ?? null;
+    const incomeCurrency = persistentIncome?.incomeCurrency || baseCurrency;
+
+    if (income && income > 0 && incomeCurrency === baseCurrency) {
+      return {
+        hasIncome: true,
+        percentage: Math.round((savingSimulation.currentMonthly / income) * 1000) / 10,
+        currencyMismatch: false,
+      };
+    }
+
+    if (budget?.hasIncome) {
+      return {
+        hasIncome: true,
+        percentage: Number(budget.subscriptionsIncomePercentage || 0),
+        currencyMismatch: false,
+      };
+    }
+
+    return {
+      hasIncome: false,
+      percentage: 0,
+      currencyMismatch: Boolean(income && income > 0 && incomeCurrency !== baseCurrency),
+    };
+  }, [budget, persistentIncome, savingSimulation, summary]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
@@ -128,15 +158,19 @@ export const StatisticsScreen = () => {
           </View>
         </View>
 
-        {budget?.hasIncome && (
+        {(budgetView.hasIncome || budgetView.currencyMismatch) && (
           <View style={styles.card}>
             <View style={styles.cardHeader}>
               <Text style={styles.cardTitle}>Wpływ na budżet</Text>
               <Wallet size={20} color={theme.colors.primary} />
             </View>
-            <Text style={styles.metricValue}>{budget.subscriptionsIncomePercentage ?? 0}%</Text>
+            <Text style={styles.metricValue}>
+              {budgetView.currencyMismatch ? 'Waluta' : `${budgetView.percentage.toFixed(1)}%`}
+            </Text>
             <Text style={styles.metricHint}>
-              Taki udział miesięcznego dochodu zajmują aktualne subskrypcje.
+              {budgetView.currencyMismatch
+                ? 'Dochód jest zapisany w innej walucie niż podsumowanie. Dopasuj walutę w ustawieniach.'
+                : 'Taki udział miesięcznego dochodu zajmują aktualne subskrypcje.'}
             </Text>
           </View>
         )}

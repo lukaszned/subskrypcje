@@ -3,6 +3,7 @@
 // =============================================================
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { clearCachedDashboardSummary } from '../api/dashboard';
 import { cancelSubscription } from '../api/subscriptions';
 import { Subscription } from '../types/api';
 import { SUBSCRIPTIONS_KEY } from './useSubscriptions';
@@ -25,6 +26,7 @@ export function useCancelSubscription() {
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: SUBSCRIPTIONS_KEY() });
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
+      clearCachedDashboardSummary();
       
       // Cancel notification (używamy id z zmiennych wejściowych)
       cancelSubscriptionReminder(variables);

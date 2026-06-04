@@ -25,6 +25,7 @@ import {
 } from '../types/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { daysUntilDate, parseAppDate, startOfLocalDay } from '../utils/date';
+import { parseSubscriptionNotes } from '../utils/subscriptionNotes';
 
 const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 const DASHBOARD_SUMMARY_FAST_CACHE_MS = 2 * 60 * 1000;
@@ -97,6 +98,14 @@ export async function getCachedDashboardSummary(): Promise<(DashboardSummary & {
   } catch (error) {
     console.log('[dashboard] Could not read cached summary.', error);
     return null;
+  }
+}
+
+export async function clearCachedDashboardSummary() {
+  try {
+    await AsyncStorage.removeItem(DASHBOARD_SUMMARY_CACHE_KEY);
+  } catch {
+    // A stale summary cache should never block subscription mutations.
   }
 }
 
@@ -186,6 +195,7 @@ function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCyc
     case 'weekly':
       return amount * 4.345;
     case 'one_time':
+    case 'custom':
       return 0;
     default:
       return amount;
@@ -193,10 +203,7 @@ function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCyc
 }
 
 function buildSummaryFromSubscriptions(rawSubscriptions: any[]): DashboardSummary {
-  const subscriptions = rawSubscriptions.map((subscription) => ({
-    ...subscription,
-    amount: Number(subscription?.amount || 0),
-  })) as Subscription[];
+  const subscriptions = normalizeSubscriptions(rawSubscriptions);
 
   const now = new Date();
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -239,10 +246,18 @@ function buildSummaryFromSubscriptions(rawSubscriptions: any[]): DashboardSummar
 }
 
 function normalizeSubscriptions(rawSubscriptions: any[]): Subscription[] {
-  return rawSubscriptions.map((subscription) => ({
-    ...subscription,
-    amount: Number(subscription?.amount || 0),
-  })) as Subscription[];
+  return rawSubscriptions.map((subscription) => {
+    const parsedNotes = parseSubscriptionNotes(subscription?.notes);
+
+    return {
+      ...subscription,
+      amount: Number(subscription?.amount || 0),
+      isShared: subscription?.isShared ?? parsedNotes.isShared,
+      peopleCount: subscription?.peopleCount ?? parsedNotes.peopleCount,
+      includeInStats: subscription?.includeInStats ?? parsedNotes.includeInStats ?? true,
+      reminderDaysBefore: Number(subscription?.reminderDaysBefore ?? 2),
+    };
+  }) as Subscription[];
 }
 
 async function getSubscriptionsFallback(): Promise<Subscription[]> {

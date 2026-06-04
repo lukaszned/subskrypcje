@@ -572,13 +572,25 @@ export interface EmailScanImportConfirmResponse {
     subscriptionId?: string;
     name?: string;
     provider?: string | null;
+    amount?: number | string | null;
+    currency?: string | null;
+    billingCycle?: BillingCycle | string | null;
+    category?: SubscriptionCategory | string | null;
+    status?: SubscriptionStatus | string | null;
     isRecurringBill?: boolean;
+    nextPaymentDate?: string | null;
+    createdAt?: string | null;
+    visibilityHint?: string | null;
     [key: string]: unknown;
   }>;
   skipped?: Array<{
     sourceItemId?: string;
+    name?: string;
+    provider?: string | null;
     reason?: string;
     missingFields?: string[];
+    visibilityHint?: string | null;
+    userMessage?: string | null;
     [key: string]: unknown;
   }>;
   warnings?: string[];
@@ -589,6 +601,11 @@ export interface EmailScanImportConfirmResponse {
     [key: string]: unknown;
   };
   message?: string;
+  refreshHints?: {
+    invalidateQueries?: string[];
+    createdSubscriptionIds?: string[];
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 

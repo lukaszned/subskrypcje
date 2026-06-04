@@ -3,6 +3,7 @@
 // =============================================================
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { clearCachedDashboardSummary } from '../api/dashboard';
 import { deleteSubscription } from '../api/subscriptions';
 import { SUBSCRIPTIONS_KEY } from './useSubscriptions';
 import { DASHBOARD_SUMMARY_KEY } from './useDashboardSummary';
@@ -25,6 +26,7 @@ export function useDeleteSubscription() {
       queryClient.invalidateQueries({ queryKey: DASHBOARD_SUMMARY_KEY });
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'upcoming'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard', 'category-breakdown'] });
+      clearCachedDashboardSummary();
 
       // Anuluj powiadomienie
       cancelSubscriptionReminder(id);

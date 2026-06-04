@@ -22,6 +22,7 @@ import {
   SubscriptionHistoryResponse,
   SubscriptionPaymentsResponse,
 } from '../types/api';
+import { parseSubscriptionNotes } from '../utils/subscriptionNotes';
 
 const SUBSCRIPTIONS_CACHE_KEY = 'sub-sentry.subscriptions.v1';
 const SUBSCRIPTION_WRITE_TIMEOUT_MS = 45000;
@@ -33,6 +34,7 @@ const SUBSCRIPTION_ACTION_TIMEOUT_MS = 30000;
 
 function normalizeSubscription(sub: any): Subscription {
   const amount = typeof sub?.amount === 'string' ? parseFloat(sub.amount) : Number(sub?.amount ?? 0);
+  const parsedNotes = parseSubscriptionNotes(sub?.notes);
 
   return {
     ...sub,
@@ -46,6 +48,9 @@ function normalizeSubscription(sub: any): Subscription {
     billingCycle: sub?.billingCycle || 'monthly',
     status: sub?.status || 'pending',
     isTrial: Boolean(sub?.isTrial),
+    isShared: sub?.isShared ?? parsedNotes.isShared,
+    peopleCount: sub?.peopleCount ?? parsedNotes.peopleCount,
+    includeInStats: sub?.includeInStats ?? parsedNotes.includeInStats ?? true,
     reminderDaysBefore: Number(sub?.reminderDaysBefore ?? 2),
   };
 }

@@ -57,6 +57,7 @@ type ReviewItem = {
 const getMonthlyAmount = (subscription: Subscription) => {
   if (subscription.billingCycle === 'yearly') return subscription.amount / 12;
   if (subscription.billingCycle === 'weekly') return subscription.amount * 4.33;
+  if (subscription.billingCycle === 'one_time' || subscription.billingCycle === 'custom') return 0;
   return subscription.amount;
 };
 
