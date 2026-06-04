@@ -98,12 +98,11 @@ const CYCLE_OPTIONS: { id: BillingCycle; label: string }[] = [
   { id: 'custom', label: 'Inny' },
 ];
 
-const IMAP_FIXED_PROFILE: EmailScanProfile = 'fast';
+const IMAP_FIXED_PROFILE: EmailScanProfile = 'balanced';
 
 type ImapProviderPreset = {
   id: 'onet' | 'interia';
   label: string;
-  reliability: 'medium' | 'high';
   note: string;
   host: string;
   port: string;
@@ -115,8 +114,7 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
   {
     id: 'onet',
     label: 'Onet',
-    reliability: 'medium',
-    note: 'Szybki start i grupowanie po czasie',
+    note: 'Szybkie skanowanie skrzynki',
     host: 'imap.poczta.onet.pl',
     port: '993',
     secure: true,
@@ -125,8 +123,7 @@ const IMAP_PROVIDER_PRESETS: ImapProviderPreset[] = [
   {
     id: 'interia',
     label: 'Interia',
-    reliability: 'high',
-    note: 'Celowane szukanie w treści',
+    note: 'Skanowanie skrzynki',
     host: 'poczta.interia.pl',
     port: '993',
     secure: true,
@@ -189,8 +186,8 @@ const PRODUCT_DECISION_LABELS: Record<string, string> = {
   sprawdzone: 'Sprawdzone',
   ignoruj: 'Zignorowane',
   'przypomnij później': 'Później',
-  active_candidate: 'Aktywna kandydatura',
-  bill_candidate: 'Kandydat na rachunek',
+  active_candidate: 'Aktywna pozycja',
+  bill_candidate: 'Rachunek do sprawdzenia',
   canceled: 'Anulowane',
   confirm_manually: 'Potwierdź ręcznie',
   confirm_still_active: 'Potwierdź, czy nadal aktywna',
@@ -932,13 +929,13 @@ export const EmailScanScreen = () => {
           setDryRunResults(result.created || []);
           Alert.alert(
             'Podgląd zakończony',
-            `Znaleziono ${result.created?.length ?? 0} potencjalnych kandydatur (nie zapisano ich w bazie).`
+            `Znaleziono ${result.created?.length ?? 0} możliwych pozycji (nie zapisano ich w bazie).`
           );
         } else {
           setDryRunResults(null);
           Alert.alert(
             'Skan zakończony',
-            `Przeanalizowano ${result.scannedMessages} wiadomości. Nowe kandydatury: ${result.createdDetections}.`
+            `Przeanalizowano ${result.scannedMessages} wiadomości. Nowe pozycje do sprawdzenia: ${result.createdDetections}.`
           );
           refresh();
         }
@@ -1249,8 +1246,8 @@ export const EmailScanScreen = () => {
 
   const handleIgnore = (detection: DetectedSubscription) => {
     Alert.alert(
-      'Ignorować kandydaturę?',
-      `${detection.name || detection.provider || 'Ta kandydatura'} nie zostanie dodana do subskrypcji.`,
+      'Pominąć pozycję?',
+      `${detection.name || detection.provider || 'Ta pozycja'} nie zostanie dodana do subskrypcji.`,
       [
         { text: 'Anuluj', style: 'cancel' },
         {
@@ -1287,7 +1284,7 @@ export const EmailScanScreen = () => {
     }, {
       onSuccess: () => {
         setSelectedDetection(null);
-        Alert.alert('Dodano subskrypcję', 'Kandydatura została zaakceptowana i dodana do subskrypcji.');
+        Alert.alert('Dodano subskrypcję', 'Pozycja została zaakceptowana i dodana do subskrypcji.');
       },
       onError: (error: any) => {
         if (error instanceof ApiError) {
@@ -1344,7 +1341,6 @@ export const EmailScanScreen = () => {
           >
             <View style={styles.imapPresetCardTop}>
               <Text style={[styles.imapPresetText, { color: theme.colors.primary }]}>{preset.label}</Text>
-              <Text style={styles.imapReliabilityText}>{preset.reliability}</Text>
             </View>
             <Text style={styles.imapPresetNote}>{preset.note}</Text>
           </TouchableOpacity>
@@ -1476,7 +1472,7 @@ export const EmailScanScreen = () => {
             <X size={20} color={theme.colors.textMuted} />
           </TouchableOpacity>
         </View>
-        <Text style={styles.dryRunDesc}>To są kandydatury znalezione podczas symulacji. Nie zostały zapisane w Twoim profilu.</Text>
+        <Text style={styles.dryRunDesc}>To są pozycje znalezione podczas symulacji. Nie zostały zapisane w Twoim profilu.</Text>
 
         {dryRunResults.length === 0 ? (
           <Text style={styles.dryRunEmpty}>Nie znaleziono nowych subskrypcji w tym teście.</Text>
@@ -1503,7 +1499,7 @@ export const EmailScanScreen = () => {
           <View style={styles.detectionMain}>
             <Text style={styles.detectionName} numberOfLines={1}>{item.name || item.provider || 'Nieznana subskrypcja'}</Text>
             <Text style={styles.detectionMeta}>
-              {item.isTrial ? 'Trial' : 'Kandydatura'} · Pewność {confidence}%
+              {item.isTrial ? 'Trial' : 'Pozycja'} · Pewność {confidence}%
             </Text>
           </View>
         </View>
@@ -2300,7 +2296,7 @@ export const EmailScanScreen = () => {
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <View>
-              <Text style={styles.modalTitle}>Zatwierdź kandydaturę</Text>
+              <Text style={styles.modalTitle}>Zatwierdź pozycję</Text>
               <Text style={styles.modalSubtitle}>{selectedDetection?.name || selectedDetection?.provider}</Text>
             </View>
             <TouchableOpacity style={styles.closeBtn} onPress={() => setSelectedDetection(null)}>
@@ -2599,7 +2595,7 @@ export const EmailScanScreen = () => {
         <View style={styles.emptyState}>
           <FileText size={32} color={theme.colors.textMuted} />
           <Text style={styles.emptyTitle}>Najpierw uruchom skan</Text>
-          <Text style={styles.emptyText}>Podgląd importu pojawi się po znalezieniu kandydatur i zaznaczeniu pozycji.</Text>
+          <Text style={styles.emptyText}>Podgląd importu pojawi się po znalezieniu pozycji i zaznaczeniu tych, które chcesz dodać.</Text>
           <TouchableOpacity style={[styles.importPreviewButton, { backgroundColor: theme.colors.primary, marginTop: 14 }]} onPress={() => setWizardStep('scan')}>
             <Search size={17} color={theme.colors.darkText} />
             <Text style={styles.importPreviewButtonText}>Przejdź do skanu</Text>
@@ -2707,7 +2703,7 @@ export const EmailScanScreen = () => {
           </View>
           <Text style={styles.heroTitle}>Email Scan</Text>
           <Text style={styles.heroText}>
-            Znajdź kandydatury subskrypcji w Gmailu albo przez manualne IMAP. Zawsze pokazujemy wynik do sprawdzenia przed zapisem.
+            Znajdź możliwe subskrypcje i rachunki w Gmailu albo przez IMAP. Zawsze pokazujemy wynik do sprawdzenia przed zapisem.
           </Text>
         </View>
 
@@ -2824,7 +2820,7 @@ export const EmailScanScreen = () => {
         {renderReviewContent && !shouldShowProductResult && (
         <>
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Kandydatury do sprawdzenia</Text>
+          <Text style={styles.sectionTitle}>Pozycje do sprawdzenia</Text>
           <Text style={[styles.sectionCounter, { color: theme.colors.primary }]}>{detectionsQuery.data?.count ?? 0}</Text>
         </View>
 
@@ -2835,7 +2831,7 @@ export const EmailScanScreen = () => {
         ) : detections.length === 0 ? (
           <View style={styles.emptyState}>
             <Inbox size={32} color={theme.colors.textMuted} />
-            <Text style={styles.emptyTitle}>Brak kandydatur</Text>
+            <Text style={styles.emptyTitle}>Brak pozycji</Text>
             <Text style={styles.emptyText}>
               Po skanie nowe wykrycia pojawią się tutaj do ręcznego zatwierdzenia.
             </Text>
@@ -3244,12 +3240,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 8,
-  },
-  imapReliabilityText: {
-    color: vibrantTheme.colors.textMuted,
-    fontSize: 10,
-    fontWeight: '900',
-    textTransform: 'uppercase',
   },
   imapPresetNote: {
     color: vibrantTheme.colors.textMuted,

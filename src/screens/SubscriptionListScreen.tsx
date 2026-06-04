@@ -56,8 +56,9 @@ const toMonthlyAmount = (subscription: Subscription) => {
     case 'weekly':
       return amount * 4.345;
     case 'one_time':
-    case 'custom':
       return 0;
+    case 'custom':
+      return subscription.isRecurringBill ? amount : 0;
     default:
       return amount;
   }

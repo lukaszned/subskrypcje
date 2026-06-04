@@ -22,6 +22,7 @@ import {
   ImapScanRequest,
   Subscription,
 } from '../types/api';
+import { mergeSubscriptionsIntoCache } from '../api/subscriptions';
 import { SUBSCRIPTIONS_KEY } from './useSubscriptions';
 
 export const EMAIL_SCAN_STATUS_KEY = ['email-scan', 'status'] as const;
@@ -91,7 +92,9 @@ export function useEmailScanImportConfirm() {
     mutationFn: (payload: EmailScanImportConfirmRequest) => confirmEmailScanImport(payload),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['email-scan'] });
-      reconcileCreatedSubscriptions(queryClient, result);
+      const createdSubscriptions = reconcileCreatedSubscriptions(queryClient, result);
+      logCreatedSubscriptionCacheVisibility(queryClient, result, 'after-query-cache-reconcile');
+      persistCreatedSubscriptions(createdSubscriptions);
       applyImportRefreshHints(queryClient, result);
     },
   });
@@ -100,9 +103,9 @@ export function useEmailScanImportConfirm() {
 function reconcileCreatedSubscriptions(
   queryClient: QueryClient,
   result: EmailScanImportConfirmResponse
-) {
+): Subscription[] {
   const created = Array.isArray(result.created) ? result.created : [];
-  if (created.length === 0) return;
+  if (created.length === 0) return [];
 
   const now = new Date().toISOString();
   const createdSubscriptions: Subscription[] = created
@@ -131,13 +134,73 @@ function reconcileCreatedSubscriptions(
       userId: 'local',
     }));
 
-  if (createdSubscriptions.length === 0) return;
+  if (createdSubscriptions.length === 0) return [];
 
   queryClient.setQueryData<Subscription[]>(SUBSCRIPTIONS_KEY(), (current) => {
     const existing = Array.isArray(current) ? current : [];
     const existingIds = new Set(existing.map((item) => item.id));
     const nextItems = createdSubscriptions.filter((item) => !existingIds.has(item.id));
     return nextItems.length > 0 ? [...nextItems, ...existing] : existing;
+  });
+
+  return createdSubscriptions;
+}
+
+function persistCreatedSubscriptions(subscriptions: Subscription[]) {
+  if (subscriptions.length === 0) return;
+
+  mergeSubscriptionsIntoCache(subscriptions)
+    .then(() => {
+      if (__DEV__) {
+        console.log('[EmailScan/import-confirm/cache]', {
+          stage: 'persisted-to-async-storage',
+          createdSubscriptionIds: subscriptions.map((subscription) => subscription.id),
+        });
+      }
+    })
+    .catch((error) => {
+      if (__DEV__) {
+        console.log('[EmailScan/import-confirm/cache]', {
+          stage: 'async-storage-persist-failed',
+          message: error?.message || String(error),
+        });
+      }
+    });
+}
+
+function logCreatedSubscriptionCacheVisibility(
+  queryClient: QueryClient,
+  result: EmailScanImportConfirmResponse,
+  stage: string
+) {
+  if (!__DEV__) return;
+
+  const createdIds = (Array.isArray(result.created) ? result.created : [])
+    .map((item) => item.subscriptionId)
+    .filter(Boolean)
+    .map(String);
+  if (createdIds.length === 0) return;
+
+  const cachedSubscriptions = queryClient.getQueryData<Subscription[]>(SUBSCRIPTIONS_KEY()) || [];
+  const cachedIds = new Set(cachedSubscriptions.map((subscription) => subscription.id));
+  const visibleCreatedItems = cachedSubscriptions.filter((subscription) => createdIds.includes(subscription.id));
+
+  console.log('[EmailScan/import-confirm/cache]', {
+    stage,
+    createdIds,
+    cacheCount: cachedSubscriptions.length,
+    presentCreatedIds: createdIds.filter((id) => cachedIds.has(id)),
+    missingCreatedIds: createdIds.filter((id) => !cachedIds.has(id)),
+    visibleCreatedItems: visibleCreatedItems.map((subscription) => ({
+      id: subscription.id,
+      name: subscription.name,
+      amount: subscription.amount,
+      currency: subscription.currency,
+      billingCycle: subscription.billingCycle,
+      status: subscription.status,
+      isRecurringBill: subscription.isRecurringBill,
+      category: subscription.category,
+    })),
   });
 }
 
@@ -154,7 +217,16 @@ function applyImportRefreshHints(
 
   if (shouldRefreshSubscriptions) {
     queryClient.invalidateQueries({ queryKey: ['subscriptions'] });
-    queryClient.refetchQueries({ queryKey: ['subscriptions'], type: 'active' });
+    queryClient.refetchQueries({ queryKey: ['subscriptions'], type: 'active' })
+      .then(() => logCreatedSubscriptionCacheVisibility(queryClient, result, 'after-subscriptions-refetch'))
+      .catch((error) => {
+        if (__DEV__) {
+          console.log('[EmailScan/import-confirm/cache]', {
+            stage: 'subscriptions-refetch-failed',
+            message: error?.message || String(error),
+          });
+        }
+      });
   }
 
   if (shouldRefreshDashboard) {

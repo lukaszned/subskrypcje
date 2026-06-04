@@ -48,6 +48,7 @@ function normalizeSubscription(sub: any): Subscription {
     billingCycle: sub?.billingCycle || 'monthly',
     status: sub?.status || 'pending',
     isTrial: Boolean(sub?.isTrial),
+    isRecurringBill: Boolean(sub?.isRecurringBill),
     isShared: sub?.isShared ?? parsedNotes.isShared,
     peopleCount: sub?.peopleCount ?? parsedNotes.peopleCount,
     includeInStats: sub?.includeInStats ?? parsedNotes.includeInStats ?? true,
@@ -75,6 +76,19 @@ async function cacheSubscriptions(subscriptions: Subscription[]) {
   } catch (error) {
     console.log('[subscriptions] Could not cache subscriptions.', error);
   }
+}
+
+export async function mergeSubscriptionsIntoCache(subscriptions: Subscription[]) {
+  if (!subscriptions.length) return;
+
+  const cached = await getCachedSubscriptions();
+  const existing = Array.isArray(cached) ? cached : [];
+  const incomingIds = new Set(subscriptions.map((subscription) => subscription.id));
+
+  await cacheSubscriptions([
+    ...subscriptions,
+    ...existing.filter((subscription) => !incomingIds.has(subscription.id)),
+  ]);
 }
 
 export async function getCachedSubscriptions(): Promise<Subscription[] | null> {
@@ -167,6 +181,41 @@ export async function getSubscriptions(
   try {
     const data = await apiGetWithTimeout<any[]>(path, 8000);
     const subscriptions = normalizeSubscriptionsResponse(data);
+
+    if (__DEV__) {
+      const statusCounts = subscriptions.reduce<Record<string, number>>((acc, subscription) => {
+        const status = subscription.status || 'unknown';
+        acc[status] = (acc[status] || 0) + 1;
+        return acc;
+      }, {});
+
+      console.log('[subscriptions] response snapshot', {
+        path,
+        count: subscriptions.length,
+        statusCounts,
+        customRecurringCount: subscriptions.filter(
+          (subscription) => subscription.billingCycle === 'custom' && subscription.isRecurringBill
+        ).length,
+        recurringBillCount: subscriptions.filter((subscription) => subscription.isRecurringBill).length,
+        trackedItems: subscriptions
+          .filter((subscription) => (
+            subscription.status === 'pending' ||
+            subscription.billingCycle === 'custom' ||
+            subscription.isRecurringBill
+          ))
+          .slice(0, 12)
+          .map((subscription) => ({
+            id: subscription.id,
+            name: subscription.name,
+            amount: subscription.amount,
+            currency: subscription.currency,
+            billingCycle: subscription.billingCycle,
+            status: subscription.status,
+            isRecurringBill: subscription.isRecurringBill,
+            category: subscription.category,
+          })),
+      });
+    }
 
     if (!params?.category && !params?.status && !params?.search) {
       await cacheSubscriptions(subscriptions);

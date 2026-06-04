@@ -238,6 +238,9 @@ export const DashboardScreen = () => {
   const monthlyTotal = canUseLocalMonthlyTotal ? localMonthlyTotal : summaryMonthlyTotal;
   const yearlyTotal = monthlyTotal * 12;
   const overdueCount = summaryData?.overdueCount ?? 0;
+  const averagePerService = summaryData?.activeSubscriptionsCount && summaryData.activeSubscriptionsCount > 0
+    ? monthlyTotal / summaryData.activeSubscriptionsCount
+    : 0;
   const reliableUpcomingItems = useMemo(() => {
     const localItems = buildUpcomingPaymentsFromSubscriptions(subscriptions, 30);
     const source = subscriptions.length > 0 ? localItems : (upcomingData?.items ?? []);
@@ -291,6 +294,45 @@ export const DashboardScreen = () => {
       currencyMismatch: hasLocalIncome && !localCurrencyMatches,
     };
   }, [baseCurrency, budgetImpact, monthlyTotal, persistentIncome]);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+
+    console.log('[Dashboard] subscriptions snapshot', {
+      count: subscriptions?.length,
+      items: subscriptions?.map((item) => ({
+        id: item.id,
+        name: item.name,
+        amount: item.amount,
+        currency: item.currency,
+        billingCycle: item.billingCycle,
+        status: item.status,
+        isRecurringBill: item.isRecurringBill,
+        nextPaymentDate: item.nextPaymentDate,
+      })),
+    });
+
+    console.log('[Dashboard] summary snapshot', {
+      monthlyTotal,
+      yearlyTotal,
+      averagePerService,
+      localMonthlyTotal,
+      summaryMonthlyTotal,
+      canUseLocalMonthlyTotal,
+      countedCurrencies,
+      rawDashboardResponse: summaryData,
+    });
+  }, [
+    averagePerService,
+    canUseLocalMonthlyTotal,
+    countedCurrencies,
+    localMonthlyTotal,
+    monthlyTotal,
+    subscriptions,
+    summaryData,
+    summaryMonthlyTotal,
+    yearlyTotal,
+  ]);
 
   // Memoized Category Breakdown Data
   const memoizedBreakdownItems = useMemo(() => {
@@ -403,18 +445,18 @@ export const DashboardScreen = () => {
       width: width * 0.9,
       height: width * 0.9,
       borderRadius: width,
-      backgroundColor: `${theme.primary}1F`,
-      top: -160,
-      right: -140,
+      backgroundColor: `${theme.primary}12`,
+      top: -190,
+      right: -170,
     },
     appGlowTwo: {
       position: 'absolute',
       width: width * 0.75,
       height: width * 0.75,
       borderRadius: width,
-      backgroundColor: withAlpha(theme.primary, 0.14),
-      top: 260,
-      left: -140,
+      backgroundColor: withAlpha(theme.primary, 0.08),
+      top: 300,
+      left: -180,
     },
     dashboardNotice: {
       flexDirection: 'row',
@@ -1487,11 +1529,6 @@ export const DashboardScreen = () => {
   };
 
   const renderHeader = () => {
-    const monthlyTotal = Number(summaryData?.monthlyTotal) || 0;
-    const yearlyTotal = Number(summaryData?.yearlyTotal) || 0;
-    const overdueCount = Number(summaryData?.overdueCount) || 0;
-    const baseCurrency = summaryData?.baseCurrency || 'PLN';
-
     return (
       <View style={[dynamicStyles.headerCard, dynamicStyles.shadow]}>
         <View style={dynamicStyles.headerTop}>
@@ -2165,7 +2202,7 @@ export const DashboardScreen = () => {
         id: 'email-scan',
         icon: Sparkles,
         title: 'Automatyczne wykrywanie',
-        desc: 'Przeskanuj Gmaila i dodawaj tylko te kandydatury, które zatwierdzisz.',
+        desc: 'Przeskanuj pocztę i dodawaj tylko te pozycje, które zatwierdzisz.',
         cta: 'Otwórz Gmail Scan',
         onPress: () => navigation.navigate('EmailScan'),
       },

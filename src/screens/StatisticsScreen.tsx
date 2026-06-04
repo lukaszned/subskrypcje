@@ -21,13 +21,13 @@ import { useTheme } from '../theme/ThemeContext';
 import type { BillingCycle, Subscription } from '../types/api';
 import { goBackOrDashboard } from '../utils/navigation';
 
-function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCycle'>) {
+function toMonthlyAmount(subscription: Pick<Subscription, 'amount' | 'billingCycle' | 'isRecurringBill'>) {
   const amount = Number(subscription.amount || 0);
   const cycle = subscription.billingCycle as BillingCycle;
   if (cycle === 'yearly') return amount / 12;
   if (cycle === 'weekly') return amount * 4.345;
   if (cycle === 'one_time') return 0;
-  if (cycle === 'custom') return 0;
+  if (cycle === 'custom') return subscription.isRecurringBill ? amount : 0;
   return amount;
 }
 

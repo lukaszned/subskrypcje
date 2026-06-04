@@ -4,7 +4,7 @@ import { parseAppDate, startOfLocalDay } from './date';
 const WEEKS_PER_MONTH = 52 / 12;
 
 export function toMonthlySubscriptionAmount(
-  subscription: Pick<Subscription, 'amount' | 'billingCycle'>
+  subscription: Pick<Subscription, 'amount' | 'billingCycle' | 'isRecurringBill'>
 ) {
   const amount = Number(subscription.amount || 0);
   const cycle = subscription.billingCycle as BillingCycle;
@@ -13,7 +13,7 @@ export function toMonthlySubscriptionAmount(
   if (cycle === 'yearly') return amount / 12;
   if (cycle === 'weekly') return amount * WEEKS_PER_MONTH;
   if (cycle === 'one_time') return 0;
-  if (cycle === 'custom') return 0;
+  if (cycle === 'custom') return subscription.isRecurringBill ? amount : 0;
   return amount;
 }
 
