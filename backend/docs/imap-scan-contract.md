@@ -107,7 +107,7 @@ Backend TODO, post-MVP or before unified UI:
 - Unknown profile strings are accepted and normalized to `mvp_standard`; they are not rejected for MVP compatibility.
 - The response includes `scanSummary.profileRequested`, `scanSummary.profileEffective`, `scanSummary.profileNormalized`, and `scanSummary.profileNormalizationReason`.
 
-This keeps the mobile app contract simple while preserving the old request field for backward compatibility. The hidden `mvp_standard` profile is broader than the old fast scan: it uses a larger recent window, bounded targeted searches, and a capped metadata prepass, but it does not run old adaptive/deep time-bucket scans. Typical scans may take around 30-45 seconds on larger mailboxes, with a backend budget guard below the expected frontend timeout.
+This keeps the mobile app contract simple while preserving the old request field for backward compatibility. The hidden `mvp_standard` profile is configured as a stable fast MVP scan: it keeps the stable recent window and only adds a very small high-signal subject/header pass. It does not run BODY targeted search, metadata prepass, or old adaptive/deep time-bucket scans. Typical scans should target roughly 15-30 seconds. Reliability is prioritized over maximum recall for MVP; missed subscriptions can be added manually and broader scanning is future work.
 
 The IMAP scan endpoint does not write subscriptions, bills, price changes, or raw email content to the database. The user must review results, call `POST /email-scan/import-preview`, and only then call `POST /email-scan/import-confirm` for selected drafts.
 
@@ -265,6 +265,16 @@ Useful frontend fields:
 - `startedAt`
 - `completedAt`
 - `durationMs`
+- `scanBudgetMs`
+- `budgetStoppedEarly`
+- `timeoutHit`
+- `capped`
+- `queryCount`
+- `analyzedMessagesCount`
+- `recentCandidates`
+- `headerCandidates`
+- `bodyCandidates`
+- `metadataCandidates`
 - `effectiveScanMode`
 - `effectiveWindowDays`
 - `scanReliabilityLevel`
@@ -756,7 +766,7 @@ Bills and utilities:
     "profileRequested": "adaptive",
     "profileEffective": "mvp_standard",
     "profileNormalized": true,
-    "profileNormalizationReason": "MVP mobile scan uses a bounded standard profile to find more candidates without long mailbox scans.",
+    "profileNormalizationReason": "MVP mobile scan uses a stable fast profile to avoid mailbox timeouts.",
     "startedAt": "2026-06-02T12:00:00.000Z",
     "completedAt": "2026-06-02T12:00:08.000Z",
     "durationMs": 8000,

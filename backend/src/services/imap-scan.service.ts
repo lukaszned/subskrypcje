@@ -110,8 +110,13 @@ export type ImapScanSummary = {
     scanBudgetMs?: number;
     timeoutHit?: boolean;
     capped?: boolean;
+    budgetStoppedEarly?: boolean;
     queryCount?: number;
     analyzedMessagesCount?: number;
+    recentCandidates?: number;
+    headerCandidates?: number;
+    bodyCandidates?: number;
+    metadataCandidates?: number;
     scanMode: ImapScanMode;
     effectiveScanMode: ImapScanMode;
     effectiveWindowDays: number;
@@ -220,7 +225,7 @@ export function normalizeImapScanProfile(inputProfile: unknown): {
         effectiveProfile: "mvp_standard",
         normalizedFrom: requestedProfile,
         warning:
-            "MVP mobile scan uses a bounded standard profile to find more candidates without long mailbox scans.",
+            "MVP mobile scan uses a stable fast profile to avoid mailbox timeouts.",
     };
 }
 
@@ -386,19 +391,19 @@ function profileDefaults(profile: ImapProductScanProfile): ScanProfileDefaults {
     switch (profile) {
         case "mvp_standard":
             return {
-                scanDays: 180,
-                deepDays: 365,
-                recentLimit: 400,
-                scanMode: "hybrid_window",
-                scanBudgetMs: 55000,
-                targetedEnabled: true,
-                targetedLimit: 260,
+                scanDays: 90,
+                deepDays: 90,
+                recentLimit: 300,
+                scanMode: "recent_window",
+                scanBudgetMs: 32000,
+                targetedEnabled: false,
+                targetedLimit: 0,
                 headerTargetedEnabled: true,
-                headerTargetedLimit: 260,
-                metadataPrepassEnabled: true,
-                metadataPrepassAlways: true,
-                metadataPrepassLimit: 1200,
-                metadataPrepassMatchLimit: 260,
+                headerTargetedLimit: 40,
+                metadataPrepassEnabled: false,
+                metadataPrepassAlways: false,
+                metadataPrepassLimit: 0,
+                metadataPrepassMatchLimit: 0,
                 metadataPrepassBatchSize: 200,
                 deepFallbackEnabled: false,
                 deepFallbackMaxFetch: 0,
@@ -648,60 +653,30 @@ const TARGETED_SEARCH_TERMS = [
     "subskrypcja",
     "abonament",
     "renewal",
-    "renew",
     "odnowienie",
-    "trial",
-    "okres probny",
-    "plan",
     "faktura",
-    "efaktura",
-    "e-faktura",
     "rachunek",
-    "kwota do zaplaty",
-    "do zaplaty",
-    "zaplata",
-    "zamowienie",
-    "termin platnosci",
-    "naleznosc",
-    "oplata",
+    "płatność",
     "platnosc",
-    "payment due",
-    "amount due",
-    "total due",
-    "bill",
     "invoice",
-    "billing",
-    "statement",
-    "rozliczenie",
     "receipt",
     "payment",
-    "charged",
-    "usluga",
-    "energia",
-    "prad",
-    "electricity",
-    "internet",
-    "telefon",
-    "telecom",
-    "Google Play",
-    "App Store",
-    "Prime Video",
-    "Amazon Prime",
-    "PayPal",
-    "Stripe",
-    "Autopay",
-    "PayU",
-    "Przelewy24",
-    "Tpay",
-    "Netflix",
-    "Spotify",
-    "YouTube",
-    "Disney",
-    "Max",
-    "SkyShowtime",
-    "Adobe",
-    "Tauron",
-    "Uber One",
+];
+
+const BODY_TARGETED_SEARCH_TERMS = [
+    "subscription",
+    "subskrypcja",
+    "abonament",
+    "renewal",
+    "odnowienie",
+    "trial",
+    "faktura",
+    "rachunek",
+    "invoice",
+    "receipt",
+    "payment",
+    "platnosc",
+    "zamowienie",
 ];
 
 const METADATA_PREPASS_TERMS = [
@@ -1927,6 +1902,7 @@ export function buildProductionImapProductResultForTest(
 type ScanCollectionStats = {
     fallbackUsed: boolean;
     fallbackReason?: string;
+    budgetStoppedEarly: boolean;
     recentMessagesFetched: number;
     targetedQueriesRun: number;
     targetedMessagesMatched: number;
@@ -1971,6 +1947,7 @@ type ScanCollectionStats = {
 function emptyCollectionStats(defaults: ScanProfileDefaults): ScanCollectionStats {
     return {
         fallbackUsed: false,
+        budgetStoppedEarly: false,
         recentMessagesFetched: 0,
         targetedQueriesRun: 0,
         targetedMessagesMatched: 0,
@@ -2574,8 +2551,20 @@ async function fetchAnalyzedMessages(params: {
     const messages: ProductionImapScanMessage[] = [];
     const seenIds = new Set<string>();
     const stats = emptyCollectionStats(params.defaults);
+    const scanStartedAt = Date.now();
     const recentSince = dateDaysAgo(params.defaults.scanDays, params.now);
     const deepSince = dateDaysAgo(params.defaults.deepDays, params.now);
+    const hasBudgetFor = (minimumRemainingMs: number) => {
+        const remainingMs =
+            params.defaults.scanBudgetMs - (Date.now() - scanStartedAt);
+
+        if (remainingMs <= minimumRemainingMs) {
+            stats.budgetStoppedEarly = true;
+            return false;
+        }
+
+        return true;
+    };
 
     try {
         const recentUids = await collectRecentWindowUids(
@@ -2612,29 +2601,10 @@ async function fetchAnalyzedMessages(params: {
         });
     }
 
-    if (params.defaults.targetedEnabled && params.defaults.targetedLimit > 0) {
-        const targeted = await collectTargetedSearchUids({
-            client: params.client,
-            terms: TARGETED_SEARCH_TERMS,
-            since: params.defaults.scanMode === "deep" ? deepSince : recentSince,
-            limit: params.defaults.targetedLimit,
-            headerOnly: false,
-        });
-        stats.targetedQueriesRun = targeted.queriesRun;
-        stats.targetedMessagesMatched = targeted.matched;
-        stats.targetedMessagesUniqueMatched = targeted.uniqueMatched;
-        stats.targetedMessagesFetched = await appendFetchedMessages({
-            client: params.client,
-            messages,
-            seenIds,
-            uids: targeted.uids,
-            sourceTag: "targeted",
-        });
-    }
-
     if (
         params.defaults.headerTargetedEnabled &&
-        params.defaults.headerTargetedLimit > 0
+        params.defaults.headerTargetedLimit > 0 &&
+        hasBudgetFor(12000)
     ) {
         const headerTargeted = await collectTargetedSearchUids({
             client: params.client,
@@ -2655,12 +2625,37 @@ async function fetchAnalyzedMessages(params: {
         });
     }
 
+    if (
+        params.defaults.targetedEnabled &&
+        params.defaults.targetedLimit > 0 &&
+        hasBudgetFor(18000)
+    ) {
+        const targeted = await collectTargetedSearchUids({
+            client: params.client,
+            terms: BODY_TARGETED_SEARCH_TERMS,
+            since: params.defaults.scanMode === "deep" ? deepSince : recentSince,
+            limit: params.defaults.targetedLimit,
+            headerOnly: false,
+        });
+        stats.targetedQueriesRun = targeted.queriesRun;
+        stats.targetedMessagesMatched = targeted.matched;
+        stats.targetedMessagesUniqueMatched = targeted.uniqueMatched;
+        stats.targetedMessagesFetched = await appendFetchedMessages({
+            client: params.client,
+            messages,
+            seenIds,
+            uids: targeted.uids,
+            sourceTag: "targeted",
+        });
+    }
+
     const targetedUseful =
         stats.targetedMessagesFetched > 0 || stats.headerTargetedMessagesFetched > 0;
 
     if (
         params.defaults.metadataPrepassEnabled &&
-        (params.defaults.metadataPrepassAlways || !targetedUseful)
+        (params.defaults.metadataPrepassAlways || !targetedUseful) &&
+        hasBudgetFor(9000)
     ) {
         const prepass = await collectMetadataPrepassUids({
             client: params.client,
@@ -2684,7 +2679,11 @@ async function fetchAnalyzedMessages(params: {
         });
     }
 
-    if (params.defaults.deepFallbackEnabled && !targetedUseful) {
+    if (
+        params.defaults.deepFallbackEnabled &&
+        !targetedUseful &&
+        hasBudgetFor(12000)
+    ) {
         const bucketResult = await collectDeepBucketUids({
             client: params.client,
             since: deepSince,
@@ -2922,7 +2921,9 @@ export async function scanImapSubscriptions(
             durationMs: completedAt.getTime() - startedAt.getTime(),
             scanBudgetMs: defaults.scanBudgetMs,
             timeoutHit: false,
+            budgetStoppedEarly: stats.budgetStoppedEarly,
             capped:
+                stats.budgetStoppedEarly ||
                 messages.length >=
                     defaults.recentLimit +
                         defaults.targetedLimit +
@@ -2937,6 +2938,10 @@ export async function scanImapSubscriptions(
                 (stats.metadataPrepassEnabled ? 1 : 0) +
                 stats.deepFallbackBucketsQueried,
             analyzedMessagesCount: messages.length,
+            recentCandidates: stats.recentMessagesFetched,
+            headerCandidates: stats.headerTargetedMessagesFetched,
+            bodyCandidates: stats.targetedMessagesFetched,
+            metadataCandidates: stats.metadataPrepassFetched,
             scanMode: defaults.scanMode,
             effectiveScanMode: plan.effectiveScanMode,
             effectiveWindowDays: plan.effectiveWindowDays,
@@ -3064,6 +3069,7 @@ export async function scanImapSubscriptions(
             candidatesFound: scanSummary.candidatesFound,
             canonicalSubscriptions: scanSummary.canonicalSubscriptions,
             capped: scanSummary.capped,
+            budgetStoppedEarly: scanSummary.budgetStoppedEarly,
             timeoutHit: scanSummary.timeoutHit,
         });
 

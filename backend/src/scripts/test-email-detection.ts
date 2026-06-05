@@ -2161,24 +2161,26 @@ function runImapProfileNormalizationCase() {
         assertField(
             `${testCase.name} warning text`,
             testCase.hasWarning,
-            Boolean(actual.warning?.includes("bounded standard profile"))
+            Boolean(actual.warning?.includes("stable fast profile"))
         );
     }
 
     const standard = getImapScanProfileDefaultsForTest("mvp_standard");
     const oldFast = getImapScanProfileDefaultsForTest("fast");
 
-    assertField("Standard scan mode", "hybrid_window", standard.scanMode);
-    assertField("Standard broader than fast", true, standard.scanDays > oldFast.scanDays);
-    assertField("Standard targeted enabled", true, standard.targetedEnabled);
+    assertField("Standard scan mode", "recent_window", standard.scanMode);
+    assertField("Standard window at least fast", true, standard.scanDays >= oldFast.scanDays);
+    assertField("Standard metadata window fast", true, standard.deepDays <= 90);
+    assertField("Standard body targeted disabled", false, standard.targetedEnabled);
+    assertField("Standard body target cap zero", 0, standard.targetedLimit);
     assertField("Standard header targeted enabled", true, standard.headerTargetedEnabled);
-    assertField("Standard metadata enabled", true, standard.metadataPrepassEnabled);
-    assertField("Standard metadata always", true, standard.metadataPrepassAlways);
+    assertField("Standard metadata disabled", false, standard.metadataPrepassEnabled);
+    assertField("Standard metadata always disabled", false, standard.metadataPrepassAlways);
     assertField("Standard deep fallback disabled", false, standard.deepFallbackEnabled);
     assertField("Standard deep fallback cap zero", 0, standard.deepFallbackMaxFetch);
-    assertField("Standard budget bounded", true, standard.scanBudgetMs > 0 && standard.scanBudgetMs <= 60000);
-    assertField("Standard target cap bounded", true, standard.targetedLimit <= 300);
-    assertField("Standard metadata cap bounded", true, standard.metadataPrepassMatchLimit <= 300);
+    assertField("Standard budget bounded", true, standard.scanBudgetMs > 0 && standard.scanBudgetMs <= 35000);
+    assertField("Standard header cap low", true, standard.headerTargetedLimit <= 50);
+    assertField("Standard metadata cap zero", 0, standard.metadataPrepassMatchLimit);
 
     if (failures.length === 0) {
         productResultPassed += 1;
