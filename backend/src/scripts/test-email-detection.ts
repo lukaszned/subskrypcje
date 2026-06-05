@@ -32,6 +32,11 @@ import {
     ImportPreviewServiceError,
     ImportPreviewValidationError,
 } from "../services/scan-result-import.service";
+import {
+    calculateDashboardMonthlyEquivalent,
+    calculateDashboardYearlyEquivalent,
+} from "../services/dashboard.service";
+import { BillingCycle } from "@prisma/client";
 
 type AssertionFailure = {
     field: string;
@@ -2280,6 +2285,156 @@ function runGmailRedirectConfigCase() {
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
+function runDashboardRecurringBillTotalsCase() {
+    const failures: AssertionFailure[] = [];
+    const assertField = (field: string, expected: unknown, value: unknown) => {
+        if (value !== expected) {
+            failures.push({ field, expected, actual: value });
+        }
+    };
+    const items = [
+        {
+            name: "TOYA",
+            amount: 55.13,
+            billingCycle: BillingCycle.custom,
+            status: "paid",
+            isRecurringBill: true,
+        },
+        {
+            name: "Play",
+            amount: 35,
+            billingCycle: BillingCycle.custom,
+            status: "paid",
+            isRecurringBill: true,
+        },
+        {
+            name: "Śpi",
+            amount: 26.99,
+            billingCycle: BillingCycle.monthly,
+            status: "pending",
+            isRecurringBill: true,
+        },
+        {
+            name: "One-time custom",
+            amount: 99,
+            billingCycle: BillingCycle.custom,
+            status: "paid",
+            isRecurringBill: false,
+        },
+        {
+            name: "Canceled recurring",
+            amount: 123,
+            billingCycle: BillingCycle.monthly,
+            status: "canceled",
+            isRecurringBill: true,
+        },
+        {
+            name: "One-time",
+            amount: 250,
+            billingCycle: BillingCycle.one_time,
+            status: "paid",
+            isRecurringBill: false,
+        },
+    ];
+    const counted = items.filter((item) => item.status !== "canceled");
+    const monthlyTotal = Number(
+        counted
+            .reduce(
+                (sum, item) =>
+                    sum +
+                    calculateDashboardMonthlyEquivalent({
+                        amount: item.amount,
+                        billingCycle: item.billingCycle,
+                        isRecurringBill: item.isRecurringBill,
+                    }),
+                0
+            )
+            .toFixed(2)
+    );
+    const yearlyTotal = Number(
+        counted
+            .reduce(
+                (sum, item) =>
+                    sum +
+                    calculateDashboardYearlyEquivalent({
+                        amount: item.amount,
+                        billingCycle: item.billingCycle,
+                        isRecurringBill: item.isRecurringBill,
+                    }),
+                0
+            )
+            .toFixed(2)
+    );
+    const countedItems = counted.filter(
+        (item) =>
+            calculateDashboardMonthlyEquivalent({
+                amount: item.amount,
+                billingCycle: item.billingCycle,
+                isRecurringBill: item.isRecurringBill,
+            }) > 0
+    );
+    const averagePerService = Number(
+        (monthlyTotal / countedItems.length).toFixed(2)
+    );
+
+    assertField(
+        "Custom recurring bill counts monthly",
+        55.13,
+        Number(
+            calculateDashboardMonthlyEquivalent({
+                amount: 55.13,
+                billingCycle: BillingCycle.custom,
+                isRecurringBill: true,
+            }).toFixed(2)
+        )
+    );
+    assertField(
+        "Custom non-recurring counts zero",
+        0,
+        calculateDashboardMonthlyEquivalent({
+            amount: 99,
+            billingCycle: BillingCycle.custom,
+            isRecurringBill: false,
+        })
+    );
+    assertField(
+        "Monthly pending counts",
+        26.99,
+        calculateDashboardMonthlyEquivalent({
+            amount: 26.99,
+            billingCycle: BillingCycle.monthly,
+            isRecurringBill: true,
+        })
+    );
+    assertField(
+        "One-time counts zero",
+        0,
+        calculateDashboardMonthlyEquivalent({
+            amount: 250,
+            billingCycle: BillingCycle.one_time,
+            isRecurringBill: false,
+        })
+    );
+    assertField("Sample monthly total", 117.12, monthlyTotal);
+    assertField("Sample yearly total", 1405.44, yearlyTotal);
+    assertField(
+        "Sample average per counted service",
+        39.04,
+        averagePerService
+    );
+
+    if (failures.length === 0) {
+        productResultPassed += 1;
+        console.log("PASS productResult: dashboard recurring bill totals");
+        return;
+    }
+
+    productResultFailed += 1;
+    failedProductResultCases.push("dashboard recurring bill totals");
+    console.log("FAIL productResult: dashboard recurring bill totals");
+    console.log("  failures:", JSON.stringify(failures, null, 2));
+}
+
 function runPlannerCase(
     name: string,
     profile: "fast" | "balanced" | "deep" | "adaptive",
@@ -2898,6 +3053,7 @@ await runImportConfirmCase();
 runGmailLegacyQualityCase();
 runImapScanErrorClassifierCase();
 runGmailRedirectConfigCase();
+runDashboardRecurringBillTotalsCase();
 
 for (const fixtureCase of emailDetectionFixtureCases) {
     const actual = analyzeMessageForSubscription(fixtureCase.input);

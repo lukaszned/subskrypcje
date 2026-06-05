@@ -80,10 +80,17 @@ async function getUserNotificationSettings(userId: string) {
     };
 }
 
-function calculateMonthlyEquivalent(
-    amount: number,
-    billingCycle: BillingCycle
+type DashboardBillingEquivalentInput = {
+    amount: number;
+    billingCycle: BillingCycle;
+    isRecurringBill?: boolean | null;
+};
+
+export function calculateDashboardMonthlyEquivalent(
+    input: DashboardBillingEquivalentInput
 ): number {
+    const { amount, billingCycle, isRecurringBill } = input;
+
     switch (billingCycle) {
         case BillingCycle.monthly:
             return amount;
@@ -94,16 +101,17 @@ function calculateMonthlyEquivalent(
         case BillingCycle.one_time:
             return 0;
         case BillingCycle.custom:
-            return 0;
+            return isRecurringBill ? amount : 0;
         default:
             return 0;
     }
 }
 
-function calculateYearlyEquivalent(
-    amount: number,
-    billingCycle: BillingCycle
+export function calculateDashboardYearlyEquivalent(
+    input: DashboardBillingEquivalentInput
 ): number {
+    const { amount, billingCycle, isRecurringBill } = input;
+
     switch (billingCycle) {
         case BillingCycle.monthly:
             return amount * 12;
@@ -114,19 +122,48 @@ function calculateYearlyEquivalent(
         case BillingCycle.one_time:
             return 0;
         case BillingCycle.custom:
-            return 0;
+            return isRecurringBill ? amount * 12 : 0;
         default:
             return 0;
     }
+}
+
+function calculateMonthlyEquivalent(
+    amount: number,
+    billingCycle: BillingCycle,
+    isRecurringBill?: boolean | null
+): number {
+    return calculateDashboardMonthlyEquivalent({
+        amount,
+        billingCycle,
+        isRecurringBill,
+    });
+}
+
+function calculateYearlyEquivalent(
+    amount: number,
+    billingCycle: BillingCycle,
+    isRecurringBill?: boolean | null
+): number {
+    return calculateDashboardYearlyEquivalent({
+        amount,
+        billingCycle,
+        isRecurringBill,
+    });
 }
 
 function calculateMonthlyEquivalentInCurrency(
     amount: number,
     currency: string,
     billingCycle: BillingCycle,
-    targetCurrency: CurrencyCode
+    targetCurrency: CurrencyCode,
+    isRecurringBill?: boolean | null
 ): number {
-    const monthlyEquivalent = calculateMonthlyEquivalent(amount, billingCycle);
+    const monthlyEquivalent = calculateMonthlyEquivalent(
+        amount,
+        billingCycle,
+        isRecurringBill
+    );
     return convertCurrency(monthlyEquivalent, currency, targetCurrency);
 }
 
@@ -134,9 +171,14 @@ function calculateYearlyEquivalentInCurrency(
     amount: number,
     currency: string,
     billingCycle: BillingCycle,
-    targetCurrency: CurrencyCode
+    targetCurrency: CurrencyCode,
+    isRecurringBill?: boolean | null
 ): number {
-    const yearlyEquivalent = calculateYearlyEquivalent(amount, billingCycle);
+    const yearlyEquivalent = calculateYearlyEquivalent(
+        amount,
+        billingCycle,
+        isRecurringBill
+    );
     return convertCurrency(yearlyEquivalent, currency, targetCurrency);
 }
 
@@ -282,7 +324,8 @@ export async function getDashboardSummaryForUser(userId: string) {
                 amount,
                 subscription.currency,
                 subscription.billingCycle,
-                baseCurrency
+                baseCurrency,
+                subscription.isRecurringBill
             )
         );
     }, 0);
@@ -296,7 +339,8 @@ export async function getDashboardSummaryForUser(userId: string) {
                 amount,
                 subscription.currency,
                 subscription.billingCycle,
-                baseCurrency
+                baseCurrency,
+                subscription.isRecurringBill
             )
         );
     }, 0);
@@ -458,7 +502,8 @@ export async function getCategoryBreakdownForUser(userId: string) {
             toNumber(subscription.amount),
             subscription.currency,
             subscription.billingCycle,
-            baseCurrency
+            baseCurrency,
+            subscription.isRecurringBill
         );
 
         if (monthlyAmount <= 0) {
@@ -682,6 +727,7 @@ export async function getSavingsForUser(userId: string) {
             amount: true,
             currency: true,
             billingCycle: true,
+            isRecurringBill: true,
             updatedAt: true,
         },
     });
@@ -693,14 +739,16 @@ export async function getSavingsForUser(userId: string) {
             rawAmount,
             subscription.currency,
             subscription.billingCycle,
-            baseCurrency
+            baseCurrency,
+            subscription.isRecurringBill
         );
 
         const yearlyAmount = calculateYearlyEquivalentInCurrency(
             rawAmount,
             subscription.currency,
             subscription.billingCycle,
-            baseCurrency
+            baseCurrency,
+            subscription.isRecurringBill
         );
 
         return {
@@ -854,7 +902,8 @@ export async function getDashboardTrendsForUser(
                     amount,
                     subscription.currency,
                     subscription.billingCycle,
-                    baseCurrency
+                    baseCurrency,
+                    subscription.isRecurringBill
                 )
             );
         }, 0);
