@@ -13,6 +13,11 @@
     },
     "preview": {
       "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_API_BASE_URL": "https://subsentry-api-ovl7.onrender.com/",
+        "EXPO_PUBLIC_SUPABASE_URL": "https://jpsyawgrmvhfqqzmzhty.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Impwc3lhd2dybXZoZnFxem16aHR5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzY5Mzk0OTQsImV4cCI6MjA5MjUxNTQ5NH0.tD4b1Gp6_Ism8R6E-7Kwmkn8kZfK0yG_dHGA6Bl75uM"
+      },
       "android": {
         "buildType": "apk"
       }
