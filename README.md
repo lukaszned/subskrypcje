@@ -21,8 +21,8 @@ MVP email provider scope:
 | Provider | Flow | Status |
 | --- | --- | --- |
 | Gmail | OAuth / Gmail API | MVP legacy flow after OAuth reconnect. Uses detected-subscriptions path, not IMAP product buckets yet. |
-| Onet | Manual IMAP | Tested for MVP. Backend normalizes mobile scans to fast profile. |
-| Interia | Manual IMAP | Tested for MVP. Backend normalizes mobile scans to fast profile. |
+| Onet | Manual IMAP | Tested for MVP. Backend normalizes mobile scans to a hidden bounded standard profile. |
+| Interia | Manual IMAP | Tested for MVP. Backend normalizes mobile scans to a hidden bounded standard profile. |
 | Other IMAP | Manual IMAP later | Architecturally possible but not officially marked ready until tested. |
 
 ## Backend Stack

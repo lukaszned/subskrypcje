@@ -21,7 +21,7 @@ Other IMAP providers are not blocked architecturally, but they are not officiall
 | Provider | Flow type | Endpoint | Tested | Reliability | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Gmail | OAuth / Gmail API | `POST /email-scan/gmail/scan` | Existing flow; contract audited in Phase 63 | Depends on Gmail API path | Does not require IMAP password. Current response is legacy detection-oriented, not `productResult` bucket-oriented yet. |
-| Onet | Manual IMAP | `POST /email-scan/imap/scan` | Yes | Medium | Server-side BODY/HEADER targeted search was weak in deep testing. Mobile MVP uses fast-only scan to reduce timeout risk. |
+| Onet | Manual IMAP | `POST /email-scan/imap/scan` | Yes | Medium | Server-side BODY/HEADER targeted search was weak in deep testing. Mobile MVP uses a bounded hidden standard scan profile. |
 | Interia | Manual IMAP | `POST /email-scan/imap/scan` | Yes | High | BODY targeted search is useful; payment-processor bill dedupe is handled globally. |
 | Other IMAP | Manual IMAP later | `POST /email-scan/imap/scan` | No | Unknown | Future provider preset/update after real testing. Manual endpoint may work, but frontend should mark it experimental if exposed. |
 
@@ -103,11 +103,11 @@ Backend TODO, post-MVP or before unified UI:
 
 - Frontend should not expose scan profile choices in the MVP UI.
 - Frontend may send `fast`, omit `profile`, or keep older values such as `balanced`, `adaptive`, or `deep`.
-- Backend normalizes all requested values to the fast MVP profile: `fast`.
-- Unknown profile strings are accepted and normalized to `fast`; they are not rejected for MVP compatibility.
+- Backend normalizes all requested values to the hidden MVP standard profile: `mvp_standard`.
+- Unknown profile strings are accepted and normalized to `mvp_standard`; they are not rejected for MVP compatibility.
 - The response includes `scanSummary.profileRequested`, `scanSummary.profileEffective`, `scanSummary.profileNormalized`, and `scanSummary.profileNormalizationReason`.
 
-This keeps the mobile app contract simple while preserving the old request field for backward compatibility.
+This keeps the mobile app contract simple while preserving the old request field for backward compatibility. The hidden `mvp_standard` profile is broader than the old fast scan: it uses a larger recent window, bounded targeted searches, and a capped metadata prepass, but it does not run old adaptive/deep time-bucket scans. Typical scans may take around 30-45 seconds on larger mailboxes, with a backend budget guard below the expected frontend timeout.
 
 The IMAP scan endpoint does not write subscriptions, bills, price changes, or raw email content to the database. The user must review results, call `POST /email-scan/import-preview`, and only then call `POST /email-scan/import-confirm` for selected drafts.
 
@@ -299,7 +299,7 @@ Reliability notes:
 
 - `fast` can miss yearly, older, and marketplace-billed subscriptions.
 - `medium` reliability usually means capability-based fallback was used. It does not mean detections are bad.
-- If `deepScanRecommended=true`, offer a deeper scan CTA.
+- For MVP, do not expose a deeper scan CTA. The backend uses one hidden bounded scan profile.
 - If `quickScanLikelyIncomplete=true`, avoid wording that implies complete mailbox coverage.
 
 ## Error Responses
@@ -329,7 +329,7 @@ IMAP errors are credential-safe and do not include raw server internals:
 
 - IMAP scan results are not auto-saved. The user must review selected items, call `import-preview`, then call `import-confirm`.
 - Price-change notices are not automatically applied to existing records yet.
-- Some providers have weak server-side IMAP search. For MVP mobile stability, the backend uses fast-only IMAP scanning instead of adaptive/deep fallbacks.
+- Some providers have weak server-side IMAP search. For MVP mobile stability, the backend uses one bounded hidden standard IMAP scan instead of old adaptive/deep fallbacks.
 - The scan intentionally avoids returning raw email bodies.
 
 ## Import / Confirmation Flow
@@ -621,9 +621,9 @@ Review mode:
 
 > We found historical subscription evidence. Please confirm which services are still active.
 
-Empty fast scan:
+Empty bounded scan:
 
-> No current subscriptions were found in the quick scan. A deeper scan may find older, yearly, or marketplace-billed subscriptions.
+> No subscriptions were found in this scan. You can try again later or add subscriptions manually.
 
 Price changes:
 
@@ -752,11 +752,11 @@ Bills and utilities:
     }
   },
   "scanSummary": {
-    "scanProfile": "fast",
+    "scanProfile": "mvp_standard",
     "profileRequested": "adaptive",
-    "profileEffective": "fast",
+    "profileEffective": "mvp_standard",
     "profileNormalized": true,
-    "profileNormalizationReason": "MVP mobile scan uses the fast profile to avoid long mailbox scans.",
+    "profileNormalizationReason": "MVP mobile scan uses a bounded standard profile to find more candidates without long mailbox scans.",
     "startedAt": "2026-06-02T12:00:00.000Z",
     "completedAt": "2026-06-02T12:00:08.000Z",
     "durationMs": 8000,

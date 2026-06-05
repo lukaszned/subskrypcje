@@ -101,12 +101,17 @@ export type ScanImapSubscriptionsInput = {
 export type ImapScanSummary = {
     scanProfile: ImapProductScanProfile;
     profileRequested?: string | null;
-    profileEffective: "fast";
+    profileEffective: "mvp_standard";
     profileNormalized: boolean;
     profileNormalizationReason?: string;
     startedAt?: string;
     completedAt?: string;
     durationMs?: number;
+    scanBudgetMs?: number;
+    timeoutHit?: boolean;
+    capped?: boolean;
+    queryCount?: number;
+    analyzedMessagesCount?: number;
     scanMode: ImapScanMode;
     effectiveScanMode: ImapScanMode;
     effectiveWindowDays: number;
@@ -201,7 +206,7 @@ export type ImapScanSummary = {
 
 export function normalizeImapScanProfile(inputProfile: unknown): {
     requestedProfile: string | null;
-    effectiveProfile: "fast";
+    effectiveProfile: "mvp_standard";
     normalizedFrom: string | null;
     warning?: string;
 } {
@@ -212,17 +217,10 @@ export function normalizeImapScanProfile(inputProfile: unknown): {
 
     return {
         requestedProfile,
-        effectiveProfile: "fast",
-        normalizedFrom:
-            requestedProfile && requestedProfile !== "fast"
-                ? requestedProfile
-                : null,
+        effectiveProfile: "mvp_standard",
+        normalizedFrom: requestedProfile,
         warning:
-            requestedProfile && requestedProfile !== "fast"
-                ? "MVP mobile scan uses the fast profile to avoid long mailbox scans."
-                : requestedProfile
-                ? undefined
-                : "MVP mobile scan uses the fast profile to avoid long mailbox scans.",
+            "MVP mobile scan uses a bounded standard profile to find more candidates without long mailbox scans.",
     };
 }
 
@@ -366,11 +364,13 @@ type ScanProfileDefaults = {
     deepDays: number;
     recentLimit: number;
     scanMode: ImapScanMode;
+    scanBudgetMs: number;
     targetedEnabled: boolean;
     targetedLimit: number;
     headerTargetedEnabled: boolean;
     headerTargetedLimit: number;
     metadataPrepassEnabled: boolean;
+    metadataPrepassAlways: boolean;
     metadataPrepassLimit: number;
     metadataPrepassMatchLimit: number;
     metadataPrepassBatchSize: number;
@@ -384,17 +384,42 @@ type ScanProfileDefaults = {
 
 function profileDefaults(profile: ImapProductScanProfile): ScanProfileDefaults {
     switch (profile) {
+        case "mvp_standard":
+            return {
+                scanDays: 180,
+                deepDays: 365,
+                recentLimit: 400,
+                scanMode: "hybrid_window",
+                scanBudgetMs: 55000,
+                targetedEnabled: true,
+                targetedLimit: 260,
+                headerTargetedEnabled: true,
+                headerTargetedLimit: 260,
+                metadataPrepassEnabled: true,
+                metadataPrepassAlways: true,
+                metadataPrepassLimit: 1200,
+                metadataPrepassMatchLimit: 260,
+                metadataPrepassBatchSize: 200,
+                deepFallbackEnabled: false,
+                deepFallbackMaxFetch: 0,
+                deepFallbackBatchSize: 200,
+                deepFallbackBucketDays: 30,
+                deepFallbackPerBucketLimit: 80,
+                deepFallbackBucketSampleMode: "mixed",
+            };
         case "fast":
             return {
                 scanDays: 90,
                 deepDays: 730,
                 recentLimit: 300,
                 scanMode: "recent_window",
+                scanBudgetMs: 55000,
                 targetedEnabled: false,
                 targetedLimit: 0,
                 headerTargetedEnabled: false,
                 headerTargetedLimit: 0,
                 metadataPrepassEnabled: false,
+                metadataPrepassAlways: false,
                 metadataPrepassLimit: 0,
                 metadataPrepassMatchLimit: 0,
                 metadataPrepassBatchSize: 200,
@@ -411,11 +436,13 @@ function profileDefaults(profile: ImapProductScanProfile): ScanProfileDefaults {
                 deepDays: 365,
                 recentLimit: 300,
                 scanMode: "hybrid_window",
+                scanBudgetMs: 55000,
                 targetedEnabled: true,
                 targetedLimit: 200,
                 headerTargetedEnabled: true,
                 headerTargetedLimit: 300,
                 metadataPrepassEnabled: true,
+                metadataPrepassAlways: false,
                 metadataPrepassLimit: 1500,
                 metadataPrepassMatchLimit: 300,
                 metadataPrepassBatchSize: 200,
@@ -432,11 +459,13 @@ function profileDefaults(profile: ImapProductScanProfile): ScanProfileDefaults {
                 deepDays: 730,
                 recentLimit: 300,
                 scanMode: "deep",
+                scanBudgetMs: 55000,
                 targetedEnabled: true,
                 targetedLimit: 500,
                 headerTargetedEnabled: true,
                 headerTargetedLimit: 500,
                 metadataPrepassEnabled: true,
+                metadataPrepassAlways: false,
                 metadataPrepassLimit: 3000,
                 metadataPrepassMatchLimit: 800,
                 metadataPrepassBatchSize: 200,
@@ -454,11 +483,13 @@ function profileDefaults(profile: ImapProductScanProfile): ScanProfileDefaults {
                 deepDays: 730,
                 recentLimit: 300,
                 scanMode: "deep",
+                scanBudgetMs: 55000,
                 targetedEnabled: true,
                 targetedLimit: 500,
                 headerTargetedEnabled: true,
                 headerTargetedLimit: 500,
                 metadataPrepassEnabled: true,
+                metadataPrepassAlways: false,
                 metadataPrepassLimit: 3000,
                 metadataPrepassMatchLimit: 800,
                 metadataPrepassBatchSize: 200,
@@ -470,6 +501,28 @@ function profileDefaults(profile: ImapProductScanProfile): ScanProfileDefaults {
                 deepFallbackBucketSampleMode: "mixed",
             };
     }
+}
+
+export function getImapScanProfileDefaultsForTest(profile: ImapProductScanProfile) {
+    const defaults = profileDefaults(profile);
+
+    return {
+        scanDays: defaults.scanDays,
+        deepDays: defaults.deepDays,
+        recentLimit: defaults.recentLimit,
+        scanMode: defaults.scanMode,
+        scanBudgetMs: defaults.scanBudgetMs,
+        targetedEnabled: defaults.targetedEnabled,
+        targetedLimit: defaults.targetedLimit,
+        headerTargetedEnabled: defaults.headerTargetedEnabled,
+        headerTargetedLimit: defaults.headerTargetedLimit,
+        metadataPrepassEnabled: defaults.metadataPrepassEnabled,
+        metadataPrepassAlways: defaults.metadataPrepassAlways,
+        metadataPrepassLimit: defaults.metadataPrepassLimit,
+        metadataPrepassMatchLimit: defaults.metadataPrepassMatchLimit,
+        deepFallbackEnabled: defaults.deepFallbackEnabled,
+        deepFallbackMaxFetch: defaults.deepFallbackMaxFetch,
+    };
 }
 
 function dateDaysAgo(days: number, now: Date) {
@@ -595,15 +648,19 @@ const TARGETED_SEARCH_TERMS = [
     "subskrypcja",
     "abonament",
     "renewal",
+    "renew",
     "odnowienie",
     "trial",
     "okres probny",
+    "plan",
     "faktura",
     "efaktura",
     "e-faktura",
     "rachunek",
     "kwota do zaplaty",
     "do zaplaty",
+    "zaplata",
+    "zamowienie",
     "termin platnosci",
     "naleznosc",
     "oplata",
@@ -618,6 +675,8 @@ const TARGETED_SEARCH_TERMS = [
     "rozliczenie",
     "receipt",
     "payment",
+    "charged",
+    "usluga",
     "energia",
     "prad",
     "electricity",
@@ -2599,7 +2658,10 @@ async function fetchAnalyzedMessages(params: {
     const targetedUseful =
         stats.targetedMessagesFetched > 0 || stats.headerTargetedMessagesFetched > 0;
 
-    if (params.defaults.metadataPrepassEnabled && !targetedUseful) {
+    if (
+        params.defaults.metadataPrepassEnabled &&
+        (params.defaults.metadataPrepassAlways || !targetedUseful)
+    ) {
         const prepass = await collectMetadataPrepassUids({
             client: params.client,
             totalMessages: params.totalMessages,
@@ -2684,6 +2746,33 @@ async function fetchAnalyzedMessages(params: {
     return { messages, stats };
 }
 
+async function withScanBudget<T>(
+    promise: Promise<T>,
+    budgetMs: number
+): Promise<T> {
+    let timeout: NodeJS.Timeout | undefined;
+    const timeoutPromise = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+            reject(
+                new ImapScanServiceError(
+                    "IMAP_CONNECTION_TIMEOUT",
+                    "IMAP scan exceeded the configured time budget.",
+                    {
+                        code: "IMAP_SCAN_BUDGET_EXCEEDED",
+                        message: "IMAP scan exceeded the configured time budget.",
+                    }
+                )
+            );
+        }, budgetMs);
+    });
+
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    } finally {
+        if (timeout) clearTimeout(timeout);
+    }
+}
+
 async function analyzeFetchedMessage(message: {
     uid?: number | string;
     seq?: number | string;
@@ -2759,12 +2848,15 @@ export async function scanImapSubscriptions(
         const mailboxTotalMessages = mailboxInfo.exists ?? 0;
         const { messages, stats } =
             mailboxTotalMessages > 0
-                ? await fetchAnalyzedMessages({
-                      client,
-                      totalMessages: mailboxTotalMessages,
-                      now,
-                      defaults,
-                  })
+                ? await withScanBudget(
+                      fetchAnalyzedMessages({
+                          client,
+                          totalMessages: mailboxTotalMessages,
+                          now,
+                          defaults,
+                      }),
+                      defaults.scanBudgetMs
+                  )
                 : {
                       messages: [],
                       stats: emptyCollectionStats(defaults),
@@ -2828,6 +2920,23 @@ export async function scanImapSubscriptions(
             startedAt: startedAt.toISOString(),
             completedAt: completedAt.toISOString(),
             durationMs: completedAt.getTime() - startedAt.getTime(),
+            scanBudgetMs: defaults.scanBudgetMs,
+            timeoutHit: false,
+            capped:
+                messages.length >=
+                    defaults.recentLimit +
+                        defaults.targetedLimit +
+                        defaults.headerTargetedLimit +
+                        defaults.metadataPrepassMatchLimit ||
+                stats.metadataPrepassMatches > stats.metadataPrepassFetched ||
+                stats.deepFallbackUidCandidatesBeforeSampling >
+                    stats.deepFallbackUidCandidatesAfterSampling,
+            queryCount:
+                stats.targetedQueriesRun +
+                stats.headerTargetedQueriesRun +
+                (stats.metadataPrepassEnabled ? 1 : 0) +
+                stats.deepFallbackBucketsQueried,
+            analyzedMessagesCount: messages.length,
             scanMode: defaults.scanMode,
             effectiveScanMode: plan.effectiveScanMode,
             effectiveWindowDays: plan.effectiveWindowDays,
@@ -2944,6 +3053,19 @@ export async function scanImapSubscriptions(
             deepFallbackCandidatesAfterPriorityPreserve:
                 stats.deepFallbackUidCandidatesAfterSampling,
         };
+
+        console.info("[email-scan] imap scan completed", {
+            requestedProfile: profileNormalization.requestedProfile,
+            effectiveProfile: profileNormalization.effectiveProfile,
+            host: input.host,
+            mailbox,
+            durationMs: scanSummary.durationMs,
+            analyzedMessagesCount: scanSummary.analyzedMessagesCount,
+            candidatesFound: scanSummary.candidatesFound,
+            canonicalSubscriptions: scanSummary.canonicalSubscriptions,
+            capped: scanSummary.capped,
+            timeoutHit: scanSummary.timeoutHit,
+        });
 
         return {
             productResult,

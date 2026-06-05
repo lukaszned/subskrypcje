@@ -9,6 +9,7 @@ import {
     buildProductionImapCanonicalItemsForTest,
     buildProductionImapProductResultForTest,
     classifyImapScanError,
+    getImapScanProfileDefaultsForTest,
     normalizeImapScanProfile,
     ProductionImapScanMessage,
     selectPreservedRetrievalCandidatesForTest,
@@ -2118,8 +2119,8 @@ function runImapProfileNormalizationCase() {
             name: "fast",
             input: "fast",
             requested: "fast",
-            normalizedFrom: null,
-            hasWarning: false,
+            normalizedFrom: "fast",
+            hasWarning: true,
         },
         {
             name: "adaptive",
@@ -2153,26 +2154,41 @@ function runImapProfileNormalizationCase() {
 
     for (const testCase of cases) {
         const actual = normalizeImapScanProfile(testCase.input);
-        assertField(`${testCase.name} effective`, "fast", actual.effectiveProfile);
+        assertField(`${testCase.name} effective`, "mvp_standard", actual.effectiveProfile);
         assertField(`${testCase.name} requested`, testCase.requested, actual.requestedProfile);
         assertField(`${testCase.name} normalizedFrom`, testCase.normalizedFrom, actual.normalizedFrom);
         assertField(`${testCase.name} warning`, testCase.hasWarning, Boolean(actual.warning));
         assertField(
             `${testCase.name} warning text`,
             testCase.hasWarning,
-            Boolean(actual.warning?.includes("fast profile"))
+            Boolean(actual.warning?.includes("bounded standard profile"))
         );
     }
 
+    const standard = getImapScanProfileDefaultsForTest("mvp_standard");
+    const oldFast = getImapScanProfileDefaultsForTest("fast");
+
+    assertField("Standard scan mode", "hybrid_window", standard.scanMode);
+    assertField("Standard broader than fast", true, standard.scanDays > oldFast.scanDays);
+    assertField("Standard targeted enabled", true, standard.targetedEnabled);
+    assertField("Standard header targeted enabled", true, standard.headerTargetedEnabled);
+    assertField("Standard metadata enabled", true, standard.metadataPrepassEnabled);
+    assertField("Standard metadata always", true, standard.metadataPrepassAlways);
+    assertField("Standard deep fallback disabled", false, standard.deepFallbackEnabled);
+    assertField("Standard deep fallback cap zero", 0, standard.deepFallbackMaxFetch);
+    assertField("Standard budget bounded", true, standard.scanBudgetMs > 0 && standard.scanBudgetMs <= 60000);
+    assertField("Standard target cap bounded", true, standard.targetedLimit <= 300);
+    assertField("Standard metadata cap bounded", true, standard.metadataPrepassMatchLimit <= 300);
+
     if (failures.length === 0) {
         productResultPassed += 1;
-        console.log("PASS productResult: IMAP MVP fast profile normalization");
+        console.log("PASS productResult: IMAP MVP standard profile normalization");
         return;
     }
 
     productResultFailed += 1;
-    failedProductResultCases.push("IMAP MVP fast profile normalization");
-    console.log("FAIL productResult: IMAP MVP fast profile normalization");
+    failedProductResultCases.push("IMAP MVP standard profile normalization");
+    console.log("FAIL productResult: IMAP MVP standard profile normalization");
     console.log("  failures:", JSON.stringify(failures, null, 2));
 }
 
