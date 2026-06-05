@@ -1,4 +1,9 @@
-export type ImapProductScanProfile = "fast" | "balanced" | "deep" | "adaptive";
+export type ImapProductScanProfile =
+    | "fast"
+    | "balanced"
+    | "deep"
+    | "adaptive"
+    | "mvp_standard";
 
 export type ImapScanMode = "recent_window" | "hybrid_window" | "deep";
 
@@ -221,7 +226,14 @@ export function planImapScanStrategy(
         recommendedFallbackStrategy = "metadata_prepass_plus_time_buckets";
     }
 
-    if (profile === "fast") {
+    if (profile === "mvp_standard") {
+        effectiveScanMode = "recent_window";
+        effectiveWindowDays = observedStats.scanDays;
+        shouldRunTargetedSearch = false;
+        shouldRunHeaderTargetedSearch = true;
+        shouldRunMetadataPrepass = false;
+        shouldRunDeepFallback = false;
+    } else if (profile === "fast") {
         effectiveScanMode = "recent_window";
         effectiveWindowDays = observedStats.scanDays;
     } else if (profile === "balanced") {
@@ -354,6 +366,22 @@ export function planImapScanStrategy(
             scanReliabilityLevel === "high"
                 ? "No current subscription evidence was found in this scan window."
                 : "No current subscription evidence was found, and IMAP search capability was limited; a later deep scan may still find older subscriptions.";
+    }
+
+    if (profile === "mvp_standard") {
+        deepScanRecommended = false;
+
+        if (!hasAnyFinding) {
+            deepScanReason =
+                "Bounded MVP standard scan found no subscription evidence.";
+            userFacingCoverageNote =
+                "No subscriptions were found in this bounded scan. You can try again later or add subscriptions manually.";
+        } else if (!hasCurrent && observedStats.needsReviewSubscriptions > 0) {
+            deepScanReason =
+                "Bounded MVP standard scan found items that need confirmation.";
+            userFacingCoverageNote =
+                "We found possible subscriptions or bills. Please review the results before importing.";
+        }
     }
 
     if (deepScanRecommended) {
