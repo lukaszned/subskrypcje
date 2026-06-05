@@ -79,7 +79,9 @@ if (API_BASE_URLS.length === 0) {
   );
 }
 
-console.log(`[apiClient] API base URLs: ${API_BASE_URLS.join(', ')}`);
+if (__DEV__) {
+  console.log(`[apiClient] API base URLs: ${API_BASE_URLS.join(', ')}`);
+}
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || '');
@@ -204,7 +206,9 @@ async function request<T>(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    console.log(`[API Request] ${method} ${url} (Timeout: ${Math.round(timeoutMs / 1000)}s)`);
+    if (__DEV__) {
+      console.log(`[API Request] ${method} ${url} (Timeout: ${Math.round(timeoutMs / 1000)}s)`);
+    }
 
     try {
       const config: RequestInit = {
@@ -257,9 +261,11 @@ async function request<T>(
         method === 'GET';
 
       if (canTryNextHost) {
-        console.warn(
-          `[API Request] ${method} ${url} failed, trying next API host: ${getErrorMessage(normalizedError)}`
-        );
+        if (__DEV__) {
+          console.warn(
+            `[API Request] ${method} ${url} failed, trying next API host: ${getErrorMessage(normalizedError)}`
+          );
+        }
         continue;
       }
 
