@@ -3059,19 +3059,24 @@ export async function scanImapSubscriptions(
                 stats.deepFallbackUidCandidatesAfterSampling,
         };
 
-        console.info("[email-scan] imap scan completed", {
-            requestedProfile: profileNormalization.requestedProfile,
-            effectiveProfile: profileNormalization.effectiveProfile,
-            host: input.host,
-            mailbox,
-            durationMs: scanSummary.durationMs,
-            analyzedMessagesCount: scanSummary.analyzedMessagesCount,
-            candidatesFound: scanSummary.candidatesFound,
-            canonicalSubscriptions: scanSummary.canonicalSubscriptions,
-            capped: scanSummary.capped,
-            budgetStoppedEarly: scanSummary.budgetStoppedEarly,
-            timeoutHit: scanSummary.timeoutHit,
-        });
+        if (
+            process.env.EMAIL_SCAN_DEBUG === "true" ||
+            process.env.NODE_ENV !== "production"
+        ) {
+            console.info("[email-scan] imap scan completed", {
+                requestedProfile: profileNormalization.requestedProfile,
+                effectiveProfile: profileNormalization.effectiveProfile,
+                host: input.host,
+                mailbox,
+                durationMs: scanSummary.durationMs,
+                analyzedMessagesCount: scanSummary.analyzedMessagesCount,
+                candidatesFound: scanSummary.candidatesFound,
+                canonicalSubscriptions: scanSummary.canonicalSubscriptions,
+                capped: scanSummary.capped,
+                budgetStoppedEarly: scanSummary.budgetStoppedEarly,
+                timeoutHit: scanSummary.timeoutHit,
+            });
+        }
 
         return {
             productResult,

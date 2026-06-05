@@ -31,6 +31,13 @@ import { getEmailScanUserMessage } from "../services/subscription-product-bucket
 
 const router = Router();
 
+function isEmailScanDiagnosticsEnabled() {
+    return (
+        process.env.EMAIL_SCAN_DEBUG === "true" ||
+        process.env.NODE_ENV !== "production"
+    );
+}
+
 const imapErrorResponse: Record<
     ImapScanServiceErrorCode,
     { status: number; message: string }
@@ -177,12 +184,14 @@ router.post("/imap/scan", requireAuth, async (req, res) => {
         const input = scanImapSchema.parse(req.body ?? {});
         const profileNormalization = normalizeImapScanProfile(input.profile);
 
-        console.info("[email-scan] imap profile normalization", {
-            requestedProfile: profileNormalization.requestedProfile,
-            effectiveProfile: profileNormalization.effectiveProfile,
-            normalized: Boolean(profileNormalization.warning),
-            request: safeImapRequestContext(req.body),
-        });
+        if (isEmailScanDiagnosticsEnabled()) {
+            console.info("[email-scan] imap profile normalization", {
+                requestedProfile: profileNormalization.requestedProfile,
+                effectiveProfile: profileNormalization.effectiveProfile,
+                normalized: Boolean(profileNormalization.warning),
+                request: safeImapRequestContext(req.body),
+            });
+        }
         const result = await scanImapSubscriptions(input);
 
         return res.json({
@@ -232,13 +241,17 @@ router.post("/import-preview", requireAuth, async (req, res) => {
     const context = safeImportPreviewContext(req.body);
     let responseCode: string | undefined;
 
-    console.info("[email-scan] import-preview received", {
-        path: req.originalUrl,
-        userId: appUser?.id,
-        ...context,
-    });
+    if (isEmailScanDiagnosticsEnabled()) {
+        console.info("[email-scan] import-preview received", {
+            path: req.originalUrl,
+            userId: appUser?.id,
+            ...context,
+        });
+    }
 
     res.on("finish", () => {
+        if (!isEmailScanDiagnosticsEnabled()) return;
+
         console.info("[email-scan] import-preview finished", {
             path: req.originalUrl,
             userId: appUser?.id,
@@ -331,13 +344,17 @@ router.post("/import-confirm", requireAuth, async (req, res) => {
           }
         | undefined;
 
-    console.info("[email-scan] import-confirm received", {
-        path: req.originalUrl,
-        userId: appUser?.id,
-        ...context,
-    });
+    if (isEmailScanDiagnosticsEnabled()) {
+        console.info("[email-scan] import-confirm received", {
+            path: req.originalUrl,
+            userId: appUser?.id,
+            ...context,
+        });
+    }
 
     res.on("finish", () => {
+        if (!isEmailScanDiagnosticsEnabled()) return;
+
         console.info("[email-scan] import-confirm finished", {
             path: req.originalUrl,
             userId: appUser?.id,

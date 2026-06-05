@@ -91,6 +91,14 @@ export function emailScanDebugMiddleware(
     res: Response,
     next: NextFunction
 ) {
+    const diagnosticsEnabled =
+        process.env.EMAIL_SCAN_DEBUG === "true" ||
+        process.env.NODE_ENV !== "production";
+
+    if (!diagnosticsEnabled) {
+        return next();
+    }
+
     const startedAt = Date.now();
     const safePath = req.path;
     const queryKeys = getSafeQueryKeys(req.query);
