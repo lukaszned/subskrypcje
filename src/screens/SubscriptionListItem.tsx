@@ -16,7 +16,7 @@
 //   - onDelete = anuluj subskrypcję  (PATCH /subscriptions/:id/cancel)
 // =============================================================
 
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { CheckCircle, XCircle } from 'lucide-react-native';
@@ -64,9 +64,9 @@ function getCategoryStyle(category: string) {
   return CATEGORY_COLORS[key] ?? { bg: '#F1F5F9', text: '#64748B' };
 }
 
-const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
+const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
   const { theme } = useTheme();
-  const safeItem: SubscriptionItem = {
+  const safeItem: SubscriptionItem = useMemo(() => ({
     ...item,
     name: item.name || 'Subskrypcja',
     category: item.category || 'Inne',
@@ -78,7 +78,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
     isTrial: Boolean(item.isTrial),
     isSeasonal: Boolean(item.isSeasonal),
     seasonEndLabel: item.seasonEndLabel || null,
-  };
+  }), [item]);
   const catStyle = getCategoryStyle(safeItem.category);
   const isCancelled = safeItem.status === 'canceled';
 
@@ -94,8 +94,11 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
 
   const statusInfo = getStatusInfo(safeItem.status, safeItem.isTrial);
 
+  const handlePayPress = useCallback(() => onPause(safeItem.id), [onPause, safeItem.id]);
+  const handleCancelPress = useCallback(() => onDelete(safeItem.id), [onDelete, safeItem.id]);
+
   const renderRightActions = (
-    progress: Animated.AnimatedInterpolation<number>,
+    _progress: Animated.AnimatedInterpolation<number>,
     dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const scale = dragX.interpolate({
@@ -111,7 +114,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         {/* Opłać — zielony */}
         <TouchableOpacity
           style={[styles.actionButton, styles.payAction, { backgroundColor: theme.colors.primary }]}
-          onPress={() => onPause(safeItem.id)}
+          onPress={handlePayPress}
           activeOpacity={0.8}
         >
           <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
@@ -123,7 +126,7 @@ const SubscriptionListItem: React.FC<Props> = ({ item, onDelete, onPause, onPres
         {/* Anuluj — czerwony */}
         <TouchableOpacity
           style={[styles.actionButton, styles.cancelAction, { backgroundColor: theme.colors.danger }]}
-          onPress={() => onDelete(safeItem.id)}
+          onPress={handleCancelPress}
           activeOpacity={0.8}
         >
           <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
@@ -359,5 +362,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
 });
+
+const SubscriptionListItem = React.memo(SubscriptionListItemComponent);
 
 export default SubscriptionListItem;

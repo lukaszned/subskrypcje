@@ -53,9 +53,23 @@ export const SubscriptionDetailScreen = () => {
   const deleteMutation = useDeleteSubscription();
   const payMutation = usePaySubscription();
   const cancelMutation = useCancelSubscription();
+  const actionLockRef = React.useRef<'pay' | 'cancel' | 'delete' | null>(null);
+  const [pendingAction, setPendingAction] = React.useState<'pay' | 'cancel' | 'delete' | null>(null);
 
   const showDetailActionError = (error: unknown, fallback: string) => {
     Alert.alert('Nie udało się wykonać akcji', getSafeMutationErrorMessage(error, fallback));
+  };
+
+  const startAction = (action: 'pay' | 'cancel' | 'delete') => {
+    if (actionLockRef.current) return false;
+    actionLockRef.current = action;
+    setPendingAction(action);
+    return true;
+  };
+
+  const finishAction = () => {
+    actionLockRef.current = null;
+    setPendingAction(null);
   };
 
   const isLoading = isSubLoading;
@@ -79,38 +93,47 @@ export const SubscriptionDetailScreen = () => {
   }
 
   const handleDelete = () => {
+    if (!startAction('delete')) return;
+
     Alert.alert('Usuń subskrypcję', 'Czy na pewno chcesz trwale usunąć tę subskrypcję?', [
-      { text: 'Anuluj', style: 'cancel' },
+      { text: 'Anuluj', style: 'cancel', onPress: finishAction },
       {
         text: 'Usuń',
         style: 'destructive',
         onPress: () => deleteMutation.mutate(id, {
           onSuccess: () => goBackOrDashboard(navigation),
           onError: (error) => showDetailActionError(error, 'Nie udało się usunąć subskrypcji.'),
+          onSettled: finishAction,
         })
       },
-    ]);
+    ], { onDismiss: finishAction });
   };
 
   const handlePay = () => {
+    if (!startAction('pay')) return;
+
     payMutation.mutate(id, {
       onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została oznaczona jako opłacona.'),
       onError: (error) => showDetailActionError(error, 'Nie udało się oznaczyć płatności.'),
+      onSettled: finishAction,
     });
   };
 
   const handleCancel = () => {
+    if (!startAction('cancel')) return;
+
     Alert.alert('Anulować subskrypcję?', `Czy na pewno chcesz oznaczyć "${sub.name}" jako anulowaną?`, [
-      { text: 'Nie', style: 'cancel' },
+      { text: 'Nie', style: 'cancel', onPress: finishAction },
       {
         text: 'Tak, anuluj',
         style: 'destructive',
         onPress: () => cancelMutation.mutate(id, {
           onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została anulowana.'),
           onError: (error) => showDetailActionError(error, 'Nie udało się anulować subskrypcji.'),
+          onSettled: finishAction,
         }),
       },
-    ]);
+    ], { onDismiss: finishAction });
   };
 
   const nextDate = parseAppDate(sub.nextPaymentDate);
@@ -177,14 +200,24 @@ export const SubscriptionDetailScreen = () => {
 
         <View style={styles.actionsRow}>
           {sub.status !== 'canceled' && (
-            <TouchableOpacity style={[styles.actionBtn, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]} onPress={handlePay} disabled={payMutation.isPending}>
-              {payMutation.isPending ? <ActivityIndicator size="small" color={theme.colors.darkText} /> : <CheckCircle size={20} color={theme.colors.darkText} />}
+            <TouchableOpacity
+              style={[styles.actionBtn, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }, pendingAction && pendingAction !== 'pay' && styles.actionBtnDisabled]}
+              onPress={handlePay}
+              disabled={Boolean(pendingAction)}
+              accessibilityState={{ disabled: Boolean(pendingAction), busy: pendingAction === 'pay' }}
+            >
+              {pendingAction === 'pay' ? <ActivityIndicator size="small" color={theme.colors.darkText} /> : <CheckCircle size={20} color={theme.colors.darkText} />}
               <Text style={styles.actionBtnText}>Oznacz jako opłaconą</Text>
             </TouchableOpacity>
           )}
           {sub.status !== 'canceled' ? (
-            <TouchableOpacity style={[styles.actionBtn, styles.actionBtnOutline]} onPress={handleCancel}>
-              <XCircle size={20} color={theme.colors.danger} />
+            <TouchableOpacity
+              style={[styles.actionBtn, styles.actionBtnOutline, pendingAction && pendingAction !== 'cancel' && styles.actionBtnDisabled]}
+              onPress={handleCancel}
+              disabled={Boolean(pendingAction)}
+              accessibilityState={{ disabled: Boolean(pendingAction), busy: pendingAction === 'cancel' }}
+            >
+              {pendingAction === 'cancel' ? <ActivityIndicator size="small" color={theme.colors.danger} /> : <XCircle size={20} color={theme.colors.danger} />}
               <Text style={[styles.actionBtnText, { color: theme.colors.danger }]}>Anuluj</Text>
             </TouchableOpacity>
           ) : (
@@ -370,8 +403,15 @@ export const SubscriptionDetailScreen = () => {
           )}
         </View>
 
-        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
-          <Trash2 size={20} color={theme.colors.danger} />
+        <TouchableOpacity
+          style={[styles.deleteBtn, pendingAction && pendingAction !== 'delete' && styles.actionBtnDisabled]}
+          onPress={handleDelete}
+          disabled={Boolean(pendingAction)}
+          accessibilityState={{ disabled: Boolean(pendingAction), busy: pendingAction === 'delete' }}
+        >
+          {pendingAction === 'delete'
+            ? <ActivityIndicator size="small" color={theme.colors.danger} />
+            : <Trash2 size={20} color={theme.colors.danger} />}
           <Text style={[styles.deleteBtnText, { color: theme.colors.danger }]}>Usuń subskrypcję na stałe</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -426,6 +466,7 @@ const styles = StyleSheet.create({
   actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
   actionBtn: { flex: 1.25, minHeight: 54, borderRadius: 20, backgroundColor: vibrantTheme.colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, ...vibrantTheme.shadows.glow },
   actionBtnOutline: { flex: 0.85, backgroundColor: 'rgba(255,77,109,0.08)', borderWidth: 1, borderColor: 'rgba(255,77,109,0.5)', shadowOpacity: 0, elevation: 0 },
+  actionBtnDisabled: { opacity: 0.45 },
   actionBtnText: { color: vibrantTheme.colors.darkText, fontWeight: '900', fontSize: 16 },
   canceledBadge: { flex: 1, height: 50, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   canceledBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },

@@ -4,7 +4,7 @@
 // Lista subskrypcji zasilona live data z backendu.
 // =============================================================
 
-import React, { useState, useMemo } from 'react';
+import React, { useCallback, useDeferredValue, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -68,12 +68,22 @@ const showActionError = (error: unknown, fallback: string) => {
   Alert.alert('Nie udało się wykonać akcji', getSafeMutationErrorMessage(error, fallback));
 };
 
+const STATUS_TABS: Array<{ id: SubscriptionStatus | 'all' | 'seasonal'; label: string }> = [
+  { id: 'all', label: 'Wszystkie' },
+  { id: 'pending', label: 'Aktywne' },
+  { id: 'paid', label: 'OpĹ‚acone' },
+  { id: 'overdue', label: 'ZalegĹ‚e' },
+  { id: 'seasonal', label: 'Sezonowe' },
+  { id: 'canceled', label: 'Anulowane' },
+];
+
 export const SubscriptionListScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList>>();
   const { theme } = useTheme();
   const canGoBack = navigation.canGoBack();
 
   const [searchQuery, setSearchQuery] = useState('');
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all' | 'seasonal'>('all');
   const [sortOption, setSortOption] = useState<{ field: string, order: 'asc' | 'desc' }>({ field: 'nextPaymentDate', order: 'asc' });
 
@@ -81,6 +91,7 @@ export const SubscriptionListScreen = () => {
 
   const cancelMutation = useCancelSubscription();
   const payMutation = usePaySubscription();
+  const actionLocksRef = useRef(new Set<string>());
 
   const normalizedSubscriptions = useMemo(() => (
     allSubscriptions
@@ -99,7 +110,7 @@ export const SubscriptionListScreen = () => {
 
   const subscriptions = useMemo(() => {
     const base = filterAndSortSubscriptions(normalizedSubscriptions, {
-      search: searchQuery,
+      search: deferredSearchQuery,
       status: activeStatus === 'all' || activeStatus === 'seasonal' ? undefined : activeStatus,
       sortBy: sortOption.field,
       sortOrder: sortOption.order,
@@ -107,7 +118,7 @@ export const SubscriptionListScreen = () => {
 
     if (activeStatus !== 'seasonal') return base;
     return base.filter((item) => item.status !== 'canceled' && getSeasonalStatus(item.notes).isSeasonal);
-  }, [activeStatus, normalizedSubscriptions, searchQuery, sortOption.field, sortOption.order]);
+  }, [activeStatus, deferredSearchQuery, normalizedSubscriptions, sortOption.field, sortOption.order]);
 
   const portfolioStats = useMemo(() => {
     const counted = normalizedSubscriptions.filter((item) => item.status !== 'canceled' && item.includeInStats !== false);
@@ -130,12 +141,18 @@ export const SubscriptionListScreen = () => {
     };
   }, [normalizedSubscriptions]);
 
-  const handleCancel = (id: string, name: string) => {
+  const handleCancel = useCallback((id: string, name: string) => {
+    const actionKey = `cancel:${id}`;
+    if (actionLocksRef.current.has(actionKey) || cancelMutation.isPending) return;
+
+    actionLocksRef.current.add(actionKey);
+    const releaseActionLock = () => actionLocksRef.current.delete(actionKey);
+
     Alert.alert(
       'Anulować subskrypcję?',
       `Czy na pewno chcesz anulować "${name}"?`,
       [
-        { text: 'Nie', style: 'cancel' },
+        { text: 'Nie', style: 'cancel', onPress: releaseActionLock },
         {
           text: 'Tak, anuluj',
           style: 'destructive',
@@ -143,50 +160,62 @@ export const SubscriptionListScreen = () => {
             cancelMutation.mutate(id, {
               onSuccess: () => Alert.alert('Sukces', 'Subskrypcja została anulowana.'),
               onError: (error) => showActionError(error, 'Nie udało się anulować subskrypcji.'),
+              onSettled: releaseActionLock,
             });
           },
         },
-      ]
+      ],
+      { onDismiss: releaseActionLock }
     );
-  };
+  }, [cancelMutation]);
 
-  const handlePay = (id: string, name: string) => {
+  const handlePay = useCallback((id: string, name: string) => {
+    const actionKey = `pay:${id}`;
+    if (actionLocksRef.current.has(actionKey) || payMutation.isPending) return;
+
+    actionLocksRef.current.add(actionKey);
+    const releaseActionLock = () => actionLocksRef.current.delete(actionKey);
+
     Alert.alert(
       'Opłacono?',
       `Oznaczyć "${name}" jako opłaconą?`,
       [
-        { text: 'Anuluj', style: 'cancel' },
+        { text: 'Anuluj', style: 'cancel', onPress: releaseActionLock },
         {
           text: 'Tak, opłacono',
           onPress: () => {
             payMutation.mutate(id, {
               onSuccess: () => Alert.alert('Sukces', 'Płatność została odnotowana.'),
               onError: (error) => showActionError(error, 'Nie udało się oznaczyć płatności.'),
+              onSettled: releaseActionLock,
             });
           },
         },
-      ]
+      ],
+      { onDismiss: releaseActionLock }
     );
-  };
+  }, [payMutation]);
 
-  const toggleSort = () => {
-    if (sortOption.field === 'nextPaymentDate') {
-      setSortOption({ field: 'amount', order: 'desc' });
-    } else if (sortOption.field === 'amount') {
-      setSortOption({ field: 'name', order: 'asc' });
-    } else {
-      setSortOption({ field: 'nextPaymentDate', order: 'asc' });
-    }
-  };
+  const toggleSort = useCallback(() => {
+    setSortOption((current) => {
+      if (current.field === 'nextPaymentDate') {
+        return { field: 'amount', order: 'desc' };
+      }
+      if (current.field === 'amount') {
+        return { field: 'name', order: 'asc' };
+      }
+      return { field: 'nextPaymentDate', order: 'asc' };
+    });
+  }, []);
 
-  const getSortLabel = () => {
+  const sortLabel = useMemo(() => {
     if (sortOption.field === 'nextPaymentDate') return 'Data';
     if (sortOption.field === 'amount') return 'Cena';
     if (sortOption.field === 'name') return 'Nazwa';
     return 'Sortuj';
-  };
+  }, [sortOption.field]);
 
-  const renderEmptyState = () => {
+  const renderEmptyState = useCallback(() => {
     if (isError) {
       return (
         <ErrorState
@@ -199,24 +228,24 @@ export const SubscriptionListScreen = () => {
     return (
       <EmptyState
         type={searchQuery ? 'search' : 'add'}
-        title={searchQuery ? 'Nie ma takiej subskrypcji' : 'Dodaj pierwszą subskrypcję'}
+        title={searchQuery ? 'Nie ma takiej subskrypcji' : 'Nie masz jeszcze żadnych subskrypcji'}
         message={searchQuery
           ? 'Zmień filtr albo wyszukaj po nazwie usługi, planu lub kategorii.'
-          : 'Zbuduj swoje centrum kosztów: płatności, triale, decyzje i oszczędności będą widoczne w jednym miejscu.'}
+          : 'Dodaj pierwszą, a Sub-Sentry pokaże płatności, triale i miesięczny koszt w jednym miejscu.'}
         actionLabel={!searchQuery && activeStatus === 'all' ? 'Dodaj subskrypcję' : undefined}
         onAction={!searchQuery && activeStatus === 'all' ? () => navigation.navigate('AddSubscription') : undefined}
       />
     );
-  };
+  }, [activeStatus, error?.message, isError, navigation, refetch, searchQuery]);
 
-  const renderLoadingState = () => (
+  const renderLoadingState = useCallback(() => (
     <View style={styles.loadingShell}>
       <Text style={[styles.loadingTitle, { color: theme.colors.text }]}>Przygotowuję listę</Text>
       <Text style={[styles.loadingSubtitle, { color: theme.colors.textMuted }]}>Jeśli odświeżanie potrwa dłużej, aplikacja skorzysta z ostatniego zapisanego stanu.</Text>
       <SkeletonList rows={5} isDark />
     </View>
-  );
-  const renderItem = ({ item }: { item: Subscription }) => {
+  ), [theme.colors.text, theme.colors.textMuted]);
+  const renderItem = useCallback(({ item }: { item: Subscription }) => {
     const seasonalStatus = getSeasonalStatus(item.notes);
 
     return (
@@ -243,9 +272,9 @@ export const SubscriptionListScreen = () => {
         onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
       />
     );
-  };
+  }, [handleCancel, handlePay, navigation]);
 
-  const renderPortfolioPulse = () => (
+  const renderPortfolioPulse = useCallback(() => (
     <GlassCard style={styles.pulseCard}>
       <View style={styles.pulseHeader}>
         <View>
@@ -270,7 +299,24 @@ export const SubscriptionListScreen = () => {
         />
       </View>
     </GlassCard>
-  );
+  ), [
+    isFetching,
+    isLoading,
+    portfolioStats.active,
+    portfolioStats.attention,
+    portfolioStats.currency,
+    portfolioStats.dueSoon,
+    portfolioStats.monthlyTotal,
+    theme.colors.primary,
+  ]);
+
+  const keyExtractor = useCallback((item: Subscription) => item.id, []);
+  const handleStatusChange = useCallback((status: SubscriptionStatus | 'all' | 'seasonal') => {
+    setActiveStatus(status);
+  }, []);
+  const refreshControl = useMemo(() => (
+    <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.colors.primary} />
+  ), [isRefetching, refetch, theme.colors.primary]);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
@@ -298,7 +344,7 @@ export const SubscriptionListScreen = () => {
             onPress={toggleSort}
           >
             <ArrowUpDown size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
-            <Text style={{ color: theme.colors.primary, fontWeight: '800', fontSize: 12 }}>{getSortLabel()}</Text>
+            <Text style={{ color: theme.colors.primary, fontWeight: '800', fontSize: 12 }}>{sortLabel}</Text>
           </PressableScale>
         </View>
 
@@ -313,18 +359,11 @@ export const SubscriptionListScreen = () => {
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={styles.statusTabs}
           >
-            {[
-              { id: 'all', label: 'Wszystkie' },
-              { id: 'pending', label: 'Aktywne' },
-              { id: 'paid', label: 'Opłacone' },
-              { id: 'overdue', label: 'Zaległe' },
-              { id: 'seasonal', label: 'Sezonowe' },
-              { id: 'canceled', label: 'Anulowane' },
-            ].map(tab => (
+            {STATUS_TABS.map(tab => (
               <PressableScale
                 key={tab.id}
                 style={[styles.statusTab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeStatus === tab.id && { backgroundColor: `${theme.colors.primary}2E`, borderColor: theme.colors.primary }]}
-                onPress={() => setActiveStatus(tab.id as any)}
+                onPress={() => handleStatusChange(tab.id)}
               >
                 <Text style={[styles.statusTabText, { color: theme.colors.textMuted }, activeStatus === tab.id && { color: theme.colors.primary }]}>
                   {tab.label}
@@ -336,12 +375,12 @@ export const SubscriptionListScreen = () => {
 
         <FlatList
           data={subscriptions}
-          keyExtractor={(item) => item.id}
+          keyExtractor={keyExtractor}
           contentContainerStyle={subscriptions.length === 0 ? styles.listEmptyContent : styles.listContent}
           renderItem={renderItem}
           ListHeaderComponent={normalizedSubscriptions.length > 0 ? renderPortfolioPulse : null}
           ListEmptyComponent={isLoading ? renderLoadingState : renderEmptyState}
-          refreshControl={<RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={theme.colors.primary} />}
+          refreshControl={refreshControl}
           initialNumToRender={6}
           maxToRenderPerBatch={6}
           updateCellsBatchingPeriod={50}

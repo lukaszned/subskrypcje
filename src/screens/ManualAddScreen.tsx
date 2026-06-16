@@ -181,6 +181,7 @@ export const ManualAddScreen = () => {
 
   const amountInputRef = useRef<TextInput>(null);
   const aiPulseAnim = useRef(new Animated.Value(0)).current;
+  const isSaveLockedRef = useRef(false);
   const createMutation = useCreateSubscription();
   const updateMutation = useUpdateSubscription();
   const { data: existingSub, isLoading: isLoadingSub } = useSubscription(subscriptionId || '');
@@ -218,12 +219,17 @@ export const ManualAddScreen = () => {
   const [aiServiceName, setAiServiceName] = useState('');
   const [showSlowSaveHint, setShowSlowSaveHint] = useState(false);
 
-  const parsedAmount = parseFloat(amount.replace(',', '.'));
+  const parsedAmount = useMemo(() => {
+    const normalizedAmount = amount.replace(',', '.').trim();
+    if (!normalizedAmount) return Number.NaN;
+    return Number(normalizedAmount);
+  }, [amount]);
+  const hasValidAmount = Number.isFinite(parsedAmount) && parsedAmount > 0;
   const finalCalculatedCost = useMemo(() => {
-    if (isNaN(parsedAmount)) return 0;
+    if (!hasValidAmount) return 0;
     if (isShared && peopleCount > 0) return parsedAmount / peopleCount;
     return parsedAmount;
-  }, [parsedAmount, isShared, peopleCount]);
+  }, [hasValidAmount, parsedAmount, isShared, peopleCount]);
 
   const selectedPlanInsights = useMemo(() => {
     const plans = selectedService?.availablePlans || [];
@@ -360,7 +366,9 @@ export const ManualAddScreen = () => {
     Keyboard.dismiss();
   };
 
-  const isValid = name.trim().length > 0 && !isNaN(parsedAmount) && parsedAmount > 0;
+  const hasNameError = isSubmitted && name.trim().length === 0;
+  const hasAmountError = isSubmitted && !hasValidAmount;
+  const isValid = name.trim().length > 0 && hasValidAmount && Number.isFinite(finalCalculatedCost) && finalCalculatedCost > 0;
 
   useEffect(() => {
     if (existingSub) {
@@ -482,7 +490,23 @@ export const ManualAddScreen = () => {
   const handleSave = async () => {
     setIsSubmitted(true);
     Keyboard.dismiss();
-    if (!isValid || createMutation.isPending || updateMutation.isPending) return;
+
+    if (!isValid) {
+      if (!hasValidAmount) {
+        amountInputRef.current?.focus();
+      }
+
+      Alert.alert(
+        'Sprawdź dane',
+        hasValidAmount
+          ? 'Podaj nazwę subskrypcji, zanim zapiszesz formularz.'
+          : 'Kwota musi być liczbą większą od 0.'
+      );
+      return;
+    }
+
+    if (isSaveLockedRef.current || createMutation.isPending || updateMutation.isPending) return;
+    isSaveLockedRef.current = true;
 
     const notesPayload = buildSubscriptionNotesPayload({
       text: notes.trim(),
@@ -519,6 +543,9 @@ export const ManualAddScreen = () => {
           goBackOrDashboard(navigation);
         },
         onError: handleApiError,
+        onSettled: () => {
+          isSaveLockedRef.current = false;
+        },
       });
     } else {
       createMutation.mutate(payload as any, {
@@ -527,6 +554,9 @@ export const ManualAddScreen = () => {
           goBackOrDashboard(navigation);
         },
         onError: handleApiError,
+        onSettled: () => {
+          isSaveLockedRef.current = false;
+        },
       });
     }
   };
@@ -559,6 +589,12 @@ export const ManualAddScreen = () => {
     }
   };
   const isLoading = createMutation.isPending || updateMutation.isPending;
+  const isInitialEditLoading = Boolean(subscriptionId && isLoadingSub && !existingSub);
+
+    useEffect(() => {
+      navigation.setOptions({ gestureEnabled: !isLoading });
+      return () => navigation.setOptions({ gestureEnabled: true });
+    }, [isLoading, navigation]);
 
     useEffect(() => {
       if (!isLoading) {
@@ -566,7 +602,7 @@ export const ManualAddScreen = () => {
         return;
       }
 
-      const timeoutId = setTimeout(() => setShowSlowSaveHint(true), 8000);
+      const timeoutId = setTimeout(() => setShowSlowSaveHint(true), 1200);
       return () => clearTimeout(timeoutId);
     }, [isLoading]);
 
@@ -579,9 +615,28 @@ export const ManualAddScreen = () => {
     };
 
     const handleClose = () => {
+      if (isLoading) {
+        Alert.alert('Zapis w toku', 'Poczekaj na potwierdzenie zapisu przed zamknięciem formularza.');
+        return;
+      }
+
       Keyboard.dismiss();
       goBackOrDashboard(navigation);
     };
+
+    if (isInitialEditLoading) {
+      return (
+        <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
+          <View style={[styles.initialLoadingState, { backgroundColor: theme.colors.bg }]}>
+            <ActivityIndicator size="large" color={theme.colors.primary} />
+            <Text style={[styles.initialLoadingTitle, { color: theme.colors.text }]}>Ładuję subskrypcję</Text>
+            <Text style={[styles.initialLoadingText, { color: theme.colors.textMuted }]}>
+              Przygotowuję dane do bezpiecznej edycji.
+            </Text>
+          </View>
+        </SafeAreaView>
+      );
+    }
   
     return (
       <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
@@ -713,7 +768,7 @@ export const ManualAddScreen = () => {
                   <View style={styles.amountRow}>
                     <TextInput
                       ref={amountInputRef}
-                      style={[styles.amountInput, isSubmitted && parsedAmount <= 0 && { color: theme.colors.danger }]}
+                      style={[styles.amountInput, hasAmountError && { color: theme.colors.danger }]}
                       value={amount}
                       onChangeText={(value) => {
                         setAmount(value);
@@ -727,6 +782,9 @@ export const ManualAddScreen = () => {
                     />
                     <Text style={styles.currencyLabel}>{currency}</Text>
                   </View>
+                )}
+                {hasAmountError && (
+                  <Text style={styles.fieldError}>Kwota musi być większa od 0.</Text>
                 )}
                 
                 {!selectedService?.availablePlans && (
@@ -803,7 +861,7 @@ export const ManualAddScreen = () => {
                   )}
 
                   <TextInput 
-                    style={[styles.textInput, { color: theme.colors.text, borderColor: theme.colors.border }, isSubmitted && name.trim().length === 0 && { borderWidth: 1, borderColor: theme.colors.danger }]}
+                    style={[styles.textInput, { color: theme.colors.text, borderColor: theme.colors.border }, hasNameError && { borderWidth: 1, borderColor: theme.colors.danger }]}
                     value={name} 
                     onChangeText={(value) => {
                       setName(value);
@@ -1248,6 +1306,24 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   safeArea: { flex: 1, backgroundColor: theme.colors.bg },
   container: { flex: 1 },
   inner: { flex: 1 },
+  initialLoadingState: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 28,
+  },
+  initialLoadingTitle: {
+    marginTop: 18,
+    fontSize: 20,
+    fontWeight: '900',
+  },
+  initialLoadingText: {
+    marginTop: 8,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    textAlign: 'center',
+  },
   appGlowTop: {
     position: 'absolute',
     top: -130,
@@ -1406,6 +1482,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   label: { fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
   labelOptional: { fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
   textInput: { fontSize: 16, backgroundColor: withAlpha(theme.colors.text, 0.09), borderRadius: 18, paddingHorizontal: 15, paddingVertical: 14, color: theme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: theme.colors.border },
+  fieldError: {
+    width: '100%',
+    marginTop: 8,
+    color: theme.colors.danger,
+    fontSize: 12,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
   pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: withAlpha(theme.colors.text, 0.07), marginRight: 8, borderWidth: 1, borderColor: theme.colors.border },
   pillActive: { backgroundColor: withAlpha(theme.colors.text, 0.16), borderColor: theme.colors.primary },
   pillText: { color: theme.colors.textMuted, fontWeight: '700' },

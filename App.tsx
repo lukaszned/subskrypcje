@@ -1,53 +1,45 @@
-// =============================================================
-// App.tsx — główny entry point aplikacji
-// =============================================================
+import 'react-native-gesture-handler';
 
-import 'react-native-gesture-handler'; 
-import { StatusBar } from 'expo-status-bar';
 import React from 'react';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import {
+  createNativeStackNavigator,
+  type NativeStackNavigationOptions,
+} from '@react-navigation/native-stack';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { enableFreeze, enableScreens } from 'react-native-screens';
 
-// Context
-import { AuthProvider, useAuth } from './src/context/AuthContext';
-import { ErrorBoundary } from './src/components/ErrorBoundary';
-import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
-import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import { getCachedDashboardSummary } from './src/api/dashboard';
 import { getCachedSubscriptions } from './src/api/subscriptions';
+import { ErrorBoundary } from './src/components/ErrorBoundary';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DASHBOARD_SUMMARY_KEY } from './src/hooks/useDashboardSummary';
 import { SUBSCRIPTIONS_KEY } from './src/hooks/useSubscriptions';
-
-// Ekrany — Auth Stack
-import OnboardingScreen from './src/screens/OnboardingScreen';
-import LoginScreen from './src/screens/LoginScreen';
-import RegisterScreen from './src/screens/RegisterScreen';
-
-// Ekrany — App Stack
 import { DashboardScreen } from './src/screens/DashboardScreen';
-import { SubscriptionListScreen } from './src/screens/SubscriptionListScreen';
-import { ManualAddScreen } from './src/screens/ManualAddScreen';
-import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen';
-import { NotificationsScreen } from './src/screens/NotificationsScreen';
-import { SettingsScreen } from './src/screens/SettingsScreen';
 import { EmailScanScreen } from './src/screens/EmailScanScreen';
-import { StatisticsScreen } from './src/screens/StatisticsScreen';
-import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
 import { GuardScreen } from './src/screens/GuardScreen';
-import { SubscriptionReviewQueueScreen } from './src/screens/SubscriptionReviewQueueScreen';
 import { HealthScoreDetailsScreen } from './src/screens/HealthScoreDetailsScreen';
+import LoginScreen from './src/screens/LoginScreen';
+import { ManualAddScreen } from './src/screens/ManualAddScreen';
+import { NotificationsScreen } from './src/screens/NotificationsScreen';
+import OnboardingScreen from './src/screens/OnboardingScreen';
+import { PaymentCalendarScreen } from './src/screens/PaymentCalendarScreen';
+import RegisterScreen from './src/screens/RegisterScreen';
 import { SavingsDetailsScreen } from './src/screens/SavingsDetailsScreen';
+import { SettingsScreen } from './src/screens/SettingsScreen';
+import { StatisticsScreen } from './src/screens/StatisticsScreen';
+import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen';
+import { SubscriptionListScreen } from './src/screens/SubscriptionListScreen';
+import { SubscriptionReviewQueueScreen } from './src/screens/SubscriptionReviewQueueScreen';
+import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
+import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
+import { requestNotificationPermissions } from './src/utils/notifications';
 
-// ─────────────────────────────────────────────────────────────
-// Typy nawigacji
-// ─────────────────────────────────────────────────────────────
-
-// ─────────────────────────────────────────────────────────────
-// Klient React Query
-// ─────────────────────────────────────────────────────────────
+enableScreens(true);
+enableFreeze(true);
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -57,8 +49,10 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: false,
       refetchOnMount: false,
       retry: (failureCount, error: any) => {
-        if (error?.status === 0) return false;
-        if (error?.status === 401 || error?.status === 403) return false;
+        if (error?.status === 0 || error?.status === 401 || error?.status === 403) {
+          return false;
+        }
+
         const message = error?.message || '';
         const isConnectivityIssue = /timeout|network request failed|failed to fetch|offline|load failed/i.test(message);
 
@@ -73,19 +67,26 @@ const queryClient = new QueryClient({
   },
 });
 
-// ─────────────────────────────────────────────────────────────
-// Nawigatory
-// ─────────────────────────────────────────────────────────────
-
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppStack = createNativeStackNavigator<AppStackParamList>();
 
-const authScreenOptions = { headerShown: false, animation: 'fade' } as const;
-const appScreenOptions = { headerShown: false, animation: 'slide_from_right' } as const;
+const authScreenOptions: NativeStackNavigationOptions = {
+  headerShown: false,
+  animation: 'fade',
+  freezeOnBlur: true,
+};
+
+const appScreenOptions: NativeStackNavigationOptions = {
+  headerShown: false,
+  animation: 'default',
+  gestureEnabled: true,
+  fullScreenGestureEnabled: true,
+  freezeOnBlur: true,
+};
 
 const AuthNavigator = React.memo(function AuthNavigator() {
   return (
-    <AuthStack.Navigator id="AuthStack" screenOptions={authScreenOptions}>
+    <AuthStack.Navigator screenOptions={authScreenOptions}>
       <AuthStack.Screen name="Onboarding" component={OnboardingScreen} />
       <AuthStack.Screen name="Login" component={LoginScreen} />
       <AuthStack.Screen name="Register" component={RegisterScreen} />
@@ -95,7 +96,7 @@ const AuthNavigator = React.memo(function AuthNavigator() {
 
 const AppNavigator = React.memo(function AppNavigator() {
   return (
-    <AppStack.Navigator id="AppStack" screenOptions={appScreenOptions}>
+    <AppStack.Navigator screenOptions={appScreenOptions}>
       <AppStack.Screen
         name="Dashboard"
         component={DashboardScreen}
@@ -106,7 +107,7 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen
         name="AddSubscription"
         component={ManualAddScreen}
-        options={{ presentation: 'modal' }}
+        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
       />
       <AppStack.Screen name="Notifications" component={NotificationsScreen} />
       <AppStack.Screen name="Settings" component={SettingsScreen} />
@@ -127,7 +128,7 @@ function RootNavigator() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: theme.colors.bg }}>
+      <View style={[styles.loadingRoot, { backgroundColor: theme.colors.bg }]}>
         <ActivityIndicator size="large" color={theme.colors.primary} />
       </View>
     );
@@ -146,24 +147,26 @@ function AppCacheWarmup() {
   const queryClient = useQueryClient();
 
   React.useEffect(() => {
-    if (!session) return;
+    if (!session) return undefined;
 
     let isMounted = true;
 
     Promise.all([
       getCachedDashboardSummary(),
       getCachedSubscriptions(),
-    ]).then(([summary, subscriptions]) => {
-      if (!isMounted) return;
+    ])
+      .then(([summary, subscriptions]) => {
+        if (!isMounted) return;
 
-      if (summary) {
-        queryClient.setQueryData(DASHBOARD_SUMMARY_KEY, summary);
-      }
+        if (summary) {
+          queryClient.setQueryData(DASHBOARD_SUMMARY_KEY, summary);
+        }
 
-      if (subscriptions) {
-        queryClient.setQueryData(SUBSCRIPTIONS_KEY(), subscriptions);
-      }
-    }).catch(() => undefined);
+        if (subscriptions) {
+          queryClient.setQueryData(SUBSCRIPTIONS_KEY(), subscriptions);
+        }
+      })
+      .catch(() => undefined);
 
     return () => {
       isMounted = false;
@@ -173,19 +176,15 @@ function AppCacheWarmup() {
   return null;
 }
 
-// Notifications
-import { requestNotificationPermissions } from './src/utils/notifications';
-
 export default function App() {
   React.useEffect(() => {
-    // Bezpieczne ładowanie uprawnień - nie blokujemy startu apki przy błędach Expo Go
-    requestNotificationPermissions().catch(err => {
-      console.warn('[App] Notification permissions error:', err);
+    requestNotificationPermissions().catch((error) => {
+      console.warn('[App] Notification permissions error:', error);
     });
   }, []);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={styles.root}>
       <ThemeProvider>
         <ErrorBoundary>
           <AuthProvider>
@@ -199,3 +198,14 @@ export default function App() {
     </GestureHandlerRootView>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
+  loadingRoot: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+});

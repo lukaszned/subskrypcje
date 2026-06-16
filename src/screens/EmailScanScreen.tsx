@@ -539,8 +539,9 @@ function parseEditableAmount(value: string) {
   const normalized = value.trim().replace(',', '.');
   if (!normalized) return undefined;
 
-  const match = normalized.match(/\d+(?:\.\d+)?/);
-  const parsed = Number(match?.[0] ?? normalized);
+  if (!/^\d+(?:\.\d{1,2})?$/.test(normalized)) return undefined;
+
+  const parsed = Number(normalized);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : undefined;
 }
 
@@ -1150,6 +1151,17 @@ export const EmailScanScreen = () => {
 
   const handleImportConfirm = (drafts: EmailScanImportDraft[]) => {
     if (importConfirmMutation.isPending) return;
+
+    const invalidSelectedDrafts = drafts.filter((draft, index) => {
+      const key = getPreviewDraftKey(draft, index);
+      const edit = previewDraftEdits[key];
+      return Boolean(edit?.selected && !parseEditableAmount(edit.amount));
+    });
+
+    if (invalidSelectedDrafts.length > 0) {
+      Alert.alert('Sprawdź kwoty', 'Każda wybrana pozycja musi mieć kwotę większą od 0, bez minusa i bez tekstu.');
+      return;
+    }
 
     const selectedDrafts = drafts
       .map((draft, index) => {
@@ -2110,6 +2122,12 @@ export const EmailScanScreen = () => {
       const key = getPreviewDraftKey(draft, index);
       return previewDraftEdits[key]?.selected;
     }).length;
+    const invalidSelectedDraftCount = previewDrafts.filter((draft, index) => {
+      const key = getPreviewDraftKey(draft, index);
+      const edit = previewDraftEdits[key];
+      return Boolean(edit?.selected && !parseEditableAmount(edit.amount));
+    }).length;
+    const hasInvalidSelectedDrafts = invalidSelectedDraftCount > 0;
     const warnings = Array.isArray(importPreviewResult.warnings) ? importPreviewResult.warnings : [];
 
     return (
@@ -2146,6 +2164,12 @@ export const EmailScanScreen = () => {
 
               {!!importPreviewResult.message && (
                 <Text style={styles.importPreviewMessage}>{importPreviewResult.message}</Text>
+              )}
+
+              {hasInvalidSelectedDrafts && (
+                <Text style={styles.importPreviewHint}>
+                  Popraw kwoty w {invalidSelectedDraftCount} zaznaczonych pozycjach, aby zapisać import.
+                </Text>
               )}
 
               {warnings.length > 0 && (
@@ -2255,7 +2279,7 @@ export const EmailScanScreen = () => {
                       </View>
 
                       {edit.selected && !parseEditableAmount(edit.amount) && (
-                        <Text style={styles.importPreviewHint}>Brakuje kwoty. Uzupełnij ją teraz albo ta pozycja nie zostanie zapisana.</Text>
+                        <Text style={styles.importPreviewHint}>Kwota musi być większa od 0, bez minusa i bez tekstu.</Text>
                       )}
                     </View>
                   );
@@ -2267,10 +2291,10 @@ export const EmailScanScreen = () => {
                   style={[
                     styles.scanBtn,
                     { backgroundColor: theme.colors.primary },
-                    (selectedPreviewDraftCount === 0 || importConfirmMutation.isPending) && styles.acceptBtnDisabled,
+                    (selectedPreviewDraftCount === 0 || hasInvalidSelectedDrafts || importConfirmMutation.isPending) && styles.acceptBtnDisabled,
                   ]}
                   onPress={() => handleImportConfirm(previewDrafts)}
-                  disabled={selectedPreviewDraftCount === 0 || importConfirmMutation.isPending}
+                  disabled={selectedPreviewDraftCount === 0 || hasInvalidSelectedDrafts || importConfirmMutation.isPending}
                   activeOpacity={0.86}
                 >
                   {importConfirmMutation.isPending ? (

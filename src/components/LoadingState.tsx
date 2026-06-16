@@ -30,7 +30,7 @@ export const Skeleton: React.FC<SkeletonProps> = ({
   const translateX = useRef(new Animated.Value(-1)).current;
 
   useEffect(() => {
-    Animated.loop(
+    const animation = Animated.loop(
       Animated.parallel([
         Animated.sequence([
           Animated.timing(opacity, { toValue: 0.68, duration: 850, useNativeDriver: true }),
@@ -41,7 +41,10 @@ export const Skeleton: React.FC<SkeletonProps> = ({
           Animated.timing(translateX, { toValue: -1, duration: 0, useNativeDriver: true }),
         ]),
       ])
-    ).start();
+    );
+
+    animation.start();
+    return () => animation.stop();
   }, [opacity, translateX]);
 
   const backgroundColor = isDark ? theme.colors.cardStrong : withAlpha(theme.colors.primary, 0.09);
