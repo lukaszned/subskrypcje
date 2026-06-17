@@ -78,6 +78,8 @@ import { formatInputDate, parseAppDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
+const ENABLE_GMAIL_SCAN = process.env.EXPO_PUBLIC_ENABLE_GMAIL_SCAN === 'true';
+const SHOW_MANUAL_IMAP_FIELDS = __DEV__;
 
 const CATEGORY_OPTIONS: { id: SubscriptionCategory; label: string }[] = [
   'entertainment',
@@ -796,7 +798,7 @@ export const EmailScanScreen = () => {
   const [selectedProductReview, setSelectedProductReview] = useState<SelectedProductReview>(null);
   const [wizardStep, setWizardStep] = useState<EmailScanWizardStep>('source');
   const [renderReviewContent, setRenderReviewContent] = useState(false);
-  const [scanSource, setScanSource] = useState<'gmail' | 'imap'>('gmail');
+  const [scanSource, setScanSource] = useState<'gmail' | 'imap'>('imap');
   const [imapHost, setImapHost] = useState(DEFAULT_IMAP_PRESET.host);
   const [imapPort, setImapPort] = useState(DEFAULT_IMAP_PRESET.port);
   const [imapSecure, setImapSecure] = useState(DEFAULT_IMAP_PRESET.secure);
@@ -842,7 +844,13 @@ export const EmailScanScreen = () => {
   }, [selectedDetection]);
 
   useEffect(() => {
-    if (scanSource !== 'gmail' || isConnected) return;
+    if (!ENABLE_GMAIL_SCAN && scanSource === 'gmail') {
+      setScanSource('imap');
+    }
+  }, [scanSource]);
+
+  useEffect(() => {
+    if (!ENABLE_GMAIL_SCAN || scanSource !== 'gmail' || isConnected) return;
 
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
@@ -1338,7 +1346,7 @@ export const EmailScanScreen = () => {
     <View style={styles.imapCard}>
       <View style={styles.imapHeader}>
         <View>
-          <Text style={styles.cardTitle}>Inna skrzynka</Text>
+          <Text style={styles.cardTitle}>Onet / Interia</Text>
           <Text style={styles.imapSubtitle}>Podaj serwer poczty, folder i dane logowania. Onet i Interia są obsługiwane w MVP.</Text>
         </View>
       </View>
@@ -1359,6 +1367,7 @@ export const EmailScanScreen = () => {
         ))}
       </View>
 
+      {SHOW_MANUAL_IMAP_FIELDS && (
       <View style={styles.imapGrid}>
         <View style={[styles.imapField, styles.imapFieldWide]}>
           <Text style={styles.label}>Host</Text>
@@ -1383,6 +1392,7 @@ export const EmailScanScreen = () => {
           />
         </View>
       </View>
+      )}
 
       <View style={styles.imapGrid}>
         <View style={[styles.imapField, styles.imapFieldWide]}>
@@ -1397,6 +1407,7 @@ export const EmailScanScreen = () => {
             keyboardType="email-address"
           />
         </View>
+        {SHOW_MANUAL_IMAP_FIELDS && (
         <View style={styles.imapField}>
           <Text style={styles.label}>Folder poczty</Text>
           <TextInput
@@ -1408,6 +1419,7 @@ export const EmailScanScreen = () => {
             autoCapitalize="none"
           />
         </View>
+        )}
       </View>
 
       <View style={styles.inputGroup}>
@@ -1423,6 +1435,7 @@ export const EmailScanScreen = () => {
         />
       </View>
 
+      {SHOW_MANUAL_IMAP_FIELDS && (
       <View style={styles.toggleRow}>
         <View>
           <Text style={styles.toggleLabel}>Połączenie SSL/TLS</Text>
@@ -1435,6 +1448,7 @@ export const EmailScanScreen = () => {
           <View style={[styles.toggleDot, imapSecure && styles.toggleDotActive]} />
         </TouchableOpacity>
       </View>
+      )}
 
       <View style={[styles.imapPrivacyNote, { backgroundColor: `${theme.colors.primary}14`, borderColor: `${theme.colors.primary}33` }]}>
         <ShieldCheck size={17} color={theme.colors.primary} />
@@ -2727,7 +2741,7 @@ export const EmailScanScreen = () => {
           </View>
           <Text style={styles.heroTitle}>Email Scan</Text>
           <Text style={styles.heroText}>
-            Znajdź możliwe subskrypcje i rachunki w Gmailu albo przez IMAP. Zawsze pokazujemy wynik do sprawdzenia przed zapisem.
+            Wykryj możliwe subskrypcje i rachunki w skrzynce Onet albo Interia. Zawsze pokazujemy wynik do sprawdzenia przed zapisem.
           </Text>
         </View>
 
@@ -2738,6 +2752,7 @@ export const EmailScanScreen = () => {
         {wizardStep === 'source' && (
         <>
         <View style={styles.sourceSwitch}>
+          {ENABLE_GMAIL_SCAN && (
           <TouchableOpacity
             style={[styles.sourceSwitchButton, scanSource === 'gmail' && { backgroundColor: theme.colors.primary }]}
             onPress={() => setScanSource('gmail')}
@@ -2746,17 +2761,18 @@ export const EmailScanScreen = () => {
             <Mail size={16} color={scanSource === 'gmail' ? theme.colors.darkText : theme.colors.textMuted} />
             <Text style={[styles.sourceSwitchText, scanSource === 'gmail' && { color: theme.colors.darkText }]}>Gmail</Text>
           </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={[styles.sourceSwitchButton, scanSource === 'imap' && { backgroundColor: theme.colors.primary }]}
             onPress={() => setScanSource('imap')}
             activeOpacity={0.84}
           >
             <Inbox size={16} color={scanSource === 'imap' ? theme.colors.darkText : theme.colors.textMuted} />
-            <Text style={[styles.sourceSwitchText, scanSource === 'imap' && { color: theme.colors.darkText }]}>Inna skrzynka</Text>
+            <Text style={[styles.sourceSwitchText, scanSource === 'imap' && { color: theme.colors.darkText }]}>Onet / Interia</Text>
           </TouchableOpacity>
         </View>
 
-        {scanSource === 'gmail' ? (
+        {ENABLE_GMAIL_SCAN && scanSource === 'gmail' ? (
         <View style={styles.statusCard}>
           <View style={styles.statusHeader}>
             <Text style={styles.cardTitle}>Status</Text>
