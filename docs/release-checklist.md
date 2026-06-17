@@ -2,6 +2,13 @@
 
 This checklist prepares the first installable MVP build. It is intentionally focused on build readiness and QA, not new features.
 
+Related release docs:
+
+- [Privacy policy draft](./privacy-policy-draft.md)
+- [Google Play Data Safety draft](./google-play-data-safety-draft.md)
+- [Google Play listing draft](./google-play-listing-draft.md)
+- [Android release runbook](./android-release-runbook.md)
+
 ## Release Scope
 
 Android MVP release scope:
