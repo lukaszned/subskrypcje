@@ -4,11 +4,19 @@ This checklist prepares the first installable MVP build. It is intentionally foc
 
 ## Release Scope
 
-MVP email scan providers:
+Android MVP release scope:
 
-- Gmail through the existing OAuth/Gmail scan flow.
-- Onet through manual IMAP.
-- Interia through manual IMAP.
+- Manual subscription management.
+- IMAP email scan for Onet.
+- IMAP email scan for Interia.
+- Review, preview, and import-confirm for selected scan results.
+
+Gmail release status:
+
+- Gmail scan exists in backend/dev code, but it is experimental/dev-only for this Android MVP.
+- Gmail must not be exposed as an active user-facing scan option in preview or production builds.
+- Gmail production readiness requires a separate pass for stable OAuth redirect URLs, Google Cloud Console configuration, privacy review, restricted-scope handling, and possible Google verification.
+- Keep backend Gmail endpoints and diagnostics available for development; do not present Gmail as a supported MVP provider until explicitly enabled later.
 
 Known app flow:
 
@@ -36,6 +44,8 @@ Frontend app config:
 Frontend environment:
 
 - `EXPO_PUBLIC_API_BASE_URL` must point to the public HTTPS backend URL for release.
+- `EXPO_PUBLIC_ENABLE_GMAIL_SCAN=false` for preview and production MVP builds.
+- If Gmail is enabled in a future build, complete Google OAuth redirect and verification work first.
 - Do not build release APK/AAB with a LAN, localhost, `10.0.2.2`, Cloudflare temporary, or ngrok URL.
 - Supabase values in the frontend must be the public project URL and anon key only.
 - No service-role keys, database URLs, OAuth secrets, IMAP passwords, or backend secrets belong in frontend env.
@@ -44,7 +54,8 @@ Backend environment:
 
 - Backend must be deployed behind a stable public HTTPS URL.
 - `/health` must return `200`.
-- `GMAIL_REDIRECT_BASE_URL` must use the stable production backend origin.
+- Gmail is experimental/dev-only for this MVP. If Gmail endpoints are used in development, configure `GMAIL_REDIRECT_BASE_URL` for the active dev backend origin.
+- Before any public Gmail release, `GMAIL_REDIRECT_BASE_URL` must use the stable production backend origin.
 - The exact Gmail callback URL must be registered in Google Cloud Console:
   `https://YOUR_BACKEND_DOMAIN/email-scan/gmail/callback`
 - Do not use temporary Cloudflare/ngrok URLs for production OAuth.
@@ -108,7 +119,8 @@ Before uploading:
 - Confirm production API URL is HTTPS and stable.
 - Confirm Supabase production/project env is intended.
 - Confirm backend `/health` is reachable from mobile data and Wi-Fi.
-- Confirm Google OAuth redirect URI is registered for the production backend URL.
+- Confirm Gmail scan is hidden/disabled for MVP (`EXPO_PUBLIC_ENABLE_GMAIL_SCAN=false`).
+- Do not claim Gmail scanning as an active release feature in Google Play listing, data safety, or privacy copy.
 - Confirm no debug build banner or debug payload is visible in the UI.
 - Confirm privacy policy/store listing requirements are ready.
 
@@ -148,8 +160,7 @@ Email scan:
 - Confirm no raw debug JSON is visible.
 - Onet manual IMAP scan returns a safe result or actionable error.
 - Interia manual IMAP scan returns product buckets.
-- Gmail connect flow opens OAuth and returns to backend callback.
-- Gmail dry-run scan works after reconnect.
+- Gmail scan/connect UI is hidden or disabled in preview and production MVP builds.
 - Review scan results before import.
 - Preview selected items.
 - Confirm import.
@@ -175,16 +186,20 @@ Security/privacy:
 
 - IMAP password is not persisted in frontend storage.
 - IMAP password is not logged.
+- IMAP scan uses user-provided mailbox credentials for supported MVP providers.
 - OAuth tokens are not logged.
 - Raw email bodies are not shown in UI.
+- Raw email bodies are not intentionally stored.
+- Gmail integration, if present in backend code, is not active in the first Android MVP release unless explicitly enabled later.
 - `includeDebug` is not used in production UI.
 
 ## Release Blockers To Resolve Manually
 
 - Choose and deploy the final public HTTPS backend URL.
 - Set `EXPO_PUBLIC_API_BASE_URL` to that HTTPS URL for release builds.
-- Set backend production env, including `GMAIL_REDIRECT_BASE_URL`.
-- Add the production Gmail callback URL in Google Cloud Console.
+- Set `EXPO_PUBLIC_ENABLE_GMAIL_SCAN=false` for preview and production MVP builds.
+- Keep Gmail scan copy out of public release notes, Play listing, data safety, and privacy claims for this MVP.
+- For a future Gmail release, set backend production env including `GMAIL_REDIRECT_BASE_URL`, add the production Gmail callback URL in Google Cloud Console, complete privacy review, and handle Google verification requirements.
 - Run EAS project linking/configuration if it has not been done yet.
 - Confirm Supabase production/project environment.
 - Complete Google Play Console store metadata, data safety, and privacy policy.
