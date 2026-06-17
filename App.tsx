@@ -20,7 +20,6 @@ import { DASHBOARD_SUMMARY_KEY } from './src/hooks/useDashboardSummary';
 import { SUBSCRIPTIONS_KEY } from './src/hooks/useSubscriptions';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { EmailScanScreen } from './src/screens/EmailScanScreen';
-import { GuardScreen } from './src/screens/GuardScreen';
 import { HealthScoreDetailsScreen } from './src/screens/HealthScoreDetailsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { ManualAddScreen } from './src/screens/ManualAddScreen';
@@ -114,7 +113,6 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppStack.Screen name="EmailScan" component={EmailScanScreen} />
       <AppStack.Screen name="Statistics" component={StatisticsScreen} />
       <AppStack.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
-      <AppStack.Screen name="Guard" component={GuardScreen} />
       <AppStack.Screen name="SubscriptionReviewQueue" component={SubscriptionReviewQueueScreen} />
       <AppStack.Screen name="HealthScoreDetails" component={HealthScoreDetailsScreen} />
       <AppStack.Screen name="SavingsDetails" component={SavingsDetailsScreen} />

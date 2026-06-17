@@ -31,7 +31,7 @@ const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 const DASHBOARD_SUMMARY_FAST_CACHE_MS = 2 * 60 * 1000;
 const USER_SETTINGS_CACHE_KEY = 'sub-sentry.user-settings.v1';
 const USER_SETTINGS_PENDING_KEY = 'sub-sentry.user-settings.pending.v1';
-const USER_SETTINGS_SYNC_TIMEOUT_MS = 15000;
+const USER_SETTINGS_SYNC_TIMEOUT_MS = 6000;
 
 export type UpdateUserSettingsPayload = Pick<
   UserSettings,
@@ -478,9 +478,17 @@ export async function getUserSettings(): Promise<UserSettings> {
         await clearPendingUserSettings();
         return syncedSettings;
       } catch (syncError) {
-        if (!isConnectivityError(syncError)) {
-          await clearPendingUserSettings();
+        if (isConnectivityError(syncError)) {
+          const localSettings = buildFallbackUserSettings(
+            settings,
+            pendingPayload
+          ) as UserSettings & { __localOnly?: boolean };
+          localSettings.__localOnly = true;
+          await cacheUserSettings(localSettings);
+          return localSettings;
         }
+
+        await clearPendingUserSettings();
       }
     }
 
@@ -624,8 +632,11 @@ export async function getDashboardSavings(): Promise<SavingsResponse> {
   const data = await apiGet<SavingsResponse>('/dashboard/savings');
   return {
     ...data,
+    baseCurrency: data.baseCurrency || 'PLN',
+    canceledSubscriptionsCount: Number(data.canceledSubscriptionsCount || 0),
     monthlySavings: Number(data.monthlySavings || 0),
     yearlySavings: Number(data.yearlySavings || 0),
+    items: Array.isArray(data.items) ? data.items : [],
   };
 }
 

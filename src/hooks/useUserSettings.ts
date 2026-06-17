@@ -1,12 +1,15 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserSettings, UpdateUserSettingsPayload, updateUserSettings } from '../api/dashboard';
 import { cancelSubscriptionReminders, requestNotificationPermissions } from '../utils/notifications';
 
+const USER_SETTINGS_QUERY_KEY = ['user', 'settings'] as const;
+const SETTINGS_BACKGROUND_RETRY_MS = 8000;
+
 export const useUserSettings = (enabled: boolean = true) => {
   return useQuery({
-    queryKey: ['user', 'settings'],
+    queryKey: USER_SETTINGS_QUERY_KEY,
     queryFn: getUserSettings,
-    staleTime: 300000, // Ustawienia rzadko się zmieniają, 5 minut cache
+    staleTime: 300000,
     enabled,
   });
 };
@@ -17,10 +20,7 @@ export const useUpdateUserSettings = () => {
   return useMutation({
     mutationFn: (payload: UpdateUserSettingsPayload) => updateUserSettings(payload),
     onSuccess: (updatedSettings) => {
-      // Aktualizujemy cache ustawień
-      queryClient.setQueryData(['user', 'settings'], updatedSettings);
-      
-      // Bardzo ważne: Gdy zmienia się waluta bazowa, musimy odświeżyć cały dashboard!
+      queryClient.setQueryData(USER_SETTINGS_QUERY_KEY, updatedSettings);
       queryClient.invalidateQueries({ queryKey: ['dashboard'] });
 
       if (updatedSettings.notificationsEnabled === false) {
@@ -28,6 +28,15 @@ export const useUpdateUserSettings = () => {
       } else {
         requestNotificationPermissions();
         queryClient.invalidateQueries({ queryKey: ['dashboard', 'reminders'] });
+      }
+
+      if (updatedSettings.__localOnly) {
+        setTimeout(() => {
+          void queryClient.refetchQueries({
+            queryKey: USER_SETTINGS_QUERY_KEY,
+            type: 'active',
+          });
+        }, SETTINGS_BACKGROUND_RETRY_MS);
       }
     },
   });

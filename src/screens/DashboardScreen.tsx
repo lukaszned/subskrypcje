@@ -65,7 +65,11 @@ import {
 import { useTheme } from '../theme/ThemeContext';
 import { getCategoryTone, getStatusTone, withAlpha } from '../theme/themeUtils';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
-import { buildUpcomingPaymentsFromSubscriptions, getCountedMonthlyTotal } from '../utils/subscriptionCalculations';
+import {
+  buildSavingsFromSubscriptions,
+  buildUpcomingPaymentsFromSubscriptions,
+  getCountedMonthlyTotal,
+} from '../utils/subscriptionCalculations';
 
 const { width } = Dimensions.get('window');
 
@@ -219,6 +223,31 @@ export const DashboardScreen = () => {
   const hasData = !!summaryData;
 
   const baseCurrency = summaryData?.baseCurrency ?? 'PLN';
+  const localSavings = useMemo(
+    () => buildSavingsFromSubscriptions(subscriptions, baseCurrency),
+    [baseCurrency, subscriptions]
+  );
+  const savingsView = useMemo(() => {
+    if (localSavings.items.length > 0) {
+      return localSavings;
+    }
+
+    const itemCurrencies = Array.from(new Set(
+      (savingsData?.items ?? [])
+        .map((item) => item.originalCurrency)
+        .filter(Boolean)
+    ));
+
+    return {
+      baseCurrency: itemCurrencies.length === 1
+        ? itemCurrencies[0]
+        : savingsData?.baseCurrency || baseCurrency,
+      canceledSubscriptionsCount: Number(savingsData?.canceledSubscriptionsCount || 0),
+      monthlySavings: Number(savingsData?.monthlySavings || 0),
+      yearlySavings: Number(savingsData?.yearlySavings || 0),
+      items: savingsData?.items ?? [],
+    };
+  }, [baseCurrency, localSavings, savingsData]);
   const summaryMonthlyTotal = summaryData?.monthlyTotal ?? 0;
   const localMonthlyTotal = useMemo(
     () => getCountedMonthlyTotal(subscriptions),
@@ -617,35 +646,6 @@ export const DashboardScreen = () => {
       fontSize: 18,
       fontWeight: '700',
       color: theme.text,
-    },
-    todayHeader: {
-      flexDirection: 'row',
-      alignItems: 'flex-start',
-      justifyContent: 'space-between',
-      marginBottom: 12,
-      gap: 12,
-    },
-    todaySubtitle: {
-      color: theme.textDim,
-      fontSize: 12,
-      fontWeight: '700',
-      lineHeight: 17,
-      marginTop: 4,
-    },
-    todayBadge: {
-      minWidth: 34,
-      height: 34,
-      borderRadius: 14,
-      backgroundColor: `${theme.primary}24`,
-      borderWidth: 1,
-      borderColor: `${theme.primary}3D`,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    todayBadgeText: {
-      color: theme.primary,
-      fontSize: 14,
-      fontWeight: '900',
     },
     seeAllBtn: {
       flexDirection: 'row',
@@ -1367,18 +1367,18 @@ export const DashboardScreen = () => {
       });
     }
 
-    if (savingsData && savingsData.monthlySavings > 0) {
+    if (savingsView.monthlySavings > 0) {
       list.push({
         id: 'savings',
         title: 'Oszczędzasz miesięcznie',
-        desc: `Anulowane usługi dają ${savingsData.monthlySavings.toFixed(2)} ${baseCurrency} oszczędności miesięcznie.`,
+        desc: `Anulowane usługi dają ${savingsView.monthlySavings.toFixed(2)} ${savingsView.baseCurrency} oszczędności miesięcznie.`,
         icon: Activity,
         color: theme.success
       });
     }
 
     return list;
-  }, [overdueCount, trialsData, effectiveBudgetImpact, savingsData, theme, baseCurrency]);
+  }, [overdueCount, trialsData, effectiveBudgetImpact, savingsView, theme]);
 
   const renderBudgetCard = () => {
     if (!effectiveBudgetImpact.hasIncome) return null;
@@ -1634,7 +1634,7 @@ export const DashboardScreen = () => {
   };
 
   const renderSavingsCard = () => {
-    const data = savingsData;
+    const data = savingsView;
     if (!data || data.canceledSubscriptionsCount === 0) return null;
 
     return (
@@ -1994,14 +1994,14 @@ export const DashboardScreen = () => {
     );
   };
 
-  const renderGuardWidget = () => {
+  const renderDecisionQueueWidget = () => {
     const riskCount = (summaryData?.trialsCount ?? 0) + overdueCount;
 
     return (
       <TouchableOpacity
         style={[dynamicStyles.widgetCard, dynamicStyles.halfWidget]}
         activeOpacity={0.86}
-        onPress={() => navigation.navigate('Guard')}
+        onPress={() => navigation.navigate('SubscriptionReviewQueue')}
       >
         <View style={dynamicStyles.widgetTop}>
           <View style={dynamicStyles.widgetIcon}>
@@ -2009,89 +2009,10 @@ export const DashboardScreen = () => {
           </View>
           <Sparkles size={18} color={theme.primary} />
         </View>
-        <Text style={dynamicStyles.widgetTitle}>Guard</Text>
+        <Text style={dynamicStyles.widgetTitle}>Kolejka decyzji</Text>
         <Text style={dynamicStyles.subscriptionMetric}>{riskCount}</Text>
-        <Text style={dynamicStyles.widgetCaption}>okresy próbne i ryzyka do pilnowania</Text>
+        <Text style={dynamicStyles.widgetCaption}>sprawy wymagające Twojej uwagi</Text>
       </TouchableOpacity>
-    );
-  };
-
-  const renderTodayFocus = () => {
-    const nextPayment = reliableUpcomingItems[0];
-    const riskCount = (summaryData?.trialsCount ?? 0) + overdueCount;
-    const focusCards = [
-      nextPayment ? {
-        id: 'payment',
-        icon: CalendarDays,
-        title: 'Najbliższa płatność',
-        desc: `${nextPayment.name} · ${formatRelativeDay(nextPayment.nextPaymentDate)} · ${nextPayment.amount.toFixed(2)} ${nextPayment.currency}`,
-        cta: 'Sprawdź termin',
-        onPress: () => navigation.navigate('SubscriptionDetail', { id: nextPayment.id }),
-      } : {
-        id: 'calendar',
-        icon: CalendarDays,
-        title: 'Kalendarz płatności',
-        desc: 'Zobacz, które tygodnie będą najdroższe i kiedy warto mieć bufor.',
-        cta: 'Otwórz kalendarz',
-        onPress: () => navigation.navigate('PaymentCalendar'),
-      },
-      riskCount > 0 ? {
-        id: 'guard',
-        icon: ShieldCheck,
-        title: 'Guard wykrył ryzyko',
-        desc: `${riskCount} rzeczy wymaga uwagi: okresy próbne, zaległości albo nadchodzące płatności.`,
-        cta: 'Otwórz Guard',
-        onPress: () => navigation.navigate('Guard'),
-      } : {
-        id: 'scan',
-        icon: Sparkles,
-        title: 'Audit skrzynki',
-        desc: 'Wykryj historyczne subskrypcje, zmiany cen i rachunki do sprawdzenia.',
-        cta: 'Otwórz Email Scan',
-        onPress: () => navigation.navigate('EmailScan'),
-      },
-      {
-        id: 'review-queue',
-        icon: ShieldCheck,
-        title: 'Kolejka decyzji',
-        desc: 'Szybko oznacz: zostawiam, anulowac albo sprawdze pozniej.',
-        cta: 'Otwórz kolejkę',
-        onPress: () => navigation.navigate('SubscriptionReviewQueue'),
-      },
-    ];
-
-    return (
-      <View style={dynamicStyles.sectionContainer}>
-        <View style={dynamicStyles.todayHeader}>
-          <View>
-            <Text style={dynamicStyles.sectionTitle}>Dziś do sprawdzenia</Text>
-            <Text style={dynamicStyles.todaySubtitle}>Najkrótsza droga do decyzji, nie kolejna lista.</Text>
-          </View>
-          <View style={dynamicStyles.todayBadge}>
-            <Text style={dynamicStyles.todayBadgeText}>{focusCards.length}</Text>
-          </View>
-        </View>
-        <View style={dynamicStyles.decisionGrid}>
-          {focusCards.map((card) => (
-            <TouchableOpacity
-              key={card.id}
-              style={dynamicStyles.decisionCard}
-              activeOpacity={0.86}
-              onPress={card.onPress}
-            >
-              <View style={dynamicStyles.decisionAccent}>
-                <card.icon size={20} color={theme.primary} />
-              </View>
-              <View style={dynamicStyles.decisionBody}>
-                <Text style={dynamicStyles.decisionTitle}>{card.title}</Text>
-                <Text style={dynamicStyles.decisionDesc}>{card.desc}</Text>
-                <Text style={dynamicStyles.decisionCta}>{card.cta}</Text>
-              </View>
-              <ChevronRight size={18} color={theme.textDim} />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
     );
   };
 
@@ -2100,8 +2021,8 @@ export const DashboardScreen = () => {
     const healthLabel = healthData
       ? `${healthData.label} · ${healthData.score}/100`
       : `Szacunkowo ${estimatedScore}/100 · dotknij po szczegóły`;
-    const savingsLabel = savingsData && savingsData.monthlySavings > 0
-      ? `Oszczędzasz ok. ${savingsData.monthlySavings.toFixed(2)} ${savingsData.baseCurrency} / mc`
+    const savingsLabel = savingsView.monthlySavings > 0
+      ? `Oszczędzasz ok. ${savingsView.monthlySavings.toFixed(2)} ${savingsView.baseCurrency} / mc`
       : 'Zobacz anulowane koszty i miesięczny efekt';
     const incomePercentage = effectiveBudgetImpact.subscriptionsIncomePercentage ?? null;
 
@@ -2287,12 +2208,11 @@ export const DashboardScreen = () => {
           {renderUpcomingWidget()}
           {renderSubscriptionsWidget()}
           {renderStatsWidget()}
-          {renderGuardWidget()}
+          {renderDecisionQueueWidget()}
         </View>
         {renderDeferredSections && (
           <>
             {renderPremiumInsights()}
-            {renderTodayFocus()}
             {renderDecisionCenter()}
           </>
         )}

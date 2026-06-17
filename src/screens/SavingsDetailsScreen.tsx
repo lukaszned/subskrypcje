@@ -19,43 +19,10 @@ import { useSubscriptions } from '../hooks/useSubscriptions';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { formatShortDate } from '../utils/date';
-import type { BillingCycle, SavingsItem, Subscription } from '../types/api';
 import { goBackOrDashboard } from '../utils/navigation';
+import { buildSavingsFromSubscriptions } from '../utils/subscriptionCalculations';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'SavingsDetails'>;
-
-function toMonthlyAmount(amount: number, billingCycle: BillingCycle) {
-  switch (billingCycle) {
-    case 'yearly':
-      return amount / 12;
-    case 'weekly':
-      return amount * 4.345;
-    case 'one_time':
-      return 0;
-    default:
-      return amount;
-  }
-}
-
-function buildLocalSavings(subscriptions: Subscription[]): SavingsItem[] {
-  return subscriptions
-    .filter((item) => item.status === 'canceled')
-    .map((item) => {
-      const monthlyAmount = toMonthlyAmount(Number(item.amount || 0), item.billingCycle);
-
-      return {
-        id: item.id,
-        name: item.name,
-        provider: item.provider,
-        originalAmount: Number(item.amount || 0),
-        originalCurrency: item.currency || 'PLN',
-        monthlyAmount,
-        yearlyAmount: monthlyAmount * 12,
-        canceledAt: item.updatedAt || item.createdAt,
-      };
-    })
-    .sort((a, b) => new Date(b.canceledAt).getTime() - new Date(a.canceledAt).getTime());
-}
 
 export function SavingsDetailsScreen() {
   const navigation = useNavigation<Nav>();
@@ -63,17 +30,32 @@ export function SavingsDetailsScreen() {
   const savingsQuery = useDashboardSavings(true);
   const subscriptionsQuery = useSubscriptions();
 
-  const localItems = useMemo(
-    () => buildLocalSavings(subscriptionsQuery.data ?? []),
+  const localSavings = useMemo(
+    () => buildSavingsFromSubscriptions(subscriptionsQuery.data ?? [], 'PLN'),
     [subscriptionsQuery.data]
   );
 
-  const items = savingsQuery.data?.items?.length ? savingsQuery.data.items : localItems;
-  const currency = savingsQuery.data?.baseCurrency || items[0]?.originalCurrency || 'PLN';
-  const monthlySavings = savingsQuery.data?.monthlySavings ?? items.reduce((sum, item) => sum + Number(item.monthlyAmount || 0), 0);
-  const yearlySavings = savingsQuery.data?.yearlySavings ?? monthlySavings * 12;
-  const canceledCount = savingsQuery.data?.canceledSubscriptionsCount ?? items.length;
-  const isLive = Boolean(savingsQuery.data);
+  const hasLocalSavings = localSavings.items.length > 0;
+  const remoteItemCurrencies = Array.from(new Set(
+    (savingsQuery.data?.items ?? [])
+      .map((item) => item.originalCurrency)
+      .filter(Boolean)
+  ));
+  const remoteCurrency = remoteItemCurrencies.length === 1
+    ? remoteItemCurrencies[0]
+    : savingsQuery.data?.baseCurrency || 'PLN';
+  const items = hasLocalSavings ? localSavings.items : savingsQuery.data?.items ?? [];
+  const monthlySavings = hasLocalSavings
+    ? localSavings.monthlySavings
+    : Number(savingsQuery.data?.monthlySavings || 0);
+  const yearlySavings = hasLocalSavings
+    ? localSavings.yearlySavings
+    : Number(savingsQuery.data?.yearlySavings || 0);
+  const canceledCount = hasLocalSavings
+    ? localSavings.canceledSubscriptionsCount
+    : Number(savingsQuery.data?.canceledSubscriptionsCount || 0);
+  const currency = hasLocalSavings ? localSavings.baseCurrency : remoteCurrency;
+  const isLive = Boolean(savingsQuery.data) && !hasLocalSavings;
   const isRefreshing = savingsQuery.isRefetching || subscriptionsQuery.isRefetching;
 
   const onRefresh = () => {
@@ -139,8 +121,8 @@ export function SavingsDetailsScreen() {
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Jak to liczymy?</Text>
           </View>
           <Text style={[styles.bodyText, { color: theme.colors.textMuted }]}>
-            Bierzemy subskrypcje ze statusem anulowana i przeliczamy ich koszt na miesięczny odpowiednik.
-            Plan roczny dzielimy przez 12, tygodniowy mnożymy przez 4.345, a jednorazowe płatności pomijamy.
+            Bierzemy Twój zapisany koszt anulowanej subskrypcji i przeliczamy go na miesięczny odpowiednik.
+            Przy planie współdzielonym kwota jest już Twoją częścią. Plan roczny dzielimy przez 12, a jednorazowe płatności pomijamy.
           </Text>
         </View>
 
@@ -169,7 +151,7 @@ export function SavingsDetailsScreen() {
                 </View>
                 <View style={styles.savingAmountBox}>
                   <Text style={[styles.savingAmount, { color: theme.colors.primary }]}>{Number(item.monthlyAmount || 0).toFixed(2)}</Text>
-                  <Text style={[styles.savingAmountMeta, { color: theme.colors.textMuted }]}>{currency}/mc</Text>
+                  <Text style={[styles.savingAmountMeta, { color: theme.colors.textMuted }]}>{item.originalCurrency || 'PLN'}/mc</Text>
                 </View>
               </View>
             ))

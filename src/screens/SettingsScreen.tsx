@@ -11,7 +11,22 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Bell, CreditCard, Mail, Shield, ChevronRight, Wallet, User, LogOut, Palette } from 'lucide-react-native';
+import {
+  ArrowLeft,
+  Bell,
+  CheckCircle2,
+  ChevronRight,
+  CloudOff,
+  CreditCard,
+  LogOut,
+  Mail,
+  Palette,
+  RefreshCw,
+  Shield,
+  TriangleAlert,
+  User,
+  Wallet,
+} from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
@@ -22,14 +37,27 @@ import type { AppStackParamList } from '../types/navigation';
 import type { UpdateUserSettingsPayload } from '../api/dashboard';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme, ThemeName } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 import { goBackOrDashboard } from '../utils/navigation';
 
 const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
+type SaveFeedback = {
+  kind: 'synced' | 'pending' | 'error';
+  title: string;
+  message: string;
+  syncStartedAt?: number;
+};
+
 export const SettingsScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'Settings'>>();
   const { user, signOut } = useAuth();
-  const { data: settings, isLoading } = useUserSettings();
+  const {
+    data: settings,
+    dataUpdatedAt: settingsUpdatedAt,
+    isFetching: isSettingsFetching,
+    isLoading,
+  } = useUserSettings();
   const { data: localIncome } = usePersistentIncome();
   const { data: emailScanStatus } = useEmailScanStatus();
   const updateMutation = useUpdateUserSettings();
@@ -44,6 +72,8 @@ export const SettingsScreen = () => {
   const [emailsEnabled, setEmailsEnabled] = useState(false);
   const [income, setIncome] = useState('');
   const [incomeCurrency, setIncomeCurrency] = useState('PLN');
+  const [saveFeedback, setSaveFeedback] = useState<SaveFeedback | null>(null);
+  const isSaving = updateMutation.isPending || savePersistentIncome.isPending;
 
   useEffect(() => {
     if (settings) {
@@ -64,11 +94,36 @@ export const SettingsScreen = () => {
     }
   }, [settings, localIncome]);
 
+  useEffect(() => {
+    if (
+      saveFeedback?.kind !== 'pending' ||
+      !settings ||
+      isSettingsFetching ||
+      (settings as any).__localOnly ||
+      settingsUpdatedAt < (saveFeedback.syncStartedAt ?? Number.POSITIVE_INFINITY)
+    ) {
+      return;
+    }
+
+    setSaveFeedback({
+      kind: 'synced',
+      title: 'Synchronizacja zakończona',
+      message: 'Ustawienia są zapisane na tym urządzeniu i na Twoim koncie.',
+    });
+  }, [isSettingsFetching, saveFeedback, settings, settingsUpdatedAt]);
+
+  useEffect(() => {
+    if (saveFeedback?.kind !== 'synced') return;
+
+    const timeout = setTimeout(() => setSaveFeedback(null), 3500);
+    return () => clearTimeout(timeout);
+  }, [saveFeedback?.kind]);
+
   const getErrorMessage = (error: any) => {
     const validationErrors = error?.body?.errors;
     if (Array.isArray(validationErrors) && validationErrors.length > 0) {
       return validationErrors
-        .map((item: any) => `${item.field || 'pole'}: ${item.message || 'nieprawidlowa wartosc'}`)
+        .map((item: any) => `${item.field || 'pole'}: ${item.message || 'nieprawidłowa wartość'}`)
         .join('\n');
     }
 
@@ -76,11 +131,14 @@ export const SettingsScreen = () => {
   };
 
   const handleSave = () => {
+    if (isSaving) return;
+
+    setSaveFeedback(null);
     const normalizedIncome = income.trim().replace(/\s/g, '').replace(',', '.');
     const parsedIncome = normalizedIncome ? Number(normalizedIncome) : null;
 
     if (parsedIncome !== null && (!Number.isFinite(parsedIncome) || parsedIncome < 0)) {
-      Alert.alert('Nieprawidlowa wartosc', 'Miesieczny dochod musi byc dodatnia liczba albo pustym polem.');
+      Alert.alert('Nieprawidłowa wartość', 'Miesięczny dochód musi być dodatnią liczbą albo pustym polem.');
       return;
     }
 
@@ -101,23 +159,80 @@ export const SettingsScreen = () => {
     updateMutation.mutate(payload, {
       onSuccess: (updatedSettings) => {
         if ((updatedSettings as any).__localOnly) {
-          Alert.alert(
-            'Zapisano lokalnie',
-            'Odświeżanie trwa dłużej niż zwykle. Ustawienia zostały zachowane w aplikacji i będą gotowe do ponownej synchronizacji.'
-          );
+          setSaveFeedback({
+            kind: 'pending',
+            title: 'Zapisano na urządzeniu',
+            message: 'Połączenie jest chwilowo niedostępne. Synchronizacja ponowi się automatycznie w tle.',
+            syncStartedAt: Date.now(),
+          });
           return;
         }
 
-        Alert.alert('Sukces', 'Ustawienia zostały zapisane.');
+        setSaveFeedback({
+          kind: 'synced',
+          title: 'Ustawienia zapisane',
+          message: 'Zmiany są już aktywne.',
+        });
       },
       onError: (error) => {
         if (__DEV__) {
           console.warn('[SettingsScreen] Save settings error:', error);
         }
-        Alert.alert('Błąd zapisu', getErrorMessage(error));
+        setSaveFeedback({
+          kind: 'error',
+          title: 'Nie udało się zapisać',
+          message: getErrorMessage(error),
+        });
       }
     });
   };
+  const renderSaveFeedback = () => {
+    if (!saveFeedback) return null;
+
+    const isSynced = saveFeedback.kind === 'synced';
+    const isPending = saveFeedback.kind === 'pending';
+    const accent = isSynced
+      ? theme.colors.primary
+      : isPending
+        ? theme.colors.warning
+        : theme.colors.danger;
+    const Icon = isSynced ? CheckCircle2 : isPending ? CloudOff : TriangleAlert;
+
+    return (
+      <View
+        style={[
+          styles.saveFeedback,
+          {
+            backgroundColor: withAlpha(accent, 0.1),
+            borderColor: withAlpha(accent, 0.28),
+          },
+        ]}
+      >
+        <View style={[styles.saveFeedbackIcon, { backgroundColor: withAlpha(accent, 0.14) }]}>
+          <Icon size={19} color={accent} />
+        </View>
+        <View style={styles.saveFeedbackCopy}>
+          <Text style={[styles.saveFeedbackTitle, { color: theme.colors.text }]}>{saveFeedback.title}</Text>
+          <Text style={[styles.saveFeedbackMessage, { color: theme.colors.textMuted }]}>{saveFeedback.message}</Text>
+        </View>
+        {!isSynced ? (
+          <TouchableOpacity
+            style={[styles.retrySaveButton, { backgroundColor: withAlpha(accent, 0.14) }]}
+            onPress={handleSave}
+            disabled={isSaving}
+            accessibilityLabel="Ponów zapis ustawień"
+          >
+            {isSaving ? (
+              <ActivityIndicator size="small" color={accent} />
+            ) : (
+              <RefreshCw size={17} color={accent} />
+            )}
+          </TouchableOpacity>
+        ) : null}
+      </View>
+    );
+  };
+
   const renderProfileHeader = () => (
     <View style={[styles.profileHeader, { backgroundColor: theme.colors.cardStrong, borderColor: theme.colors.border }]}>
       <View style={[styles.avatarContainer, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }]}>
@@ -152,9 +267,9 @@ export const SettingsScreen = () => {
         <Text style={[styles.headerTitle, { color: theme.colors.text }]}>Ustawienia</Text>
         <TouchableOpacity
           onPress={handleSave}
-          disabled={updateMutation.isPending}
+          disabled={isSaving}
         >
-          {updateMutation.isPending ? (
+          {isSaving ? (
             <ActivityIndicator size="small" color={theme.colors.primary} />
           ) : (
             <Text style={[styles.saveBtnText, { color: theme.colors.primary }]}>Zapisz</Text>
@@ -163,6 +278,7 @@ export const SettingsScreen = () => {
       </View>
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        {renderSaveFeedback()}
         {renderProfileHeader()}
         <View style={styles.section}>
           <Text style={[styles.sectionLabel, { color: theme.colors.textSubtle }]}>Wygląd aplikacji</Text>
@@ -558,6 +674,42 @@ const styles = StyleSheet.create({
   },
   miniPillTextActive: {
     color: vibrantTheme.colors.primary,
+  },
+  saveFeedback: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 13,
+    marginBottom: 18,
+  },
+  saveFeedbackIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveFeedbackCopy: {
+    flex: 1,
+  },
+  saveFeedbackTitle: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
+  saveFeedbackMessage: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  retrySaveButton: {
+    width: 38,
+    height: 38,
+    borderRadius: 13,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   profileHeader: {
     flexDirection: 'row',

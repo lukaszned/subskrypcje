@@ -53,7 +53,7 @@ export function reportRequestSuccess(latencyMs: number) {
     lastLatencyMs: latencyMs,
     lastSuccessAt: Date.now(),
     message: isSlow
-      ? 'API odpowiada wolniej niż zwykle. Pokazujemy dane, gdy tylko wrócą.'
+      ? 'Odpowiedź trwa dłużej niż zwykle. Aktualizacja zakończy się w tle.'
       : null,
   });
 }
@@ -69,9 +69,9 @@ export function reportRequestFailure(error: unknown, latencyMs?: number) {
     lastLatencyMs: latencyMs ?? snapshot.lastLatencyMs,
     lastFailureAt: Date.now(),
     message: isTimeout
-      ? 'Backend nie odpowiedział na czas. Spróbujemy utrzymać ekran na ostatnich danych.'
+      ? 'Serwer nie odpowiedział na czas. Pokazujemy ostatnio zapisane dane.'
       : isNetwork
-        ? 'Brak połączenia z API. Sprawdź sieć lub uruchom backend.'
+        ? 'Nie udało się połączyć. Sprawdź internet i spróbuj ponownie.'
         : message || 'Nie udało się pobrać danych.',
   });
 }

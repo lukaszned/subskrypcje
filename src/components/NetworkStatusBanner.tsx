@@ -29,11 +29,11 @@ export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
   }
 
   const isOffline = network.status === 'offline';
-  const title = isOffline ? 'Pracujemy na ostatnich danych' : 'Odświeżanie trwa dłużej niż zwykle';
+  const title = isOffline ? 'Brak połączenia' : 'Połączenie jest wolniejsze';
   const description = network.message || (
     isOffline
-      ? 'Sprawdź połączenie telefonu. Jeśli mamy cache, aplikacja nadal pokaże zapisany stan.'
-      : 'Nie blokujemy ekranu. Dane dosynchronizują się, gdy odświeżanie się zakończy.'
+      ? 'Możesz korzystać z zapisanych danych. Zmiany zsynchronizują się po powrocie sieci.'
+      : 'Pokazujemy zapisane dane. Aktualizacja zakończy się w tle.'
   );
 
   return (
@@ -60,7 +60,7 @@ export function NetworkStatusBanner({ onRetry }: NetworkStatusBannerProps) {
         <Text style={[styles.description, { color: theme.colors.textMuted }]}>{description}</Text>
       </View>
       {onRetry && (
-        <TouchableOpacity style={[styles.retryButton, { backgroundColor: `${theme.colors.primary}18` }]} onPress={onRetry} activeOpacity={0.8}>
+        <TouchableOpacity style={[styles.retryButton, { backgroundColor: withAlpha(theme.colors.primary, 0.1) }]} onPress={onRetry} activeOpacity={0.8}>
           <RotateCw size={16} color={theme.colors.primary} />
         </TouchableOpacity>
       )}

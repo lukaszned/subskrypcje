@@ -1,4 +1,4 @@
-import type { BillingCycle, Subscription, UpcomingPaymentItem } from '../types/api';
+import type { BillingCycle, SavingsItem, Subscription, UpcomingPaymentItem } from '../types/api';
 import { parseAppDate, startOfLocalDay } from './date';
 
 const WEEKS_PER_MONTH = 52 / 12;
@@ -21,6 +21,58 @@ export function getCountedMonthlyTotal(subscriptions: Subscription[]) {
   return subscriptions
     .filter((subscription) => subscription.status !== 'canceled' && subscription.includeInStats !== false)
     .reduce((sum, subscription) => sum + toMonthlySubscriptionAmount(subscription), 0);
+}
+
+export type LocalSavingsSummary = {
+  baseCurrency: string;
+  canceledSubscriptionsCount: number;
+  monthlySavings: number;
+  yearlySavings: number;
+  items: SavingsItem[];
+};
+
+export function buildSavingsFromSubscriptions(
+  subscriptions: Subscription[],
+  preferredCurrency = 'PLN'
+): LocalSavingsSummary {
+  const items = subscriptions
+    .filter((subscription) => subscription.status === 'canceled')
+    .map((subscription) => {
+      const currency = subscription.currency || preferredCurrency || 'PLN';
+      // Shared subscriptions already store the user's divided share in amount.
+      const monthlyAmount = toMonthlySubscriptionAmount(subscription);
+
+      return {
+        id: subscription.id,
+        name: subscription.name,
+        provider: subscription.provider,
+        originalAmount: Number(subscription.amount || 0),
+        originalCurrency: currency,
+        monthlyAmount,
+        yearlyAmount: monthlyAmount * 12,
+        canceledAt: subscription.updatedAt || subscription.createdAt,
+      };
+    })
+    .sort((a, b) => new Date(b.canceledAt).getTime() - new Date(a.canceledAt).getTime());
+
+  const currencies = Array.from(new Set(items.map((item) => item.originalCurrency)));
+  const baseCurrency = currencies.length === 1
+    ? currencies[0]
+    : currencies.includes(preferredCurrency)
+      ? preferredCurrency
+      : currencies.includes('PLN')
+        ? 'PLN'
+        : currencies[0] || preferredCurrency || 'PLN';
+  const countedItems = items.filter((item) => item.originalCurrency === baseCurrency);
+  const monthlySavings = countedItems.reduce((sum, item) => sum + item.monthlyAmount, 0);
+
+  return {
+    baseCurrency,
+    canceledSubscriptionsCount: countedItems.length,
+    monthlySavings,
+    yearlySavings: monthlySavings * 12,
+    items,
+  };
 }
 
 export function buildUpcomingPaymentsFromSubscriptions(
