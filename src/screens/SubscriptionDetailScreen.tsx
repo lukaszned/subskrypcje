@@ -148,7 +148,7 @@ export const SubscriptionDetailScreen = () => {
     if (sub.status === 'overdue' || (nextDaysLeft !== null && nextDaysLeft < 0)) {
       return { label: 'Po terminie', color: theme.colors.danger, bg: `${theme.colors.danger}18` };
     }
-    if (sub.isTrial) return { label: 'Trial', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
+    if (sub.isTrial) return { label: 'Okres próbny', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
     if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
     return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}24` };
   })();

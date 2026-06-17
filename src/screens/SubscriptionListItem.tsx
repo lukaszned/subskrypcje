@@ -21,7 +21,8 @@ import { View, Text, StyleSheet, TouchableOpacity, Animated } from 'react-native
 import { Swipeable } from 'react-native-gesture-handler';
 import { CheckCircle, XCircle } from 'lucide-react-native';
 import { vibrantTheme } from '../theme/vibrantTheme';
-import { useTheme } from '../theme/ThemeContext';
+import { useTheme, type AppTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 
 export interface SubscriptionItem {
   id: string;
@@ -46,22 +47,86 @@ interface Props {
   onPress?: () => void;
 }
 
-// Mapowanie etykiet kategorii -> kolor tła awatara
-const CATEGORY_COLORS: Record<string, { bg: string; text: string }> = {
-  'rozrywka':     { bg: '#E0E7FF', text: '#4F46E5' },
-  'narzędzia':    { bg: '#DBEAFE', text: '#2563EB' },
-  'zdrowie':      { bg: '#F1F5F9', text: '#334155' },
-  'edukacja':     { bg: '#FEF9C3', text: '#CA8A04' },
-  'produktywność':{ bg: '#FCE7F3', text: '#BE185D' },
-  'zakupy':       { bg: '#FEF3C7', text: '#D97706' },
-  'finanse':      { bg: '#F8FAFC', text: '#334155' },
-  'transport':    { bg: '#F0F9FF', text: '#0284C7' },
-  'inne':         { bg: '#F1F5F9', text: '#64748B' },
-};
-
-function getCategoryStyle(category: string) {
+function getCategoryStyle(category: string, theme: AppTheme) {
   const key = category.toLowerCase();
-  return CATEGORY_COLORS[key] ?? { bg: '#F1F5F9', text: '#64748B' };
+  const color =
+    key === 'rozrywka' ? theme.colors.primary :
+    key === 'narzędzia' ? theme.colors.cyan :
+    key === 'zdrowie' ? theme.colors.success :
+    key === 'edukacja' ? theme.colors.warning :
+    key === 'produktywność' ? theme.colors.pink :
+    key === 'zakupy' ? theme.colors.warning :
+    key === 'finanse' ? theme.colors.textMuted :
+    key === 'transport' ? theme.colors.cyan :
+    theme.colors.textMuted;
+
+  return { bg: withAlpha(color, 0.16), text: color };
+}
+
+function getSubscriptionCardTone(
+  status: SubscriptionItem['status'],
+  isTrial: boolean | undefined,
+  theme: AppTheme
+) {
+  if (isTrial) {
+    return {
+      label: 'Okres próbny',
+      accent: theme.colors.warning,
+      badgeBg: withAlpha(theme.colors.warning, 0.16),
+      cardBg: withAlpha(theme.colors.warning, 0.08),
+      border: withAlpha(theme.colors.warning, 0.34),
+      rail: withAlpha(theme.colors.warning, 0.86),
+      shadow: theme.colors.warning,
+      muted: false,
+    };
+  }
+
+  switch (status) {
+    case 'paid':
+      return {
+        label: 'Opłacona',
+        accent: theme.colors.primary,
+        badgeBg: withAlpha(theme.colors.primary, 0.16),
+        cardBg: withAlpha(theme.colors.primary, 0.08),
+        border: withAlpha(theme.colors.primary, 0.32),
+        rail: withAlpha(theme.colors.primary, 0.88),
+        shadow: theme.colors.primary,
+        muted: false,
+      };
+    case 'overdue':
+      return {
+        label: 'Zaległa',
+        accent: theme.colors.danger,
+        badgeBg: withAlpha(theme.colors.danger, 0.16),
+        cardBg: withAlpha(theme.colors.danger, 0.09),
+        border: withAlpha(theme.colors.danger, 0.42),
+        rail: withAlpha(theme.colors.danger, 0.9),
+        shadow: theme.colors.danger,
+        muted: false,
+      };
+    case 'canceled':
+      return {
+        label: 'Anulowana',
+        accent: theme.colors.textSubtle,
+        badgeBg: withAlpha(theme.colors.text, 0.08),
+        cardBg: withAlpha(theme.colors.text, 0.045),
+        border: withAlpha(theme.colors.text, 0.11),
+        rail: withAlpha(theme.colors.textMuted, 0.42),
+        shadow: theme.colors.bg,
+        muted: true,
+      };
+    default:
+      return {
+        label: 'Aktywna',
+        accent: theme.colors.primary,
+        badgeBg: withAlpha(theme.colors.primary, 0.16),
+        cardBg: withAlpha(theme.colors.primary, 0.07),
+        border: withAlpha(theme.colors.primary, 0.28),
+        rail: withAlpha(theme.colors.primary, 0.86),
+        shadow: theme.colors.primary,
+        muted: false,
+      };
+  }
 }
 
 const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
@@ -79,20 +144,9 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
     isSeasonal: Boolean(item.isSeasonal),
     seasonEndLabel: item.seasonEndLabel || null,
   }), [item]);
-  const catStyle = getCategoryStyle(safeItem.category);
+  const catStyle = getCategoryStyle(safeItem.category, theme);
   const isCancelled = safeItem.status === 'canceled';
-
-  const getStatusInfo = (status: string, isTrial?: boolean) => {
-    if (isTrial) return { label: 'Trial', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
-    switch (status) {
-      case 'paid': return { label: 'Opłacona', color: theme.colors.primary, bg: `${theme.colors.primary}18` };
-      case 'overdue': return { label: 'Zaległa', color: theme.colors.danger, bg: `${theme.colors.danger}18` };
-      case 'canceled': return { label: 'Anulowana', color: theme.colors.textSubtle, bg: theme.colors.cardStrong };
-      default: return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}18` };
-    }
-  };
-
-  const statusInfo = getStatusInfo(safeItem.status, safeItem.isTrial);
+  const cardTone = getSubscriptionCardTone(safeItem.status, safeItem.isTrial, theme);
 
   const handlePayPress = useCallback(() => onPause(safeItem.id), [onPause, safeItem.id]);
   const handleCancelPress = useCallback(() => onDelete(safeItem.id), [onDelete, safeItem.id]);
@@ -118,8 +172,8 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
           activeOpacity={0.8}
         >
           <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
-            <CheckCircle size={22} color="#FFFFFF" />
-            <Text style={styles.actionText}>Opłać</Text>
+            <CheckCircle size={22} color={theme.colors.darkText} />
+            <Text style={[styles.actionText, { color: theme.colors.darkText }]}>Opłać</Text>
           </Animated.View>
         </TouchableOpacity>
 
@@ -130,8 +184,8 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
           activeOpacity={0.8}
         >
           <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
-            <XCircle size={22} color="#FFFFFF" />
-            <Text style={styles.actionText}>Anuluj</Text>
+            <XCircle size={22} color={theme.colors.darkText} />
+            <Text style={[styles.actionText, { color: theme.colors.darkText }]}>Anuluj</Text>
           </Animated.View>
         </TouchableOpacity>
       </View>
@@ -149,19 +203,21 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
         style={[
           styles.rowContainer,
           {
-            backgroundColor: isCancelled ? theme.colors.cardSoft : theme.colors.card,
-            borderColor: theme.colors.border,
-            shadowColor: theme.colors.primary,
+            backgroundColor: cardTone.cardBg,
+            borderColor: cardTone.border,
+            shadowColor: cardTone.shadow,
+            shadowOpacity: cardTone.muted ? 0.08 : 0.18,
           },
         ]}
         onPress={onPress}
         activeOpacity={0.7}
       >
+        <View style={[styles.statusRail, { backgroundColor: cardTone.rail }]} />
         {/* Avatar */}
         <View
           style={[
             styles.avatar,
-            { backgroundColor: isCancelled ? theme.colors.cardStrong : catStyle.bg },
+            { backgroundColor: isCancelled ? cardTone.badgeBg : catStyle.bg },
           ]}
         >
           <Text
@@ -183,14 +239,14 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
             {safeItem.name}
           </Text>
           <View style={styles.statusRow}>
-            <View style={[styles.statusBadge, { backgroundColor: statusInfo.bg }]}>
-              <Text style={[styles.statusBadgeText, { color: statusInfo.color }]} numberOfLines={1}>
-                {statusInfo.label}
+            <View style={[styles.statusBadge, { backgroundColor: cardTone.badgeBg, borderColor: cardTone.border }]}>
+              <Text style={[styles.statusBadgeText, { color: cardTone.accent }]} numberOfLines={1}>
+                {cardTone.label}
               </Text>
             </View>
             {safeItem.isSeasonal && (
-              <View style={[styles.seasonalBadge, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}33` }]}>
-                <Text style={[styles.seasonalBadgeText, { color: theme.colors.primary }]}>Sezon</Text>
+              <View style={[styles.seasonalBadge, { backgroundColor: withAlpha(theme.colors.cyan, 0.13), borderColor: withAlpha(theme.colors.cyan, 0.32) }]}>
+                <Text style={[styles.seasonalBadgeText, { color: theme.colors.cyan }]}>Sezon</Text>
               </View>
             )}
           </View>
@@ -213,7 +269,7 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
           >
             {safeItem.amount.toFixed(2)} {safeItem.currency}
           </Text>
-          <View style={[styles.cycleBadge, { backgroundColor: theme.colors.cardStrong }]}>
+          <View style={[styles.cycleBadge, { backgroundColor: withAlpha(cardTone.accent, cardTone.muted ? 0.07 : 0.12) }]}>
             <Text style={[styles.cycleText, { color: theme.colors.textMuted }]} numberOfLines={1}>{safeItem.cycle}</Text>
           </View>
         </View>
@@ -224,6 +280,7 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
 
 const styles = StyleSheet.create({
   rowContainer: {
+    position: 'relative',
     flexDirection: 'row',
     alignItems: 'flex-start',
     backgroundColor: vibrantTheme.colors.card,
@@ -233,14 +290,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
-    shadowColor: '#000000',
+    shadowColor: vibrantTheme.colors.primary,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.12,
     shadowRadius: 16,
     elevation: 2,
   },
-  rowContainerCancelled: {
-    backgroundColor: 'rgba(255,255,255,0.05)',
+  statusRail: {
+    position: 'absolute',
+    left: 0,
+    top: 12,
+    bottom: 12,
+    width: 4,
+    borderTopRightRadius: 999,
+    borderBottomRightRadius: 999,
   },
   avatar: {
     width: 48,
@@ -267,10 +330,6 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     lineHeight: 20,
   },
-  textCancelled: {
-    color: '#94A3B8',
-    textDecorationLine: 'line-through',
-  },
   dateText: {
     fontSize: 13,
     color: vibrantTheme.colors.textMuted,
@@ -291,7 +350,6 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   cycleBadge: {
-    backgroundColor: 'rgba(255,255,255,0.08)',
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
@@ -315,14 +373,9 @@ const styles = StyleSheet.create({
   actionInner: {
     alignItems: 'center',
   },
-  payAction: {
-    backgroundColor: '#CBD5E1',
-  },
-  cancelAction: {
-    backgroundColor: '#FF3B6B',
-  },
+  payAction: {},
+  cancelAction: {},
   actionText: {
-    color: '#FFFFFF',
     fontSize: 11,
     fontWeight: '700',
     marginTop: 4,
@@ -336,6 +389,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
     borderRadius: 8,
     marginBottom: 5,
+    borderWidth: 1,
   },
   statusBadgeText: {
     fontSize: 10,

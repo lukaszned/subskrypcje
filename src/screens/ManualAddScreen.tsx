@@ -4,7 +4,7 @@
 // Formularz dodawania/edycji subskrypcji.
 // =============================================================
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -182,6 +182,7 @@ export const ManualAddScreen = () => {
   const amountInputRef = useRef<TextInput>(null);
   const aiPulseAnim = useRef(new Animated.Value(0)).current;
   const isSaveLockedRef = useRef(false);
+  const handleSaveRef = useRef<() => void>(() => undefined);
   const createMutation = useCreateSubscription();
   const updateMutation = useUpdateSubscription();
   const { data: existingSub, isLoading: isLoadingSub } = useSubscription(subscriptionId || '');
@@ -369,6 +370,7 @@ export const ManualAddScreen = () => {
   const hasNameError = isSubmitted && name.trim().length === 0;
   const hasAmountError = isSubmitted && !hasValidAmount;
   const isValid = name.trim().length > 0 && hasValidAmount && Number.isFinite(finalCalculatedCost) && finalCalculatedCost > 0;
+  const shouldShowNextPaymentDate = !isTrial && !isSeasonal;
 
   useEffect(() => {
     if (existingSub) {
@@ -561,6 +563,10 @@ export const ManualAddScreen = () => {
     }
   };
 
+  useEffect(() => {
+    handleSaveRef.current = handleSave;
+  }, [handleSave]);
+
   const handleApiError = (error: any) => {
     if (__DEV__) {
       console.warn('[ManualAddScreen] Save warning:', error);
@@ -605,6 +611,27 @@ export const ManualAddScreen = () => {
       const timeoutId = setTimeout(() => setShowSlowSaveHint(true), 1200);
       return () => clearTimeout(timeoutId);
     }, [isLoading]);
+
+    useLayoutEffect(() => {
+      navigation.setOptions({
+        headerRight: () => (
+          <TouchableOpacity
+            style={[styles.headerSaveButton, isLoading && styles.headerSaveButtonDisabled]}
+            onPress={() => handleSaveRef.current()}
+            disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Zapisz subskrypcję"
+            accessibilityState={{ disabled: isLoading, busy: isLoading }}
+          >
+            {isLoading ? (
+              <ActivityIndicator size="small" color={theme.colors.darkText} />
+            ) : (
+              <Text style={[styles.headerSaveButtonText, { color: theme.colors.darkText }]}>Zapisz</Text>
+            )}
+          </TouchableOpacity>
+        ),
+      });
+    }, [isLoading, navigation, styles.headerSaveButton, styles.headerSaveButtonDisabled, styles.headerSaveButtonText, theme.colors.darkText]);
 
     const scrollViewRef = useRef<ScrollView>(null);
   
@@ -657,9 +684,20 @@ export const ManualAddScreen = () => {
                   <Text style={styles.headerEyebrow}>{subscriptionId ? 'Edycja subskrypcji' : 'Nowa subskrypcja'}</Text>
                   <Text style={styles.headerTitle}>Skonfiguruj plan</Text>
                 </View>
-                <View style={[styles.headerStepBadge, { backgroundColor: `${theme.colors.primary}24`, borderColor: `${theme.colors.primary}44` }]}>
-                  <Text style={[styles.headerStepText, { color: theme.colors.primary }]}>{isValid ? 'Gotowe' : 'Setup'}</Text>
-                </View>
+                <TouchableOpacity
+                  style={[styles.headerSaveButton, isLoading && styles.headerSaveButtonDisabled]}
+                  onPress={handleSave}
+                  disabled={isLoading}
+                  accessibilityRole="button"
+                  accessibilityLabel="Zapisz subskrypcję"
+                  accessibilityState={{ disabled: isLoading, busy: isLoading }}
+                >
+                  {isLoading ? (
+                    <ActivityIndicator size="small" color={theme.colors.darkText} />
+                  ) : (
+                    <Text style={[styles.headerSaveButtonText, { color: theme.colors.darkText }]}>Zapisz</Text>
+                  )}
+                </TouchableOpacity>
               </View>
   
               <ScrollView 
@@ -673,145 +711,6 @@ export const ManualAddScreen = () => {
                 scrollEventThrottle={16}
                 decelerationRate="fast"
               >
-              <LinearGradient colors={theme.gradients.hero} style={[styles.amountHeader, { shadowColor: theme.colors.primary }]}>
-                <Text style={styles.amountLabel}>Kwota subskrypcji</Text>
-                
-                {selectedService?.availablePlans && selectedService.availablePlans.length > 0 ? (
-                  <View style={styles.planSelectionContainer}>
-                    <View style={styles.planSelectionHeader}>
-                      <Text style={styles.planSelectionTitle}>Wybierz plan dla {selectedService.name}</Text>
-                      <TouchableOpacity 
-                        style={styles.planBackButton}
-                        onPress={() => {
-                          LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                          setSelectedService(null);
-                          setAmount('');
-                          setPlanName('');
-                        }}
-                      >
-                        <Text style={styles.planBackButtonText}>Wpisz ręcznie</Text>
-                      </TouchableOpacity>
-                    </View>
-                    
-                    <ScrollView 
-                      horizontal 
-                      showsHorizontalScrollIndicator={false} 
-                      nestedScrollEnabled
-                      keyboardShouldPersistTaps="handled"
-                      contentContainerStyle={styles.plansScrollContent}
-                    >
-                      {selectedService.availablePlans.map((plan) => {
-                        const isActivePlan = planName === plan.name && parsedAmount === plan.price;
-                        return (
-                        <TouchableOpacity
-                          key={`${plan.name}-${plan.price}`}
-                          style={[
-                            styles.planCard,
-                            isActivePlan && [styles.planCardActive, { borderColor: theme.colors.primary }]
-                          ]}
-                          onPress={() => {
-                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-                            setAmount(plan.price.toString());
-                            setPlanName(plan.name);
-                            if (plan.billingCycle) handleCycleChange(plan.billingCycle);
-                            scrollToForm();
-                          }}
-                        >
-                          <Text style={[styles.planCardName, isActivePlan && { color: theme.colors.primary }]} numberOfLines={1}>
-                            {plan.name}
-                          </Text>
-                          <View style={styles.planCardPriceRow}>
-                            <Text style={[styles.planCardPrice, isActivePlan && { color: theme.colors.primary }]}>
-                              {plan.price.toFixed(2)}
-                            </Text>
-                            <Text style={[styles.planCardCurrency, isActivePlan && { color: theme.colors.primary }]}>
-                              {currency}
-                            </Text>
-                          </View>
-                          <Text style={[styles.planCardCycle, isActivePlan && { color: theme.colors.primary }]}>
-                            {plan.billingCycle === 'yearly' ? 'Rocznie' : 'Miesięcznie'}
-                          </Text>
-                        </TouchableOpacity>
-                        );
-                      })}
-                    </ScrollView>
-                    
-                    {parsedAmount > 0 && (
-                      <TouchableOpacity 
-                        style={styles.planConfirmButton}
-                        onPress={() => {
-                          // Action to "go further"
-                          Keyboard.dismiss();
-                          scrollToForm();
-                        }}
-                      >
-                        <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
-                        <ArrowRight size={16} color={theme.colors.darkText} />
-                      </TouchableOpacity>
-                    )}
-
-                    {selectedPlanInsights.length > 0 && (
-                      <View style={styles.planInsights}>
-                        {selectedPlanInsights.map((insight) => (
-                          <View key={insight.title} style={styles.planInsightRow}>
-                            <View style={styles.planInsightDot} />
-                            <View style={styles.planInsightCopy}>
-                              <Text style={styles.planInsightTitle}>{insight.title}</Text>
-                              <Text style={styles.planInsightDesc}>{insight.desc}</Text>
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                ) : (
-                  <View style={styles.amountRow}>
-                    <TextInput
-                      ref={amountInputRef}
-                      style={[styles.amountInput, hasAmountError && { color: theme.colors.danger }]}
-                      value={amount}
-                      onChangeText={(value) => {
-                        setAmount(value);
-                        setPlanName('');
-                      }}
-                      keyboardType="decimal-pad"
-                      placeholder="0.00"
-                      placeholderTextColor={withAlpha(theme.colors.text, 0.45)}
-                      returnKeyType="done"
-                      onSubmitEditing={Keyboard.dismiss}
-                    />
-                    <Text style={styles.currencyLabel}>{currency}</Text>
-                  </View>
-                )}
-                {hasAmountError && (
-                  <Text style={styles.fieldError}>Kwota musi być większa od 0.</Text>
-                )}
-                
-                {!selectedService?.availablePlans && (
-                  <View style={styles.currencyPills}>
-                    {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
-                      <TouchableOpacity 
-                        key={c} 
-                        style={[styles.currencyPill, currency === c && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
-                        onPress={() => setCurrency(c)}
-                      >
-                        <Text style={[styles.currencyPillText, currency === c && { color: theme.colors.primary }]}>{c}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                )}
-                <View style={styles.costPreviewRow}>
-                  <View style={styles.costPreviewPill}>
-                    <Text style={styles.costPreviewLabel}>Twój koszt</Text>
-                    <Text style={styles.costPreviewValue}>{finalCalculatedCost.toFixed(2)} {currency}</Text>
-                  </View>
-                  <View style={styles.costPreviewPill}>
-                    <Text style={styles.costPreviewLabel}>Tryb</Text>
-                    <Text style={styles.costPreviewValue}>{isShared ? `${peopleCount} osoby` : 'Solo'}</Text>
-                  </View>
-                </View>
-              </LinearGradient>
-
               <View style={styles.formSection}>
                 <View style={[styles.infoBox, { marginBottom: 20, backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
                   <AlertCircle size={16} color={theme.colors.primary} style={{ marginRight: 8 }} />
@@ -997,6 +896,144 @@ export const ManualAddScreen = () => {
 
                 </View>
 
+                <LinearGradient colors={theme.gradients.hero} style={[styles.amountHeader, { shadowColor: theme.colors.primary }]}>
+                  <Text style={styles.amountLabel}>Cena / proponowana cena</Text>
+
+                  {selectedService?.availablePlans && selectedService.availablePlans.length > 0 ? (
+                    <View style={styles.planSelectionContainer}>
+                      <View style={styles.planSelectionHeader}>
+                        <Text style={styles.planSelectionTitle}>Wybierz plan dla {selectedService.name}</Text>
+                        <TouchableOpacity
+                          style={styles.planBackButton}
+                          onPress={() => {
+                            LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                            setSelectedService(null);
+                            setAmount('');
+                            setPlanName('');
+                          }}
+                        >
+                          <Text style={styles.planBackButtonText}>Wpisz ręcznie</Text>
+                        </TouchableOpacity>
+                      </View>
+
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        nestedScrollEnabled
+                        keyboardShouldPersistTaps="handled"
+                        contentContainerStyle={styles.plansScrollContent}
+                      >
+                        {selectedService.availablePlans.map((plan) => {
+                          const isActivePlan = planName === plan.name && parsedAmount === plan.price;
+                          return (
+                            <TouchableOpacity
+                              key={`${plan.name}-${plan.price}`}
+                              style={[
+                                styles.planCard,
+                                isActivePlan && [styles.planCardActive, { borderColor: theme.colors.primary }]
+                              ]}
+                              onPress={() => {
+                                LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+                                setAmount(plan.price.toString());
+                                setPlanName(plan.name);
+                                if (plan.billingCycle) handleCycleChange(plan.billingCycle);
+                                scrollToForm();
+                              }}
+                            >
+                              <Text style={[styles.planCardName, isActivePlan && { color: theme.colors.primary }]} numberOfLines={1}>
+                                {plan.name}
+                              </Text>
+                              <View style={styles.planCardPriceRow}>
+                                <Text style={[styles.planCardPrice, isActivePlan && { color: theme.colors.primary }]}>
+                                  {plan.price.toFixed(2)}
+                                </Text>
+                                <Text style={[styles.planCardCurrency, isActivePlan && { color: theme.colors.primary }]}>
+                                  {currency}
+                                </Text>
+                              </View>
+                              <Text style={[styles.planCardCycle, isActivePlan && { color: theme.colors.primary }]}>
+                                {plan.billingCycle === 'yearly' ? 'Rocznie' : 'Miesięcznie'}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </ScrollView>
+
+                      {parsedAmount > 0 && (
+                        <TouchableOpacity
+                          style={styles.planConfirmButton}
+                          onPress={() => {
+                            Keyboard.dismiss();
+                            scrollToForm();
+                          }}
+                        >
+                          <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
+                          <ArrowRight size={16} color={theme.colors.darkText} />
+                        </TouchableOpacity>
+                      )}
+
+                      {selectedPlanInsights.length > 0 && (
+                        <View style={styles.planInsights}>
+                          {selectedPlanInsights.map((insight) => (
+                            <View key={insight.title} style={styles.planInsightRow}>
+                              <View style={styles.planInsightDot} />
+                              <View style={styles.planInsightCopy}>
+                                <Text style={styles.planInsightTitle}>{insight.title}</Text>
+                                <Text style={styles.planInsightDesc}>{insight.desc}</Text>
+                              </View>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+                    </View>
+                  ) : (
+                    <View style={styles.amountRow}>
+                      <TextInput
+                        ref={amountInputRef}
+                        style={[styles.amountInput, hasAmountError && { color: theme.colors.danger }]}
+                        value={amount}
+                        onChangeText={(value) => {
+                          setAmount(value);
+                          setPlanName('');
+                        }}
+                        keyboardType="decimal-pad"
+                        placeholder="0.00"
+                        placeholderTextColor={withAlpha(theme.colors.text, 0.45)}
+                        returnKeyType="done"
+                        onSubmitEditing={Keyboard.dismiss}
+                      />
+                      <Text style={styles.currencyLabel}>{currency}</Text>
+                    </View>
+                  )}
+                  {hasAmountError && (
+                    <Text style={styles.fieldError}>Kwota musi być większa od 0.</Text>
+                  )}
+
+                  {!selectedService?.availablePlans && (
+                    <View style={styles.currencyPills}>
+                      {['PLN', 'USD', 'EUR', 'GBP'].map(c => (
+                        <TouchableOpacity
+                          key={c}
+                          style={[styles.currencyPill, currency === c && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
+                          onPress={() => setCurrency(c)}
+                        >
+                          <Text style={[styles.currencyPillText, currency === c && { color: theme.colors.primary }]}>{c}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                  <View style={styles.costPreviewRow}>
+                    <View style={styles.costPreviewPill}>
+                      <Text style={styles.costPreviewLabel}>Twój koszt</Text>
+                      <Text style={styles.costPreviewValue}>{finalCalculatedCost.toFixed(2)} {currency}</Text>
+                    </View>
+                    <View style={styles.costPreviewPill}>
+                      <Text style={styles.costPreviewLabel}>Tryb</Text>
+                      <Text style={styles.costPreviewValue}>{isShared ? `${peopleCount} osoby` : 'Solo'}</Text>
+                    </View>
+                  </View>
+                </LinearGradient>
+
                 <View style={styles.formCard}>
                   <View style={styles.sectionHeaderBlock}>
                     <Text style={styles.sectionHeaderTitle}>Szczegóły kosztów</Text>
@@ -1018,26 +1055,28 @@ export const ManualAddScreen = () => {
                   </ScrollView>
                 </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Następna płatność</Text>
-                  <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
-                    <Calendar size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
-                    <Text style={styles.dateText}>{formatDate(date)}</Text>
-                  </TouchableOpacity>
-                  <Text style={[styles.dateHint, { color: theme.colors.textMuted }]}>
-                    {hasManualDate
-                      ? 'Data ustawiona ręcznie.'
-                      : 'Podpowiadamy ją automatycznie na podstawie cyklu.'}
-                  </Text>
-                  {showDatePicker && (
-                    <DateTimePicker
-                      value={date}
-                      mode="date"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={onDateChange}
-                    />
-                  )}
-                </View>
+                {shouldShowNextPaymentDate && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Następna płatność</Text>
+                    <TouchableOpacity style={styles.dateButton} onPress={() => setShowDatePicker(true)}>
+                      <Calendar size={20} color={theme.colors.primary} style={{ marginRight: 8 }} />
+                      <Text style={styles.dateText}>{formatDate(date)}</Text>
+                    </TouchableOpacity>
+                    <Text style={[styles.dateHint, { color: theme.colors.textMuted }]}>
+                      {hasManualDate
+                        ? 'Data ustawiona ręcznie.'
+                        : 'Podpowiadamy ją automatycznie na podstawie cyklu.'}
+                    </Text>
+                    {showDatePicker && (
+                      <DateTimePicker
+                        value={date}
+                        mode="date"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={onDateChange}
+                      />
+                    )}
+                  </View>
+                )}
 
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Kategoria</Text>
@@ -1069,7 +1108,7 @@ export const ManualAddScreen = () => {
 
                 <View style={styles.inputGroup}>
                   <View style={styles.rowBetween}>
-                    <Text style={styles.labelOptional}>Trial</Text>
+                    <Text style={styles.labelOptional}>Okres próbny</Text>
                     <TouchableOpacity 
                       onPress={() => setIsTrial(!isTrial)}
                       style={[styles.toggle, isTrial && { backgroundColor: theme.colors.primary }]}
@@ -1081,7 +1120,7 @@ export const ManualAddScreen = () => {
 
                 {isTrial && (
                   <View style={styles.inputGroup}>
-                    <Text style={styles.label}>Koniec triala</Text>
+                    <Text style={styles.label}>Data zakończenia okresu próbnego</Text>
                     <TouchableOpacity style={styles.dateButton} onPress={() => setShowTrialPicker(true)}>
                       <Calendar size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
                       <Text style={[styles.dateText, { color: theme.colors.warning }]}>{formatDate(trialEndDate)}</Text>
@@ -1096,6 +1135,50 @@ export const ManualAddScreen = () => {
                     )}
                   </View>
                 )}
+
+                <View style={styles.optionalGroup}>
+                  <View style={styles.rowBetween}>
+                    <View style={{ flex: 1, paddingRight: 14 }}>
+                      <Text style={styles.labelOptional}>Subskrypcja sezonowa</Text>
+                      <Text style={[styles.infoBoxText, { color: theme.colors.textMuted }]}>
+                        Oznacz usługi kupione tylko na sezon, np. sport, serial, wakacje albo kurs.
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => setIsSeasonal(!isSeasonal)}
+                      style={[styles.toggle, isSeasonal && { backgroundColor: theme.colors.primary }]}
+                    >
+                      <View style={[styles.toggleDot, isSeasonal && styles.toggleDotActive]} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {isSeasonal && (
+                    <View style={styles.seasonalBox}>
+                      <TouchableOpacity style={styles.dateButton} onPress={() => setShowSeasonPicker(true)}>
+                        <Calendar size={18} color={theme.colors.primary} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.dateButtonLabel}>Koniec sezonu</Text>
+                          <Text style={styles.dateButtonText}>{formatDate(seasonEndDate)}</Text>
+                        </View>
+                      </TouchableOpacity>
+                      {showSeasonPicker && (
+                        <DateTimePicker
+                          value={seasonEndDate}
+                          mode="date"
+                          display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                          onChange={onSeasonDateChange}
+                        />
+                      )}
+                      <TextInput
+                        style={[styles.textInput, { marginTop: 10 }]}
+                        value={seasonReason}
+                        onChangeText={setSeasonReason}
+                        placeholder="Np. tylko na wakacje, sezon sportowy, konkretny kurs..."
+                        placeholderTextColor={theme.colors.textSubtle}
+                      />
+                    </View>
+                  )}
+                </View>
 
                 <View style={styles.optionalGroup}>
                   <View style={styles.rowBetween}>
@@ -1194,49 +1277,6 @@ export const ManualAddScreen = () => {
                         </Text>
                       </View>
 
-                      <View style={styles.optionalGroup}>
-                        <View style={styles.rowBetween}>
-                          <View style={{ flex: 1, paddingRight: 14 }}>
-                            <Text style={styles.labelOptional}>Subskrypcja sezonowa</Text>
-                            <Text style={[styles.infoBoxText, { color: theme.colors.textMuted }]}>
-                              Oznacz usługi kupione tylko na sezon, np. sport, serial, wakacje albo kurs.
-                            </Text>
-                          </View>
-                          <TouchableOpacity
-                            onPress={() => setIsSeasonal(!isSeasonal)}
-                            style={[styles.toggle, isSeasonal && { backgroundColor: theme.colors.primary }]}
-                          >
-                            <View style={[styles.toggleDot, isSeasonal && styles.toggleDotActive]} />
-                          </TouchableOpacity>
-                        </View>
-
-                        {isSeasonal && (
-                          <View style={styles.seasonalBox}>
-                            <TouchableOpacity style={styles.dateButton} onPress={() => setShowSeasonPicker(true)}>
-                              <Calendar size={18} color={theme.colors.primary} />
-                              <View style={{ flex: 1 }}>
-                                <Text style={styles.dateButtonLabel}>Koniec sezonu</Text>
-                                <Text style={styles.dateButtonText}>{formatDate(seasonEndDate)}</Text>
-                              </View>
-                            </TouchableOpacity>
-                            {showSeasonPicker && (
-                              <DateTimePicker
-                                value={seasonEndDate}
-                                mode="date"
-                                display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                                onChange={onSeasonDateChange}
-                              />
-                            )}
-                            <TextInput
-                              style={[styles.textInput, { marginTop: 10 }]}
-                              value={seasonReason}
-                              onChangeText={setSeasonReason}
-                              placeholder="Np. tylko na wakacje, sezon sportowy, konkretny kurs..."
-                              placeholderTextColor={theme.colors.textSubtle}
-                            />
-                          </View>
-                        )}
-                      </View>
                     </>
                   )}
                 </View>
@@ -1349,6 +1389,24 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   headerTitle: { fontSize: 23, fontWeight: '900', color: theme.colors.text, marginTop: 2 },
   headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: withAlpha(theme.colors.text, 0.14), borderWidth: 1, borderColor: withAlpha(theme.colors.text, 0.28), alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   headerStepText: { color: theme.colors.primary, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
+  headerSaveButton: {
+    minWidth: 72,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: theme.colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderColor: withAlpha(theme.colors.primary, 0.45),
+  },
+  headerSaveButtonDisabled: {
+    opacity: 0.58,
+  },
+  headerSaveButtonText: {
+    fontSize: 13,
+    fontWeight: '900',
+  },
   scrollContent: { paddingBottom: 44, flexGrow: 1, paddingHorizontal: 16 },
   amountHeader: {
     paddingTop: 22,

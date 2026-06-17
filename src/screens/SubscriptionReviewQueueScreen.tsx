@@ -31,6 +31,7 @@ import { SkeletonList } from '../components/LoadingState';
 import { MetricTile } from '../components/ui/PremiumPrimitives';
 import { useSubscriptions } from '../hooks/useSubscriptions';
 import { useTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 import type { Subscription } from '../types/api';
 import type { AppStackParamList } from '../types/navigation';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
@@ -88,9 +89,9 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         id: `trial-${subscription.id}`,
         type: 'trial',
         subscription,
-        title: 'Trial blisko końca',
-        description: `${displayName} moze zaraz przejsc w platny plan.`,
-        meta: subscription.trialEndDate ? `Koniec ${formatShortDate(subscription.trialEndDate)}` : 'Trial aktywny',
+        title: 'Okres próbny blisko końca',
+        description: `${displayName} może zaraz przejść w płatny plan.`,
+        meta: subscription.trialEndDate ? `Koniec ${formatShortDate(subscription.trialEndDate)}` : 'Okres próbny aktywny',
         tone: 'warning',
       });
     }
@@ -101,7 +102,7 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         type: 'due',
         subscription,
         title: 'Nadchodzi płatność',
-        description: `${displayName} pojawi sie w kosztach w najblizszych dniach.`,
+        description: `${displayName} pojawi się w kosztach w najbliższych dniach.`,
         meta: formatRelativeDay(subscription.nextPaymentDate),
         tone: 'primary',
       });
@@ -112,8 +113,8 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         id: `expensive-${subscription.id}`,
         type: 'expensive',
         subscription,
-        title: 'Wysoki miesieczny koszt',
-        description: `${displayName} jest dobrym kandydatem do przegladu planu lub współdzielenia.`,
+        title: 'Wysoki miesięczny koszt',
+        description: `${displayName} jest dobrym kandydatem do przeglądu planu lub współdzielenia.`,
         meta: `${subscription.amount.toFixed(2)} ${subscription.currency}`,
         tone: 'warning',
       });
@@ -136,6 +137,10 @@ export function SubscriptionReviewQueueScreen() {
   const { data: subscriptions = [], isLoading, isError, refetch } = useSubscriptions();
   const [decisions, setDecisions] = useState<Record<string, Decision>>({});
 
+  const screenGradient = useMemo(
+    () => [theme.colors.bg, theme.colors.bg2, theme.colors.bg] as const,
+    [theme.colors.bg, theme.colors.bg2]
+  );
   const reviewItems = useMemo(() => buildReviewItems(subscriptions), [subscriptions]);
   const doneCount = reviewItems.filter((item) => decisions[item.id]).length;
   const pendingCount = Math.max(reviewItems.length - doneCount, 0);
@@ -168,7 +173,7 @@ export function SubscriptionReviewQueueScreen() {
             Buduję kolejkę decyzji
           </Text>
           <Text style={[styles.emptyDesc, { color: theme.colors.textMuted }]}>
-            Szukam triali, płatności i kosztów wymagających uwagi.
+            Szukam okresów próbnych, płatności i kosztów wymagających uwagi.
           </Text>
           <SkeletonList rows={4} isDark />
         </View>
@@ -189,7 +194,7 @@ export function SubscriptionReviewQueueScreen() {
         <EmptyState
           type="calm"
           title="Nie ma pilnych decyzji"
-          message="Nie widzę teraz triali, zaległych płatności ani drogich planów wymagających szybkiego przeglądu."
+          message="Nie widzę teraz okresów próbnych, zaległych płatności ani drogich planów wymagających szybkiego przeglądu."
         />
       );
     }
@@ -207,14 +212,15 @@ export function SubscriptionReviewQueueScreen() {
               style={[
                 styles.reviewCard,
                 {
-                  backgroundColor: theme.colors.card,
-                  borderColor: decision ? `${theme.colors.primary}55` : theme.colors.border,
+                  backgroundColor: theme.cardBg,
+                  borderColor: decision ? withAlpha(theme.colors.primary, 0.34) : theme.colors.border,
+                  shadowColor: theme.colors.bg,
                 },
               ]}
               onPress={() => navigation.navigate('SubscriptionDetail', { id: item.subscription.id })}
             >
               <View style={styles.reviewTopRow}>
-                <View style={[styles.reviewIcon, { backgroundColor: `${toneColor}1F`, borderColor: `${toneColor}44` }]}>
+                <View style={[styles.reviewIcon, { backgroundColor: withAlpha(toneColor, 0.12), borderColor: withAlpha(toneColor, 0.26) }]}>
                   <Icon size={20} color={toneColor} />
                 </View>
                 <View style={styles.reviewMain}>
@@ -231,7 +237,7 @@ export function SubscriptionReviewQueueScreen() {
               </View>
 
               <View style={styles.reviewMetaRow}>
-                <Text style={[styles.metaPill, { color: toneColor, borderColor: `${toneColor}55`, backgroundColor: `${toneColor}14` }]}>
+                <Text style={[styles.metaPill, { color: toneColor, borderColor: withAlpha(toneColor, 0.3), backgroundColor: withAlpha(toneColor, 0.09) }]}>
                   {item.meta}
                 </Text>
                 <Text style={[styles.amountText, { color: theme.colors.text }]}>
@@ -240,7 +246,7 @@ export function SubscriptionReviewQueueScreen() {
               </View>
 
               {decision ? (
-                <View style={[styles.decisionDone, { backgroundColor: `${theme.colors.primary}16`, borderColor: `${theme.colors.primary}44` }]}>
+                <View style={[styles.decisionDone, { backgroundColor: withAlpha(theme.colors.primary, 0.1), borderColor: withAlpha(theme.colors.primary, 0.28) }]}>
                   <CheckCircle2 size={16} color={theme.colors.primary} />
                   <Text style={[styles.decisionDoneText, { color: theme.colors.primary }]}>
                     {decision === 'keep' ? 'Oznaczono: zostawiam' : decision === 'cancel' ? 'Oznaczono: do anulowania' : 'Oznaczono: sprawdzę później'}
@@ -249,7 +255,7 @@ export function SubscriptionReviewQueueScreen() {
               ) : (
                 <View style={styles.actionsRow}>
                   <PressableScale
-                    style={[styles.actionButton, { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}44` }]}
+                    style={[styles.actionButton, { backgroundColor: withAlpha(theme.colors.primary, 0.1), borderColor: withAlpha(theme.colors.primary, 0.28) }]}
                     onPress={(event) => {
                       event.stopPropagation();
                       setDecision(item.id, 'keep');
@@ -259,7 +265,7 @@ export function SubscriptionReviewQueueScreen() {
                     <Text style={[styles.actionText, { color: theme.colors.primary }]}>Zostawiam</Text>
                   </PressableScale>
                   <PressableScale
-                    style={[styles.actionButton, { backgroundColor: 'rgba(255,77,109,0.13)', borderColor: 'rgba(255,77,109,0.38)' }]}
+                    style={[styles.actionButton, { backgroundColor: withAlpha(theme.colors.danger, 0.13), borderColor: withAlpha(theme.colors.danger, 0.38) }]}
                     onPress={(event) => {
                       event.stopPropagation();
                       setDecision(item.id, 'cancel');
@@ -288,11 +294,13 @@ export function SubscriptionReviewQueueScreen() {
   };
 
   return (
-    <LinearGradient colors={theme.gradients.app} style={styles.screen}>
+    <LinearGradient colors={screenGradient} style={styles.screen}>
+      <View style={[styles.glowTop, { backgroundColor: withAlpha(theme.colors.primary, 0.2) }]} />
+      <View style={[styles.glowSide, { backgroundColor: withAlpha(theme.colors.cyan, 0.12) }]} />
       <SafeAreaView style={styles.safeArea}>
         <View style={styles.header}>
           <PressableScale
-            style={[styles.backButton, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
+            style={[styles.backButton, { backgroundColor: theme.cardBg, borderColor: theme.colors.border }]}
             onPress={() => goBackOrDashboard(navigation)}
           >
             <ArrowLeft size={22} color={theme.colors.text} />
@@ -308,21 +316,21 @@ export function SubscriptionReviewQueueScreen() {
           contentContainerStyle={styles.content}
           showsVerticalScrollIndicator={false}
         >
-          <LinearGradient colors={theme.gradients.hero} style={[styles.hero, theme.shadows.glow]}>
+          <LinearGradient colors={theme.gradients.primary} style={[styles.hero, theme.shadows.glow, { borderColor: withAlpha(theme.colors.darkText, 0.14), shadowColor: theme.colors.primary }]}>
             <View style={styles.heroTop}>
-              <View style={styles.heroIcon}>
+              <View style={[styles.heroIcon, { backgroundColor: withAlpha(theme.colors.text, 0.86) }]}>
                 <ShieldCheck size={24} color={theme.colors.darkText} />
               </View>
-              <Text style={styles.heroBadge}>{pendingCount} do decyzji</Text>
+              <Text style={[styles.heroBadge, { color: theme.colors.darkText, backgroundColor: withAlpha(theme.colors.text, 0.72) }]}>{pendingCount} do decyzji</Text>
             </View>
-            <Text style={styles.heroTitle}>Szybki przeglad tego, co wymaga Twojej uwagi</Text>
-            <Text style={styles.heroDesc}>
-              Decyzje sa lokalne i pomagaja uporzadkowac priorytety. Nie anulujemy niczego automatycznie.
+            <Text style={[styles.heroTitle, { color: theme.colors.darkText }]}>Szybki przegląd tego, co wymaga Twojej uwagi</Text>
+            <Text style={[styles.heroDesc, { color: withAlpha(theme.colors.darkText, 0.78) }]}>
+              Decyzje są lokalne i pomagają uporządkować priorytety. Nie anulujemy niczego automatycznie.
             </Text>
-            <View style={styles.progressTrack}>
-              <View style={[styles.progressFill, { width: `${Math.max(progress * 100, 4)}%` }]} />
+            <View style={[styles.progressTrack, { backgroundColor: withAlpha(theme.colors.darkText, 0.16) }]}>
+              <View style={[styles.progressFill, { width: `${Math.max(progress * 100, 4)}%`, backgroundColor: theme.colors.darkText }]} />
             </View>
-            <Text style={styles.progressText}>
+            <Text style={[styles.progressText, { color: withAlpha(theme.colors.darkText, 0.82) }]}>
               {doneCount}/{reviewItems.length || 0} oznaczone
             </Text>
           </LinearGradient>
@@ -348,6 +356,23 @@ export function SubscriptionReviewQueueScreen() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+    overflow: 'hidden',
+  },
+  glowTop: {
+    position: 'absolute',
+    top: -150,
+    right: -120,
+    width: 320,
+    height: 320,
+    borderRadius: 160,
+  },
+  glowSide: {
+    position: 'absolute',
+    bottom: 80,
+    left: -150,
+    width: 280,
+    height: 280,
+    borderRadius: 140,
   },
   safeArea: {
     flex: 1,
@@ -393,6 +418,7 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     padding: 22,
     overflow: 'hidden',
+    borderWidth: 1,
   },
   heroTop: {
     flexDirection: 'row',
@@ -404,46 +430,38 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.82)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   heroBadge: {
-    color: '#071017',
     fontSize: 12,
     fontWeight: '900',
-    backgroundColor: 'rgba(255,255,255,0.72)',
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
     overflow: 'hidden',
   },
   heroTitle: {
-    color: '#FFFFFF',
     fontSize: 25,
     lineHeight: 30,
     fontWeight: '900',
     marginBottom: 10,
   },
   heroDesc: {
-    color: 'rgba(255,255,255,0.82)',
     fontSize: 14,
     lineHeight: 20,
   },
   progressTrack: {
     height: 8,
     borderRadius: 99,
-    backgroundColor: 'rgba(255,255,255,0.24)',
     marginTop: 20,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
     borderRadius: 99,
-    backgroundColor: '#FFFFFF',
   },
   progressText: {
-    color: 'rgba(255,255,255,0.88)',
     fontSize: 12,
     fontWeight: '800',
     marginTop: 8,
@@ -475,6 +493,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     padding: 16,
     gap: 14,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.12,
+    shadowRadius: 20,
+    elevation: 4,
   },
   reviewTopRow: {
     flexDirection: 'row',

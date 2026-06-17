@@ -51,7 +51,7 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
   return {
     score,
     label: score >= 85 ? 'Bardzo dobra' : score >= 70 ? 'Stabilna' : score >= 55 ? 'Wymaga uwagi' : 'Ryzykowna',
-    summary: 'Szacunek lokalny oparty na aktywnych usługach, trialach, zaległościach i liczbie aktywnych planów.',
+    summary: 'Szacunek lokalny oparty na aktywnych usługach, okresach próbnych, zaległościach i liczbie aktywnych planów.',
     metrics: {
       activeSubscriptionsCount: active.length,
       trialsCount: trials,
@@ -70,8 +70,8 @@ function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'
       },
       {
         type: trialsEndingSoon > 0 ? 'negative' : 'positive',
-        title: trialsEndingSoon > 0 ? 'Kończące się triale' : 'Triale pod kontrolą',
-        description: trialsEndingSoon > 0 ? `${trialsEndingSoon} triali kończy się w najbliższych 7 dniach.` : 'Brak triali kończących się w tym tygodniu.',
+        title: trialsEndingSoon > 0 ? 'Kończące się okresy próbne' : 'Okresy próbne pod kontrolą',
+        description: trialsEndingSoon > 0 ? `${trialsEndingSoon} okresów próbnych kończy się w najbliższych 7 dniach.` : 'Brak okresów próbnych kończących się w tym tygodniu.',
         impact: trialsEndingSoon > 0 ? -trialsEndingSoon * 9 : 6,
       },
     ],
@@ -104,10 +104,10 @@ export function HealthScoreDetailsScreen() {
 
   const metricCards = [
     ['Aktywne', health.metrics.activeSubscriptionsCount],
-    ['Triale', health.metrics.trialsCount],
+    ['Okresy próbne', health.metrics.trialsCount],
     ['Zaległe', health.metrics.overdueCount],
     ['Do 7 dni', health.metrics.upcomingPaymentsSoonCount],
-    ['Trial kończy się', health.metrics.trialsEndingSoonCount],
+    ['Okres próbny kończy się', health.metrics.trialsEndingSoonCount],
   ];
 
   const onRefresh = () => {
@@ -159,7 +159,7 @@ export function HealthScoreDetailsScreen() {
             <Text style={[styles.cardTitle, { color: theme.colors.text }]}>Co to jest?</Text>
           </View>
           <Text style={[styles.bodyText, { color: theme.colors.textMuted }]}>
-            Kondycja subskrypcji pokazuje, czy Twoje usługi są pod kontrolą. Im mniej zaległości, kończących się triali, bliskich płatności i nadmiarowych aktywnych planów, tym wyższy wynik.
+            Kondycja subskrypcji pokazuje, czy Twoje usługi są pod kontrolą. Im mniej zaległości, kończących się okresów próbnych, bliskich płatności i nadmiarowych aktywnych planów, tym wyższy wynik.
           </Text>
         </View>
 
@@ -179,7 +179,7 @@ export function HealthScoreDetailsScreen() {
           </View>
           <View style={styles.formulaRow}>
             <Text style={[styles.formulaStrong, { color: theme.colors.primary }]}>100</Text>
-            <Text style={[styles.formulaText, { color: theme.colors.textMuted }]}>minus punkty ryzyka za zaległości, triale do 7 dni, płatności do 7 dni i nadmiar aktywnych planów.</Text>
+            <Text style={[styles.formulaText, { color: theme.colors.textMuted }]}>minus punkty ryzyka za zaległości, okresy próbne do 7 dni, płatności do 7 dni i nadmiar aktywnych planów.</Text>
           </View>
           <View style={[styles.scoreBarTrack, { borderColor: scoreColor }]}>
             <View style={[styles.scoreBarFill, { width: `${health.score}%`, backgroundColor: scoreColor }]} />

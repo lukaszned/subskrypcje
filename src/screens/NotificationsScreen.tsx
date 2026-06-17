@@ -93,7 +93,7 @@ export const NotificationsScreen = React.memo(() => {
               <EmptyState
                 type="calm"
                 title="Brak zaplanowanych alertów"
-                message="Gdy pojawią się płatności albo triale do przypomnienia, zobaczysz je tutaj."
+                message="Gdy pojawią się płatności albo okresy próbne do przypomnienia, zobaczysz je tutaj."
               />
             ) : (
               items.map((item) => (

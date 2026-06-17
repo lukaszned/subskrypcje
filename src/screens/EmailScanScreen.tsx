@@ -1328,7 +1328,7 @@ export const EmailScanScreen = () => {
         <ShieldCheck size={20} color={theme.colors.primary} />
         <Text style={styles.privacyTitle}>Prywatne skanowanie</Text>
       </View>
-      <Text style={styles.privacyText}>Skanujemy tylko wiadomości wyglądające jak rachunki, triale, odnowienia lub subskrypcje.</Text>
+      <Text style={styles.privacyText}>Skanujemy tylko wiadomości wyglądające jak rachunki, okresy próbne, odnowienia lub subskrypcje.</Text>
       <Text style={styles.privacyText}>Nie zapisujemy pełnej treści maili i nie tworzymy subskrypcji automatycznie.</Text>
       <Text style={styles.privacyText}>To Ty zatwierdzasz, co ma zostać dodane.</Text>
     </View>
@@ -1511,7 +1511,7 @@ export const EmailScanScreen = () => {
           <View style={styles.detectionMain}>
             <Text style={styles.detectionName} numberOfLines={1}>{item.name || item.provider || 'Nieznana subskrypcja'}</Text>
             <Text style={styles.detectionMeta}>
-              {item.isTrial ? 'Trial' : 'Pozycja'} · Pewność {confidence}%
+              {item.isTrial ? 'Okres próbny' : 'Pozycja'} · Pewność {confidence}%
             </Text>
           </View>
         </View>
@@ -1520,7 +1520,7 @@ export const EmailScanScreen = () => {
           <View style={styles.dateRow}>
             <Clock size={16} color={theme.colors.warning} />
             <Text style={[styles.dateRowText, { color: theme.colors.warning }]}>
-              {trialDate ? `Koniec triala: ${trialDate}` : `Następna płatność: ${nextDate}`}
+              {trialDate ? `Koniec okresu próbnego: ${trialDate}` : `Następna płatność: ${nextDate}`}
             </Text>
           </View>
         )}
@@ -2421,7 +2421,7 @@ export const EmailScanScreen = () => {
             {selectedDetection?.isTrial && selectedDetection.trialEndDate && (
               <View style={styles.trialInfo}>
                 <AlertCircle size={16} color={theme.colors.warning} />
-                <Text style={styles.trialInfoText}>Wykryto trial do {formatDate(selectedDetection.trialEndDate)}.</Text>
+                <Text style={styles.trialInfoText}>Wykryto okres próbny do {formatDate(selectedDetection.trialEndDate)}.</Text>
               </View>
             )}
 

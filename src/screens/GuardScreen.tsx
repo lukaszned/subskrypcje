@@ -148,7 +148,7 @@ export const GuardScreen = () => {
         trials.push({
           id: `trial-${subscription.id}`,
           title: subscription.name,
-          desc: `Trial kończy się ${formatRelativeDay(subscription.trialEndDate).toLowerCase()}`,
+          desc: `Okres próbny kończy się ${formatRelativeDay(subscription.trialEndDate).toLowerCase()}`,
           severity: trialDays <= 1 ? 'critical' : 'warning',
           subscriptionId: subscription.id,
         });
@@ -276,7 +276,7 @@ export const GuardScreen = () => {
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: theme.colors.text }]}>Sub-Sentry Guard</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Pilot bezpieczeństwa triali i płatności</Text>
+          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Pilot bezpieczeństwa okresów próbnych i płatności</Text>
         </View>
       </View>
 
@@ -316,7 +316,7 @@ export const GuardScreen = () => {
           <View style={styles.heroMetrics}>
             <View style={styles.heroMetric}>
               <Text style={styles.heroMetricValue}>{guardData.trials.length}</Text>
-              <Text style={styles.heroMetricLabel}>triale</Text>
+              <Text style={styles.heroMetricLabel}>okresy próbne</Text>
             </View>
             <View style={styles.heroMetric}>
               <Text style={styles.heroMetricValue}>{guardData.dueSoon.length}</Text>
@@ -335,16 +335,16 @@ export const GuardScreen = () => {
           </View>
           <View style={styles.paywallBody}>
             <Text style={[styles.paywallTitle, { color: theme.colors.text }]}>Guard jako pakiet za 5 zł / mies.</Text>
-            <Text style={[styles.paywallDesc, { color: theme.colors.textMuted }]}>Triale, radar płatności i price watch w jednym miejscu.</Text>
+            <Text style={[styles.paywallDesc, { color: theme.colors.textMuted }]}>Okresy próbne, radar płatności i price watch w jednym miejscu.</Text>
           </View>
         </View>
 
         {renderSection(
-          'Trial Guard',
-          'Najbliższe triale, które mogą zamienić się w płatność',
+          'Strażnik okresów próbnych',
+          'Najbliższe okresy próbne, które mogą zamienić się w płatność',
           Clock,
           guardData.trials,
-          'Brak triali kończących się w najbliższych 7 dniach.'
+          'Brak okresów próbnych kończących się w najbliższych 7 dniach.'
         )}
 
         {renderSection(

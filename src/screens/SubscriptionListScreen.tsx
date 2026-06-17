@@ -37,6 +37,7 @@ import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS, SubscriptionStatus
 import SubscriptionListItem from './SubscriptionListItem';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
+import { withAlpha } from '../theme/themeUtils';
 import { daysUntilDate, parseAppDate } from '../utils/date';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
@@ -71,8 +72,8 @@ const showActionError = (error: unknown, fallback: string) => {
 const STATUS_TABS: Array<{ id: SubscriptionStatus | 'all' | 'seasonal'; label: string }> = [
   { id: 'all', label: 'Wszystkie' },
   { id: 'pending', label: 'Aktywne' },
-  { id: 'paid', label: 'OpĹ‚acone' },
-  { id: 'overdue', label: 'ZalegĹ‚e' },
+  { id: 'paid', label: 'Opłacone' },
+  { id: 'overdue', label: 'Zaległe' },
   { id: 'seasonal', label: 'Sezonowe' },
   { id: 'canceled', label: 'Anulowane' },
 ];
@@ -231,7 +232,7 @@ export const SubscriptionListScreen = () => {
         title={searchQuery ? 'Nie ma takiej subskrypcji' : 'Nie masz jeszcze żadnych subskrypcji'}
         message={searchQuery
           ? 'Zmień filtr albo wyszukaj po nazwie usługi, planu lub kategorii.'
-          : 'Dodaj pierwszą, a Sub-Sentry pokaże płatności, triale i miesięczny koszt w jednym miejscu.'}
+          : 'Dodaj pierwszą, a Sub-Sentry pokaże płatności, okresy próbne i miesięczny koszt w jednym miejscu.'}
         actionLabel={!searchQuery && activeStatus === 'all' ? 'Dodaj subskrypcję' : undefined}
         onAction={!searchQuery && activeStatus === 'all' ? () => navigation.navigate('AddSubscription') : undefined}
       />
@@ -282,7 +283,7 @@ export const SubscriptionListScreen = () => {
           <Text style={styles.pulseTitle}>{portfolioStats.monthlyTotal.toFixed(2)} {portfolioStats.currency} / mc</Text>
         </View>
         {isFetching && !isLoading && (
-          <View style={styles.syncPill}>
+          <View style={[styles.syncPill, { backgroundColor: withAlpha(theme.colors.text, 0.06), borderColor: theme.colors.border }]}>
             <ActivityIndicator size="small" color={theme.colors.primary} />
             <Text style={styles.syncPillText}>Odświeżam</Text>
           </View>
@@ -307,7 +308,9 @@ export const SubscriptionListScreen = () => {
     portfolioStats.currency,
     portfolioStats.dueSoon,
     portfolioStats.monthlyTotal,
+    theme.colors.border,
     theme.colors.primary,
+    theme.colors.text,
   ]);
 
   const keyExtractor = useCallback((item: Subscription) => item.id, []);
@@ -329,7 +332,7 @@ export const SubscriptionListScreen = () => {
           ) : (
             <View style={styles.headerSpacer} />
           )}
-          <View style={[styles.searchContainer, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <View style={[styles.searchContainer, { backgroundColor: withAlpha(theme.colors.text, 0.07), borderColor: theme.colors.border }]}>
             <Search size={20} color={theme.colors.textMuted} style={styles.searchIcon} />
             <TextInput
               style={[styles.searchInput, { color: theme.colors.text }]}
@@ -340,7 +343,7 @@ export const SubscriptionListScreen = () => {
             />
           </View>
           <PressableScale
-            style={[styles.sortButton, { flexDirection: 'row', width: 'auto', paddingHorizontal: 12 }]}
+            style={[styles.sortButton, { flexDirection: 'row', width: 'auto', paddingHorizontal: 12, backgroundColor: withAlpha(theme.colors.text, 0.07), borderColor: theme.colors.border }]}
             onPress={toggleSort}
           >
             <ArrowUpDown size={18} color={theme.colors.primary} style={{ marginRight: 6 }} />
@@ -362,7 +365,7 @@ export const SubscriptionListScreen = () => {
             {STATUS_TABS.map(tab => (
               <PressableScale
                 key={tab.id}
-                style={[styles.statusTab, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, activeStatus === tab.id && { backgroundColor: `${theme.colors.primary}2E`, borderColor: theme.colors.primary }]}
+                style={[styles.statusTab, { backgroundColor: withAlpha(theme.colors.text, 0.07), borderColor: theme.colors.border }, activeStatus === tab.id && { backgroundColor: withAlpha(theme.colors.primary, 0.18), borderColor: theme.colors.primary }]}
                 onPress={() => handleStatusChange(tab.id)}
               >
                 <Text style={[styles.statusTabText, { color: theme.colors.textMuted }, activeStatus === tab.id && { color: theme.colors.primary }]}>
@@ -407,7 +410,6 @@ const styles = StyleSheet.create({
   filterSection: { paddingBottom: 16 },
   statusTabs: { paddingHorizontal: 20, gap: 10 },
   statusTab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 16, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  statusTabActive: { backgroundColor: 'rgba(255,255,255,0.18)', borderColor: vibrantTheme.colors.primary },
   statusTabText: { fontSize: 13, fontWeight: '700', color: vibrantTheme.colors.textMuted },
   statusTabTextActive: { color: vibrantTheme.colors.primary },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
@@ -442,7 +444,6 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
-    backgroundColor: 'rgba(255,255,255,0.06)',
     paddingHorizontal: 10,
     paddingVertical: 7,
   },

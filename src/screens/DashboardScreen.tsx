@@ -1349,8 +1349,8 @@ export const DashboardScreen = () => {
       const nextTrial = trialsData.items[0];
       list.push({
         id: 'trial',
-        title: 'Trial kończy się wkrótce',
-        desc: `Trial ${nextTrial.name} kończy się za ${formatDays(nextTrial.daysLeft)}.`,
+        title: 'Okres próbny kończy się wkrótce',
+        desc: `Okres próbny ${nextTrial.name} kończy się za ${formatDays(nextTrial.daysLeft)}.`,
         icon: Clock,
         color: theme.warning
       });
@@ -1581,7 +1581,7 @@ export const DashboardScreen = () => {
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
             <Text style={[dynamicStyles.statValue, { color: theme.warning }]}>{summaryData?.trialsCount ?? 0}</Text>
-            <Text style={dynamicStyles.statLabel}>Triale</Text>
+            <Text style={dynamicStyles.statLabel}>Okresy próbne</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
             <Text style={[dynamicStyles.statValue, { color: theme.error }]}>{summaryData?.overdueCount ?? 0}</Text>
@@ -1716,7 +1716,7 @@ export const DashboardScreen = () => {
             </Text>
           </View>
           <Text style={dynamicStyles.upcomingName} numberOfLines={1}>{item.name}</Text>
-          <Text style={dynamicStyles.upcomingAmount}>Koniec triala</Text>
+          <Text style={dynamicStyles.upcomingAmount}>Koniec okresu próbnego</Text>
         </View>
       </TouchableOpacity>
     );
@@ -1775,7 +1775,7 @@ export const DashboardScreen = () => {
                 Widzisz pełen obraz subskrypcji?
               </Text>
               <Text style={{ fontSize: 13, color: theme.textDim, lineHeight: 20 }}>
-                Dodaj wszystkie cykliczne usługi, triale i płatności, aby zobaczyć trend kosztów i łatwiej znaleźć miejsca do oszczędzania.
+                Dodaj wszystkie cykliczne usługi, okresy próbne i płatności, aby zobaczyć trend kosztów i łatwiej znaleźć miejsca do oszczędzania.
               </Text>
             </View>
           </View>
@@ -1930,7 +1930,7 @@ export const DashboardScreen = () => {
       <Text style={dynamicStyles.widgetTitle}>Twoje Subskrypcje</Text>
       <Text style={dynamicStyles.subscriptionMetric}>{summaryData?.activeSubscriptionsCount ?? 0}</Text>
       <Text style={dynamicStyles.widgetCaption}>
-        {summaryData?.trialsCount ?? 0} triali · {overdueCount} zaległych
+        {summaryData?.trialsCount ?? 0} okresów próbnych · {overdueCount} zaległych
       </Text>
     </TouchableOpacity>
   );
@@ -2011,7 +2011,7 @@ export const DashboardScreen = () => {
         </View>
         <Text style={dynamicStyles.widgetTitle}>Guard</Text>
         <Text style={dynamicStyles.subscriptionMetric}>{riskCount}</Text>
-        <Text style={dynamicStyles.widgetCaption}>triale i ryzyka do pilnowania</Text>
+        <Text style={dynamicStyles.widgetCaption}>okresy próbne i ryzyka do pilnowania</Text>
       </TouchableOpacity>
     );
   };
@@ -2039,7 +2039,7 @@ export const DashboardScreen = () => {
         id: 'guard',
         icon: ShieldCheck,
         title: 'Guard wykrył ryzyko',
-        desc: `${riskCount} rzeczy wymaga uwagi: triale, zaległości albo nadchodzące płatności.`,
+        desc: `${riskCount} rzeczy wymaga uwagi: okresy próbne, zaległości albo nadchodzące płatności.`,
         cta: 'Otwórz Guard',
         onPress: () => navigation.navigate('Guard'),
       } : {
@@ -2194,9 +2194,9 @@ export const DashboardScreen = () => {
       nextTrial ? {
         id: 'trial',
         icon: Clock,
-        title: 'Trial radar',
+        title: 'Radar okresu próbnego',
         desc: `${nextTrial.name} kończy się za ${formatDays(nextTrial.daysLeft)}. To dobry moment na decyzję.`,
-        cta: 'Sprawdź trial',
+        cta: 'Sprawdź okres próbny',
         onPress: () => navigation.navigate('SubscriptionDetail', { id: nextTrial.id }),
       } : {
         id: 'email-scan',
