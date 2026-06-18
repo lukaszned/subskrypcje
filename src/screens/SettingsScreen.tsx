@@ -241,9 +241,6 @@ export const SettingsScreen = () => {
       <View style={styles.profileInfo}>
         <Text style={styles.profileName}>{user?.email?.split('@')[0] || 'Użytkownik'}</Text>
         <Text style={[styles.profileEmail, { color: theme.colors.textMuted }]}>{user?.email || 'brak email'}</Text>
-        <View style={[styles.badge, { backgroundColor: `${theme.colors.primary}22`, borderColor: theme.colors.primary }]}>
-          <Text style={[styles.badgeText, { color: theme.colors.primary }]}>Plan Premium</Text>
-        </View>
       </View>
     </View>
   );
@@ -289,9 +286,6 @@ export const SettingsScreen = () => {
               </View>
               <View style={styles.settingTextBlock}>
                 <Text style={[styles.settingTitle, { color: theme.colors.text }]}>Motyw kolorystyczny</Text>
-                <Text style={[styles.settingDesc, { color: theme.colors.textMuted }]}>
-                  Premium Glassmorphism & Glow w wybranej palecie
-                </Text>
               </View>
             </View>
             <View style={styles.themePickerRow}>
@@ -407,7 +401,12 @@ export const SettingsScreen = () => {
             <Switch
               value={notifsEnabled}
               onValueChange={setNotifsEnabled}
-              trackColor={{ false: '#DDE6DF', true: theme.colors.primary }}
+              trackColor={{
+                false: theme.colors.borderStrong,
+                true: withAlpha(theme.colors.primary, 0.45),
+              }}
+              thumbColor={notifsEnabled ? theme.colors.primary : theme.colors.textMuted}
+              ios_backgroundColor={theme.colors.borderStrong}
             />
           </View>
 
@@ -747,22 +746,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: vibrantTheme.colors.textMuted,
     marginTop: 2,
-  },
-  badge: {
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.14)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    marginTop: 8,
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.primary,
-  },
-  badgeText: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: vibrantTheme.colors.primary,
-    textTransform: 'uppercase',
   },
   footer: { marginTop: 20, marginBottom: 40, alignItems: 'center' },
   versionText: { fontSize: 13, fontWeight: '600', color: '#94A3B8' },
