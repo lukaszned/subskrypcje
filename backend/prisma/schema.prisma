@@ -1,0 +1,271 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SubscriptionCategory {
+  entertainment
+  utilities
+  shopping
+  health
+  education
+  productivity
+  finance
+  transport
+  other
+}
+
+enum BillingCycle {
+  monthly
+  yearly
+  weekly
+  one_time
+  custom
+}
+
+enum SubscriptionStatus {
+  pending
+  paid
+  overdue
+  canceled
+}
+
+enum SubscriptionEventType {
+  created
+  updated
+  paid
+  canceled
+}
+
+enum CancelDifficulty {
+  easy
+  medium
+  hard
+}
+
+enum CancelGuideRequestStatus {
+  pending
+  reviewed
+  added
+  ignored
+}
+
+enum EmailProvider {
+  gmail
+}
+
+enum DetectedSubscriptionStatus {
+  pending
+  accepted
+  ignored
+  duplicate
+}
+
+model User {
+  id                  String                 @id @default(cuid())
+  email               String                 @unique
+  name                String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+
+  subscriptions       Subscription[]
+  settings            UserSettings?
+  payments            SubscriptionPayment[]
+  events              SubscriptionEvent[]
+  cancelGuideRequests CancelGuideRequest[]
+  emailConnections    EmailConnection[]
+  detectedSubscriptions DetectedSubscription[]
+}
+
+model UserSettings {
+  id                        String   @id @default(cuid())
+  userId                    String   @unique
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  baseCurrency              String   @default("PLN")
+  defaultReminderDaysBefore Int      @default(2)
+  notificationsEnabled      Boolean  @default(true)
+  emailReportsEnabled       Boolean  @default(false)
+  monthlyIncome             Decimal? @db.Decimal(12, 2)
+  incomeCurrency            String   @default("PLN")
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Subscription {
+  id                 String               @id @default(cuid())
+  name               String
+  provider           String?
+  planName           String?
+  amount             Decimal              @db.Decimal(10, 2)
+  currency           String               @default("PLN")
+  category           SubscriptionCategory
+  billingCycle       BillingCycle
+  nextPaymentDate    DateTime
+  lastPaymentDate    DateTime?
+  trialEndDate       DateTime?
+  isTrial            Boolean              @default(false)
+  isRecurringBill    Boolean              @default(true)
+  reminderDaysBefore Int                  @default(1)
+  paymentMethodLabel String?
+  cancelUrl          String?
+  notes              String?
+  status             SubscriptionStatus   @default(pending)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+
+  userId             String
+  user               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments           SubscriptionPayment[]
+  events             SubscriptionEvent[]
+  cancelGuideRequests CancelGuideRequest[]
+  detectedSources    DetectedSubscription[]
+
+  @@index([userId])
+  @@index([nextPaymentDate])
+  @@index([provider])
+}
+
+model EmailConnection {
+  id                    String   @id @default(cuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider              EmailProvider
+  email                 String
+  accessTokenEncrypted  String?
+  refreshTokenEncrypted String?
+  scope                 String
+  connectedAt           DateTime @default(now())
+  lastScanAt            DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  detectedSubscriptions DetectedSubscription[]
+
+  @@unique([userId, provider, email])
+  @@index([userId])
+  @@index([provider])
+  @@index([lastScanAt])
+}
+
+model DetectedSubscription {
+  id                     String                     @id @default(cuid())
+  userId                 String
+  user                   User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  emailConnectionId      String?
+  emailConnection        EmailConnection?           @relation(fields: [emailConnectionId], references: [id], onDelete: SetNull)
+
+  sourceProvider         EmailProvider
+  sourceMessageId        String?
+
+  provider               String?
+  name                   String
+  amount                 Decimal?                   @db.Decimal(10, 2)
+  currency               String?
+  billingCycle           BillingCycle?
+  nextPaymentDate        DateTime?
+  trialEndDate           DateTime?
+  isTrial                Boolean                    @default(false)
+  category               SubscriptionCategory?
+  confidence             Decimal                    @db.Decimal(4, 3)
+
+  status                 DetectedSubscriptionStatus @default(pending)
+  evidenceSnippet        String?
+
+  acceptedSubscriptionId String?
+  acceptedSubscription   Subscription?              @relation(fields: [acceptedSubscriptionId], references: [id], onDelete: SetNull)
+
+  createdAt              DateTime                   @default(now())
+  updatedAt              DateTime                   @updatedAt
+
+  @@unique([userId, sourceProvider, sourceMessageId])
+  @@index([userId, status])
+  @@index([emailConnectionId])
+  @@index([provider])
+  @@index([createdAt])
+  @@index([acceptedSubscriptionId])
+}
+
+model SubscriptionPayment {
+  id                      String        @id @default(cuid())
+  subscriptionId          String
+  subscription            Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  userId                  String
+  user                    User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amount                  Decimal       @db.Decimal(12, 2)
+  currency                String
+  billingCycle            BillingCycle
+  paidAt                  DateTime      @default(now())
+  previousNextPaymentDate DateTime?
+  nextPaymentDateAfter    DateTime?
+  createdAt               DateTime      @default(now())
+
+  @@index([subscriptionId, paidAt])
+  @@index([userId, paidAt])
+}
+
+model SubscriptionEvent {
+  id             String                @id @default(cuid())
+  subscriptionId String
+  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type           SubscriptionEventType
+  payload        Json?
+  createdAt      DateTime              @default(now())
+
+  @@index([subscriptionId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model ProviderCancelGuide {
+  id                    String               @id @default(cuid())
+  providerName          String
+  providerSlug          String               @unique
+  category              SubscriptionCategory
+  logoKey               String?
+  cancelUrl             String?
+  supportUrl            String?
+  difficulty            CancelDifficulty     @default(medium)
+  estimatedTimeMinutes  Int                  @default(5)
+  instructions          String[]
+  notes                 String?
+  matchingKeywords      String[]
+  isActive              Boolean              @default(true)
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+
+  @@index([providerSlug])
+  @@index([category])
+  @@index([isActive])
+}
+
+model CancelGuideRequest {
+  id               String                   @id @default(cuid())
+  userId           String
+  subscriptionId   String
+
+  subscriptionName String
+  provider         String?
+  providerSlug     String?
+
+  status           CancelGuideRequestStatus @default(pending)
+
+  createdAt        DateTime                 @default(now())
+  updatedAt        DateTime                 @updatedAt
+
+  user             User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription     Subscription             @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([providerSlug])
+}
