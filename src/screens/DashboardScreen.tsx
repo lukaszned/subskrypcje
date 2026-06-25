@@ -34,8 +34,9 @@ import {
   CalendarDays,
   Sparkles,
   ShieldCheck,
+  Menu,
 } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 
 // App imports
@@ -70,6 +71,7 @@ import {
   buildUpcomingPaymentsFromSubscriptions,
   getCountedMonthlyTotal,
 } from '../utils/subscriptionCalculations';
+import { getEffectiveNextPaymentDate } from '../utils/subscriptionSchedule';
 
 const { width } = Dimensions.get('window');
 
@@ -266,7 +268,17 @@ export const DashboardScreen = () => {
     (countedCurrencies[0] || baseCurrency) === baseCurrency;
   const monthlyTotal = canUseLocalMonthlyTotal ? localMonthlyTotal : summaryMonthlyTotal;
   const yearlyTotal = monthlyTotal * 12;
-  const overdueCount = summaryData?.overdueCount ?? 0;
+  const localOverdueCount = useMemo(
+    () => subscriptions
+      .filter((subscription) => subscription.status !== 'canceled' && subscription.includeInStats !== false)
+      .filter((subscription) => {
+        if (subscription.status === 'overdue') return true;
+        const daysLeft = daysUntilDate(getEffectiveNextPaymentDate(subscription));
+        return daysLeft !== null && daysLeft < 0;
+      }).length,
+    [subscriptions]
+  );
+  const overdueCount = subscriptions.length > 0 ? localOverdueCount : summaryData?.overdueCount ?? 0;
   const averagePerService = summaryData?.activeSubscriptionsCount && summaryData.activeSubscriptionsCount > 0
     ? monthlyTotal / summaryData.activeSubscriptionsCount
     : 0;
@@ -491,7 +503,7 @@ export const DashboardScreen = () => {
       flexDirection: 'row',
       alignItems: 'center',
       backgroundColor: `${theme.primary}18`,
-      borderRadius: 18,
+      borderRadius: 10,
       padding: 14,
       marginBottom: 16,
       borderWidth: 1,
@@ -511,7 +523,7 @@ export const DashboardScreen = () => {
     },
     headerCard: {
       backgroundColor: theme.card,
-      borderRadius: 24,
+      borderRadius: 12,
       padding: 24,
       marginBottom: 24,
     },
@@ -594,7 +606,7 @@ export const DashboardScreen = () => {
       alignItems: 'center',
       justifyContent: 'space-between',
       backgroundColor: isDark ? theme.card : withAlpha(theme.primary, 0.12),
-      borderRadius: 16,
+      borderRadius: 10,
       padding: 16,
       marginTop: 20,
       borderWidth: 1,
@@ -663,7 +675,7 @@ export const DashboardScreen = () => {
     upcomingCard: {
       width: 150,
       backgroundColor: theme.card,
-      borderRadius: 20,
+      borderRadius: 12,
       padding: 16,
       borderWidth: 1,
       borderColor: theme.border,
@@ -718,7 +730,7 @@ export const DashboardScreen = () => {
     },
     breakdownCard: {
       backgroundColor: theme.card,
-      borderRadius: 20,
+      borderRadius: 12,
       padding: 20,
       borderWidth: 1,
       borderColor: theme.border,
@@ -767,7 +779,7 @@ export const DashboardScreen = () => {
     },
     trendsCard: {
       backgroundColor: theme.card,
-      borderRadius: 20,
+      borderRadius: 12,
       padding: 20,
       borderWidth: 1,
       borderColor: theme.border,
@@ -796,7 +808,7 @@ export const DashboardScreen = () => {
     },
     savingsCard: {
       backgroundColor: `${theme.primary}14`,
-      borderRadius: 20,
+      borderRadius: 12,
       padding: 20,
       marginBottom: 24,
       borderWidth: 1,
@@ -875,7 +887,7 @@ export const DashboardScreen = () => {
     },
     budgetCard: {
       backgroundColor: theme.card,
-      borderRadius: 24,
+      borderRadius: 12,
       padding: 20,
       marginBottom: 24,
       borderWidth: 1,
@@ -923,7 +935,7 @@ export const DashboardScreen = () => {
     insightCard: {
       width: 240,
       backgroundColor: theme.card,
-      borderRadius: 20,
+      borderRadius: 12,
       padding: 16,
       borderLeftWidth: 4,
       shadowColor: theme.background,
@@ -950,7 +962,7 @@ export const DashboardScreen = () => {
     },
     healthCard: {
       backgroundColor: theme.card,
-      borderRadius: 24,
+      borderRadius: 12,
       padding: 20,
       borderLeftWidth: 6,
       marginBottom: 24,
@@ -963,7 +975,7 @@ export const DashboardScreen = () => {
     scoreCircle: {
       width: 56,
       height: 56,
-      borderRadius: 28,
+      borderRadius: 12,
       borderWidth: 3,
       alignItems: 'center',
       justifyContent: 'center',
@@ -987,7 +999,7 @@ export const DashboardScreen = () => {
     },
     activityCard: {
       backgroundColor: theme.card,
-      borderRadius: 24,
+      borderRadius: 12,
       padding: 12,
       marginBottom: 24,
       borderWidth: 1,
@@ -1063,7 +1075,7 @@ export const DashboardScreen = () => {
     topIconButton: {
       width: 42,
       height: 42,
-      borderRadius: 21,
+      borderRadius: 10,
       backgroundColor: theme.card,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1080,7 +1092,7 @@ export const DashboardScreen = () => {
       gap: 10,
     },
     heroDashboardCard: {
-      borderRadius: 28,
+      borderRadius: 12,
       padding: 24,
       marginBottom: 18,
       shadowColor: theme.primary,
@@ -1122,7 +1134,7 @@ export const DashboardScreen = () => {
     heroMetaPill: {
       flex: 1,
       backgroundColor: withAlpha(appTheme.colors.text, 0.12),
-      borderRadius: 16,
+      borderRadius: 10,
       padding: 12,
     },
     heroMetaValue: {
@@ -1144,7 +1156,7 @@ export const DashboardScreen = () => {
     },
     widgetCard: {
       backgroundColor: theme.card,
-      borderRadius: 22,
+      borderRadius: 12,
       padding: 18,
       shadowColor: theme.background,
       shadowOffset: { width: 0, height: 10 },
@@ -1170,7 +1182,7 @@ export const DashboardScreen = () => {
     widgetIcon: {
       width: 42,
       height: 42,
-      borderRadius: 15,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: `${theme.primary}21`,
@@ -1248,7 +1260,7 @@ export const DashboardScreen = () => {
     },
     insightStrip: {
       backgroundColor: theme.card,
-      borderRadius: 22,
+      borderRadius: 12,
       padding: 18,
       marginBottom: 18,
       shadowColor: theme.background,
@@ -1272,7 +1284,7 @@ export const DashboardScreen = () => {
     },
     decisionCard: {
       backgroundColor: theme.card,
-      borderRadius: 22,
+      borderRadius: 12,
       padding: 16,
       borderWidth: 1,
       borderColor: theme.border,
@@ -1283,7 +1295,7 @@ export const DashboardScreen = () => {
     decisionAccent: {
       width: 46,
       height: 46,
-      borderRadius: 16,
+      borderRadius: 10,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: `${theme.primary}24`,
@@ -1317,7 +1329,7 @@ export const DashboardScreen = () => {
       right: 24,
       width: 60,
       height: 60,
-      borderRadius: 30,
+      borderRadius: 12,
       backgroundColor: theme.primary,
       alignItems: 'center',
       justifyContent: 'center',
@@ -1584,7 +1596,7 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.statLabel}>Okresy próbne</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: theme.error }]}>{summaryData?.overdueCount ?? 0}</Text>
+            <Text style={[dynamicStyles.statValue, { color: theme.error }]}>{overdueCount}</Text>
             <Text style={dynamicStyles.statLabel}>Zaległe</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
@@ -1831,6 +1843,14 @@ export const DashboardScreen = () => {
 
   const renderMenuHeader = () => (
     <View style={dynamicStyles.menuHeader}>
+      <TouchableOpacity
+        style={dynamicStyles.topIconButton}
+        onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+        accessibilityRole="button"
+        accessibilityLabel="Otwórz menu"
+      >
+        <Menu size={20} color={theme.primary} />
+      </TouchableOpacity>
       <View>
         <Text style={dynamicStyles.menuTitle}>Menu główne</Text>
         <Text style={dynamicStyles.menuSubtitle}>Subskrypcje pod kontrolą</Text>
@@ -1838,9 +1858,6 @@ export const DashboardScreen = () => {
       <View style={dynamicStyles.topActions}>
         <TouchableOpacity style={dynamicStyles.topIconButton} onPress={() => navigation.navigate('Notifications')}>
           <Bell size={19} color={theme.primary} />
-        </TouchableOpacity>
-        <TouchableOpacity style={dynamicStyles.topIconButton} onPress={() => navigation.navigate('Settings')}>
-          <Settings size={19} color={theme.primary} />
         </TouchableOpacity>
       </View>
     </View>

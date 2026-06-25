@@ -246,7 +246,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: vibrantTheme.colors.card,
@@ -256,7 +256,7 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 22, fontWeight: '900', color: vibrantTheme.colors.text },
   content: { padding: 20, paddingBottom: 48 },
   heroCard: {
-    borderRadius: 28,
+    borderRadius: 12,
     padding: 24,
     backgroundColor: vibrantTheme.colors.cardStrong,
     marginBottom: 18,
@@ -264,7 +264,7 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 48,
     height: 48,
-    borderRadius: 16,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.16)',
     alignItems: 'center',
     justifyContent: 'center',
@@ -275,7 +275,7 @@ const styles = StyleSheet.create({
   heroHint: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, marginTop: 10 },
   card: {
     backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 24,
+    borderRadius: 12,
     padding: 20,
     marginBottom: 16,
     shadowColor: '#000000',
@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   cardTitle: { color: vibrantTheme.colors.text, fontSize: 16, fontWeight: '900' },
   chartShell: {
     height: 190,
-    borderRadius: 22,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.05)',
     paddingHorizontal: 12,
     paddingTop: 16,
@@ -389,7 +389,7 @@ const styles = StyleSheet.create({
   savingMetric: {
     flex: 1,
     backgroundColor: 'rgba(52,211,153,0.1)',
-    borderRadius: 18,
+    borderRadius: 10,
     padding: 13,
     borderWidth: 1,
     borderColor: 'rgba(52,211,153,0.18)',
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   beforeAfterTrack: {
-    borderRadius: 18,
+    borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.06)',
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
@@ -432,7 +432,7 @@ const styles = StyleSheet.create({
   },
   simulationCta: {
     height: 46,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: vibrantTheme.colors.primary,

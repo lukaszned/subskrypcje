@@ -26,6 +26,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { daysUntilDate, parseAppDate, startOfLocalDay } from '../utils/date';
 import { parseSubscriptionNotes } from '../utils/subscriptionNotes';
+import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
 
 const DASHBOARD_SUMMARY_CACHE_KEY = 'sub-sentry.dashboard-summary.v1';
 const DASHBOARD_SUMMARY_FAST_CACHE_MS = 2 * 60 * 1000;
@@ -222,16 +223,14 @@ function buildSummaryFromSubscriptions(rawSubscriptions: any[]): DashboardSummar
   );
 
   const upcomingPaymentsCount = countedSubscriptions.filter((subscription) => {
-    if (!subscription.nextPaymentDate) return false;
-    const paymentDate = parseAppDate(subscription.nextPaymentDate);
+    const paymentDate = getEffectiveNextPaymentDate(subscription);
     if (!paymentDate) return false;
     return paymentDate >= today && paymentDate <= upcomingLimit;
   }).length;
 
   const overdueCount = countedSubscriptions.filter((subscription) => {
     if (subscription.status === 'overdue') return true;
-    if (!subscription.nextPaymentDate) return false;
-    const paymentDate = parseAppDate(subscription.nextPaymentDate);
+    const paymentDate = getEffectiveNextPaymentDate(subscription);
     return paymentDate ? paymentDate < today : false;
   }).length;
 
@@ -256,6 +255,7 @@ function normalizeSubscriptions(rawSubscriptions: any[]): Subscription[] {
       isShared: subscription?.isShared ?? parsedNotes.isShared,
       peopleCount: subscription?.peopleCount ?? parsedNotes.peopleCount,
       includeInStats: subscription?.includeInStats ?? parsedNotes.includeInStats ?? true,
+      isRecurringBill: subscription?.isRecurringBill ?? true,
       reminderDaysBefore: Number(subscription?.reminderDaysBefore ?? 2),
     };
   }) as Subscription[];
@@ -278,13 +278,13 @@ function buildUpcomingFromSubscriptions(subscriptions: Subscription[], days: num
   const items = subscriptions
     .filter((subscription) => {
       if (subscription.status === 'canceled' || !subscription.nextPaymentDate) return false;
-      const paymentDate = parseAppDate(subscription.nextPaymentDate);
+      const paymentDate = getEffectiveNextPaymentDate(subscription);
       if (!paymentDate) return false;
       return paymentDate >= today && paymentDate <= limit;
     })
     .sort((a, b) => {
-      const first = parseAppDate(a.nextPaymentDate)?.getTime() ?? 0;
-      const second = parseAppDate(b.nextPaymentDate)?.getTime() ?? 0;
+      const first = getEffectiveNextPaymentDate(a)?.getTime() ?? 0;
+      const second = getEffectiveNextPaymentDate(b)?.getTime() ?? 0;
       return first - second;
     })
     .map((subscription) => ({
@@ -294,7 +294,7 @@ function buildUpcomingFromSubscriptions(subscriptions: Subscription[], days: num
       planName: subscription.planName,
       amount: Number(subscription.amount || 0),
       currency: subscription.currency,
-      nextPaymentDate: subscription.nextPaymentDate || '',
+      nextPaymentDate: getEffectiveNextPaymentDateString(subscription) || '',
       status: subscription.status,
       isTrial: subscription.isTrial,
       reminderDaysBefore: subscription.reminderDaysBefore,

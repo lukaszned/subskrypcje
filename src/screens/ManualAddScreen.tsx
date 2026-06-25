@@ -14,13 +14,13 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  TouchableWithoutFeedback,
   Keyboard,
   Alert,
   Animated,
   Easing,
   ActivityIndicator,
   LayoutAnimation,
+  InteractionManager,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -365,6 +365,9 @@ export const ManualAddScreen = () => {
     }
     
     Keyboard.dismiss();
+    InteractionManager.runAfterInteractions(() => {
+      scrollToForm(360);
+    });
   };
 
   const hasNameError = isSubmitted && name.trim().length === 0;
@@ -563,6 +566,12 @@ export const ManualAddScreen = () => {
     }
   };
 
+  const handleFastSaveSelectedPlan = () => {
+    Keyboard.dismiss();
+    if (isLoading) return;
+    handleSave();
+  };
+
   useEffect(() => {
     handleSaveRef.current = handleSave;
   }, [handleSave]);
@@ -635,9 +644,11 @@ export const ManualAddScreen = () => {
 
     const scrollViewRef = useRef<ScrollView>(null);
   
-    const scrollToForm = () => {
+    const scrollToForm = (y = 150) => {
       if (scrollViewRef.current) {
-        scrollViewRef.current.scrollTo({ y: 150, animated: true });
+        requestAnimationFrame(() => {
+          scrollViewRef.current?.scrollTo({ y, animated: true });
+        });
       }
     };
 
@@ -674,8 +685,7 @@ export const ManualAddScreen = () => {
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-            <View style={styles.inner}>
+          <View style={styles.inner}>
               <View style={styles.header}>
                 <TouchableOpacity style={styles.headerIconButton} onPress={handleClose} accessibilityLabel="Zamknij formularz">
                   <X size={22} color={theme.colors.text} />
@@ -961,14 +971,20 @@ export const ManualAddScreen = () => {
 
                       {parsedAmount > 0 && (
                         <TouchableOpacity
-                          style={styles.planConfirmButton}
-                          onPress={() => {
-                            Keyboard.dismiss();
-                            scrollToForm();
-                          }}
+                          style={[styles.planConfirmButton, isLoading && styles.saveButtonDisabled]}
+                          onPress={handleFastSaveSelectedPlan}
+                          disabled={isLoading}
+                          accessibilityRole="button"
+                          accessibilityState={{ disabled: isLoading, busy: isLoading }}
                         >
-                          <Text style={styles.planConfirmButtonText}>Kontynuuj z tym planem</Text>
-                          <ArrowRight size={16} color={theme.colors.darkText} />
+                          {isLoading ? (
+                            <ActivityIndicator size="small" color={theme.colors.darkText} />
+                          ) : (
+                            <ArrowRight size={16} color={theme.colors.darkText} />
+                          )}
+                          <Text style={styles.planConfirmButtonText}>
+                            {subscriptionId ? 'Zapisz ten plan' : 'Dodaj ten plan'}
+                          </Text>
                         </TouchableOpacity>
                       )}
 
@@ -1280,7 +1296,17 @@ export const ManualAddScreen = () => {
                     </>
                   )}
                 </View>
-                <View style={styles.saveSummaryCard}>
+                <View
+                  style={[
+                    styles.saveFooterCard,
+                    {
+                      backgroundColor: isValid ? withAlpha(theme.colors.primary, 0.12) : theme.colors.card,
+                      borderColor: isValid ? withAlpha(theme.colors.primary, 0.58) : theme.colors.border,
+                      shadowColor: isValid ? theme.colors.primary : theme.colors.bg,
+                    },
+                  ]}
+                >
+                  <View style={styles.saveSummaryCard}>
                   <View>
                     <Text style={styles.saveSummaryLabel}>Podsumowanie</Text>
                     <Text style={styles.saveSummaryTitle} numberOfLines={1}>
@@ -1301,13 +1327,17 @@ export const ManualAddScreen = () => {
                 <TouchableOpacity
                   style={[
                     styles.saveButton,
-                    { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary },
-                    (!isValid || isLoading) && styles.saveButtonDisabled,
+                    {
+                      backgroundColor: theme.colors.primary,
+                      shadowColor: theme.colors.primary,
+                      borderColor: withAlpha(theme.colors.text, 0.22),
+                    },
+                    (!isValid && !isLoading) && styles.saveButtonDisabled,
                     isLoading && styles.saveButtonLoading,
                   ]}
                   onPress={handleSave}
                   disabled={isLoading || !isValid}
-                  activeOpacity={0.8}
+                  activeOpacity={0.84}
                   accessibilityState={{ disabled: isLoading || !isValid, busy: isLoading }}
                 >
                   {isLoading ? (
@@ -1319,11 +1349,18 @@ export const ManualAddScreen = () => {
                     </>
                   ) : (
                     <>
-                      <Text style={styles.saveButtonText}>Zapisz subskrypcję</Text>
+                      <Text style={[styles.saveButtonText, !isValid && styles.saveButtonTextDisabled]}>Zapisz subskrypcję</Text>
                       <ArrowRight size={20} color={theme.colors.darkText} />
                     </>
                   )}
                 </TouchableOpacity>
+
+                  {!isValid && !isLoading && (
+                    <Text style={[styles.saveHelperText, { color: theme.colors.textMuted }]}>
+                      Uzupełnij wymagane pola, żeby aktywować zapis.
+                    </Text>
+                  )}
+                </View>
 
                 {showSlowSaveHint && (
                   <View style={[styles.slowSaveHint, { borderColor: `${theme.colors.warning}44`, backgroundColor: `${theme.colors.warning}14` }]}>
@@ -1336,7 +1373,6 @@ export const ManualAddScreen = () => {
               </View>
             </ScrollView>
           </View>
-        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -1383,16 +1419,16 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: withAlpha(theme.colors.violet, 0.14),
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, alignItems: 'center', gap: 12 },
-  headerIconButton: { width: 46, height: 46, borderRadius: 18, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border },
+  headerIconButton: { width: 46, height: 46, borderRadius: 10, backgroundColor: theme.colors.card, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: theme.colors.border },
   headerCenter: { flex: 1 },
   headerEyebrow: { color: theme.colors.textMuted, fontSize: 12, fontWeight: '800', textTransform: 'uppercase' },
   headerTitle: { fontSize: 23, fontWeight: '900', color: theme.colors.text, marginTop: 2 },
-  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 17, backgroundColor: withAlpha(theme.colors.text, 0.14), borderWidth: 1, borderColor: withAlpha(theme.colors.text, 0.28), alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
+  headerStepBadge: { minWidth: 66, height: 34, borderRadius: 10, backgroundColor: withAlpha(theme.colors.text, 0.14), borderWidth: 1, borderColor: withAlpha(theme.colors.text, 0.28), alignItems: 'center', justifyContent: 'center', paddingHorizontal: 10 },
   headerStepText: { color: theme.colors.primary, fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   headerSaveButton: {
     minWidth: 72,
     height: 38,
-    borderRadius: 19,
+    borderRadius: 10,
     backgroundColor: theme.colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
@@ -1413,7 +1449,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     paddingBottom: 24,
     paddingHorizontal: 20,
     alignItems: 'center',
-    borderRadius: 28,
+    borderRadius: 12,
     marginBottom: 16,
     shadowColor: theme.colors.primary,
     shadowOffset: { width: 0, height: 14 },
@@ -1464,7 +1500,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   costPreviewPill: {
     flex: 1,
     backgroundColor: withAlpha(theme.colors.text, 0.14),
-    borderRadius: 17,
+    borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderWidth: 1,
@@ -1485,7 +1521,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   formSection: { margin: 0 },
   formCard: {
     backgroundColor: theme.colors.card,
-    borderRadius: 28,
+    borderRadius: 12,
     padding: 20,
     marginBottom: 18,
     shadowColor: theme.colors.bg,
@@ -1521,7 +1557,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   accordionIcon: {
     width: 38,
     height: 38,
-    borderRadius: 14,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -1539,7 +1575,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   label: { fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
   labelOptional: { fontSize: 12, fontWeight: '800', color: theme.colors.textMuted, textTransform: 'uppercase', marginBottom: 12 },
-  textInput: { fontSize: 16, backgroundColor: withAlpha(theme.colors.text, 0.09), borderRadius: 18, paddingHorizontal: 15, paddingVertical: 14, color: theme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: theme.colors.border },
+  textInput: { fontSize: 16, backgroundColor: withAlpha(theme.colors.text, 0.09), borderRadius: 10, paddingHorizontal: 15, paddingVertical: 14, color: theme.colors.text, fontWeight: '700', borderWidth: 1, borderColor: theme.colors.border },
   fieldError: {
     width: '100%',
     marginTop: 8,
@@ -1548,20 +1584,20 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: '900',
     textAlign: 'center',
   },
-  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 20, backgroundColor: withAlpha(theme.colors.text, 0.07), marginRight: 8, borderWidth: 1, borderColor: theme.colors.border },
+  pill: { paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, backgroundColor: withAlpha(theme.colors.text, 0.07), marginRight: 8, borderWidth: 1, borderColor: theme.colors.border },
   pillActive: { backgroundColor: withAlpha(theme.colors.text, 0.16), borderColor: theme.colors.primary },
   pillText: { color: theme.colors.textMuted, fontWeight: '700' },
   pillTextActive: { color: theme.colors.primary },
-  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: withAlpha(theme.colors.text, 0.09), padding: 15, borderRadius: 18, borderWidth: 1, borderColor: theme.colors.border },
+  dateButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: withAlpha(theme.colors.text, 0.09), padding: 15, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border },
   dateButtonLabel: { color: theme.colors.textSubtle, fontSize: 10, fontWeight: '900', textTransform: 'uppercase', marginBottom: 2 },
   dateButtonText: { color: theme.colors.text, fontSize: 15, fontWeight: '900' },
   dateText: { fontSize: 16, fontWeight: '700', color: theme.colors.primary },
   dateHint: { marginTop: 8, fontSize: 12, fontWeight: '700', lineHeight: 16 },
-  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, marginRight: 8, borderWidth: 1 },
+  catPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 9, borderRadius: 12, marginRight: 8, borderWidth: 1 },
   catPillActive: { borderWidth: 2 },
   catText: { marginLeft: 6, fontWeight: '700', fontSize: 13 },
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  toggle: { width: 52, height: 30, borderRadius: 15, backgroundColor: withAlpha(theme.colors.text, 0.16), padding: 3 },
+  toggle: { width: 52, height: 30, borderRadius: 10, backgroundColor: withAlpha(theme.colors.text, 0.16), padding: 3 },
   toggleActive: { backgroundColor: theme.colors.primary },
   toggleDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: theme.colors.text },
   toggleDotActive: { transform: [{ translateX: 22 }] },
@@ -1569,7 +1605,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: withAlpha(theme.colors.text, 0.13),
     padding: 12,
-    borderRadius: 18,
+    borderRadius: 10,
     alignItems: 'center',
     borderWidth: 1,
     borderColor: withAlpha(theme.colors.text, 0.24),
@@ -1583,7 +1619,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   seasonalBox: {
     marginTop: 12,
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 12,
     backgroundColor: withAlpha(theme.colors.text, 0.06),
     borderWidth: 1,
@@ -1591,17 +1627,30 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   saveButton: {
     backgroundColor: theme.colors.primary,
-    borderRadius: 22,
+    borderRadius: 12,
+    minHeight: 62,
     paddingVertical: 18,
+    paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 12,
-    marginTop: 20,
+    marginTop: 14,
     shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.46,
+    shadowRadius: 28,
+    elevation: 12,
+    borderWidth: 1,
+  },
+  saveFooterCard: {
+    marginTop: 18,
+    borderRadius: 12,
+    borderWidth: 1,
+    padding: 14,
+    shadowOffset: { width: 0, height: 14 },
+    shadowOpacity: 0.18,
+    shadowRadius: 26,
     elevation: 8,
   },
   saveSummaryCard: {
@@ -1609,12 +1658,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 14,
-    backgroundColor: withAlpha(theme.colors.text, 0.08),
-    borderRadius: 24,
+    backgroundColor: withAlpha(theme.colors.text, 0.10),
+    borderRadius: 10,
     padding: 16,
     borderWidth: 1,
     borderColor: theme.colors.border,
-    marginTop: 4,
   },
   saveSummaryLabel: {
     color: theme.colors.textSubtle,
@@ -1661,8 +1709,19 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   },
   saveButtonText: {
     color: theme.colors.darkText,
-    fontSize: 17,
+    fontSize: 18,
+    fontWeight: '900',
+    letterSpacing: 0.2,
+  },
+  saveButtonTextDisabled: {
+    color: theme.colors.textMuted,
+  },
+  saveHelperText: {
+    marginTop: 10,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: '800',
+    textAlign: 'center',
   },
   slowSaveHint: {
     flexDirection: 'row',
@@ -1670,7 +1729,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     gap: 9,
     marginTop: 12,
     padding: 12,
-    borderRadius: 18,
+    borderRadius: 10,
     borderWidth: 1,
   },
   slowSaveHintText: {
@@ -1692,7 +1751,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     backgroundColor: withAlpha(theme.colors.text, 0.09),
     paddingHorizontal: 11,
     paddingVertical: 8,
-    borderRadius: 16,
+    borderRadius: 10,
     marginRight: 8,
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1721,14 +1780,14 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     gap: 12,
     marginTop: 12,
     padding: 12,
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: withAlpha(theme.colors.text, 0.07),
     borderWidth: 1,
   },
   generatedBrandMark: {
     width: 48,
     height: 48,
-    borderRadius: 17,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: theme.colors.bg,
@@ -1762,7 +1821,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     gap: 5,
     paddingHorizontal: 10,
     paddingVertical: 8,
-    borderRadius: 14,
+    borderRadius: 10,
     borderWidth: 1,
   },
   useCategoryText: {
@@ -1778,11 +1837,11 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     left: -4,
     right: -4,
     bottom: -4,
-    borderRadius: 22,
+    borderRadius: 12,
   },
   aiPredictButton: {
     minHeight: 52,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     paddingHorizontal: 15,
     flexDirection: 'row',
@@ -1807,7 +1866,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   aiLoadingCard: {
     marginTop: 12,
     minHeight: 112,
-    borderRadius: 22,
+    borderRadius: 12,
     backgroundColor: withAlpha(theme.colors.text, 0.07),
     borderWidth: 1,
     padding: 14,
@@ -1842,7 +1901,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   aiSkeletonPlan: {
     flex: 1,
     height: 42,
-    borderRadius: 16,
+    borderRadius: 10,
     backgroundColor: withAlpha(theme.colors.text, 0.1),
   },
   aiMessageCard: {
@@ -1851,7 +1910,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     gap: 9,
     marginTop: 12,
     padding: 12,
-    borderRadius: 18,
+    borderRadius: 10,
     backgroundColor: withAlpha(theme.colors.text, 0.06),
     borderWidth: 1,
   },
@@ -1877,7 +1936,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   aiPlanCard: {
     minWidth: 128,
     padding: 14,
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: withAlpha(theme.colors.text, 0.08),
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -1925,15 +1984,18 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     fontWeight: '600',
   },
   planBackButton: {
-    backgroundColor: withAlpha(theme.colors.text, 0.18),
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
+    backgroundColor: 'transparent',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: withAlpha(theme.colors.text, 0.72),
   },
   planBackButtonText: {
     color: theme.colors.text,
-    fontSize: 10,
-    fontWeight: '700',
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   plansScrollContent: {
     paddingHorizontal: 20,
@@ -1943,7 +2005,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   planCard: {
     backgroundColor: withAlpha(theme.colors.text, 0.14),
     padding: 16,
-    borderRadius: 22,
+    borderRadius: 12,
     minWidth: 122,
     borderWidth: 1,
     borderColor: withAlpha(theme.colors.text, 0.18),
@@ -2004,7 +2066,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginHorizontal: 40,
     marginTop: 20,
     paddingVertical: 12,
-    borderRadius: 16,
+    borderRadius: 10,
     gap: 8,
     shadowColor: theme.colors.bg,
     shadowOffset: { width: 0, height: 4 },
@@ -2020,7 +2082,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   planInsights: {
     marginHorizontal: 24,
     marginTop: 16,
-    borderRadius: 18,
+    borderRadius: 10,
     backgroundColor: withAlpha(theme.colors.bg, 0.16),
     borderWidth: 1,
     borderColor: withAlpha(theme.colors.text, 0.18),
@@ -2055,7 +2117,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   stepperBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: 12,
     backgroundColor: withAlpha(theme.colors.text, 0.12),
     borderWidth: 1,
     borderColor: theme.colors.border,
@@ -2066,7 +2128,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     marginTop: 16,
     backgroundColor: withAlpha(theme.colors.text, 0.07),
     padding: 16,
-    borderRadius: 16,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: theme.colors.border,
   },

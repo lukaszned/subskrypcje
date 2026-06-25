@@ -21,19 +21,25 @@ import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { daysUntilDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
+import { getEffectiveNextPaymentDate } from '../utils/subscriptionSchedule';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'HealthScoreDetails'>;
 
 function getLocalScore(subscriptions: ReturnType<typeof useSubscriptions>['data'], summary: ReturnType<typeof useDashboardSummary>['data']) {
   const active = (subscriptions ?? []).filter((item) => item.status !== 'canceled');
-  const overdue = summary?.overdueCount ?? active.filter((item) => item.status === 'overdue').length;
+  const localOverdue = active.filter((item) => {
+    if (item.status === 'overdue') return true;
+    const days = daysUntilDate(getEffectiveNextPaymentDate(item));
+    return days !== null && days < 0;
+  }).length;
+  const overdue = active.length > 0 ? localOverdue : summary?.overdueCount ?? 0;
   const trials = summary?.trialsCount ?? active.filter((item) => item.isTrial).length;
   const trialsEndingSoon = active.filter((item) => {
     const days = daysUntilDate(item.trialEndDate);
     return item.isTrial && days !== null && days >= 0 && days <= 7;
   }).length;
   const upcomingSoon = active.filter((item) => {
-    const days = daysUntilDate(item.nextPaymentDate);
+    const days = daysUntilDate(getEffectiveNextPaymentDate(item));
     return days !== null && days >= 0 && days <= 7;
   }).length;
 
@@ -218,14 +224,14 @@ const styles = StyleSheet.create({
   glowOne: { position: 'absolute', top: -130, right: -120, width: 300, height: 300, borderRadius: 150, backgroundColor: 'rgba(255,255,255,0.16)' },
   glowTwo: { position: 'absolute', bottom: 80, left: -140, width: 280, height: 280, borderRadius: 140, backgroundColor: 'rgba(139,92,246,0.14)' },
   header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10 },
-  iconButton: { width: 44, height: 44, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  iconButton: { width: 44, height: 44, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   headerCopy: { flex: 1 },
   title: { color: vibrantTheme.colors.text, fontSize: 22, fontWeight: '900', letterSpacing: 0 },
   subtitle: { color: vibrantTheme.colors.textMuted, fontSize: 13, fontWeight: '700', marginTop: 3 },
   content: { padding: 20, paddingBottom: 42 },
-  hero: { borderRadius: 30, padding: 22, marginBottom: 16, ...vibrantTheme.shadows.glow },
+  hero: { borderRadius: 12, padding: 22, marginBottom: 16, ...vibrantTheme.shadows.glow },
   heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 },
-  heroIcon: { width: 50, height: 50, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
+  heroIcon: { width: 50, height: 50, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.18)', alignItems: 'center', justifyContent: 'center' },
   sourcePill: { flexDirection: 'row', alignItems: 'center', gap: 7, borderRadius: 999, backgroundColor: 'rgba(0,0,0,0.18)', paddingHorizontal: 12, paddingVertical: 8 },
   sourcePillText: { color: '#FFFFFF', fontWeight: '900', fontSize: 12 },
   heroLabel: { color: 'rgba(255,255,255,0.78)', fontSize: 13, fontWeight: '800' },
@@ -233,12 +239,12 @@ const styles = StyleSheet.create({
   score: { color: '#FFFFFF', fontSize: 76, fontWeight: '900', lineHeight: 82, letterSpacing: 0 },
   scoreSuffix: { color: 'rgba(255,255,255,0.78)', fontSize: 24, fontWeight: '900', marginBottom: 10 },
   heroSummary: { color: '#FFFFFF', fontSize: 14, fontWeight: '700', lineHeight: 20, marginTop: 8 },
-  explainCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, marginBottom: 14 },
+  explainCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, marginBottom: 14 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 },
   cardTitle: { color: vibrantTheme.colors.text, fontSize: 16, fontWeight: '900' },
   bodyText: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 20, fontWeight: '600' },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 14 },
-  metricCard: { width: '31.5%', minHeight: 86, borderRadius: 20, padding: 12, backgroundColor: 'rgba(255,255,255,0.065)', borderWidth: 1, borderColor: vibrantTheme.colors.border, justifyContent: 'space-between' },
+  metricCard: { width: '31.5%', minHeight: 86, borderRadius: 12, padding: 12, backgroundColor: 'rgba(255,255,255,0.065)', borderWidth: 1, borderColor: vibrantTheme.colors.border, justifyContent: 'space-between' },
   metricValue: { color: vibrantTheme.colors.text, fontSize: 22, fontWeight: '900' },
   metricLabel: { color: vibrantTheme.colors.textMuted, fontSize: 11, fontWeight: '800' },
   formulaRow: { flexDirection: 'row', gap: 12, alignItems: 'flex-start', marginBottom: 14 },

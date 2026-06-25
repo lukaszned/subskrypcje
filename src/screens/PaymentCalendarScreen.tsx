@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Calendar, DateData } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -23,13 +24,16 @@ import type { AppStackParamList } from '../types/navigation';
 import type { Subscription } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
-import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
+import { withAlpha } from '../theme/themeUtils';
+import { daysUntilDate, formatRelativeDay } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
+import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
 
-type CalendarItem = Subscription & {
+type CalendarItem = Omit<Subscription, 'nextPaymentDate'> & {
+  nextPaymentDate: string;
   paymentDate: Date;
   daysLeft: number;
 };
@@ -59,20 +63,23 @@ export const PaymentCalendarScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'PaymentCalendar'>>();
   const { theme } = useTheme();
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(30);
+  const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const { data: subscriptions = [], isLoading, isError, error, refetch, isRefetching } = useSubscriptions();
 
   const calendarItems = useMemo<CalendarItem[]>(() => {
     return subscriptions
       .filter((subscription) => subscription.status !== 'canceled')
       .map((subscription) => {
-        const paymentDate = parseAppDate(subscription.nextPaymentDate);
-        const daysLeft = daysUntilDate(subscription.nextPaymentDate);
+        const paymentDate = getEffectiveNextPaymentDate(subscription);
+        const effectiveNextPaymentDate = getEffectiveNextPaymentDateString(subscription);
+        const daysLeft = daysUntilDate(paymentDate);
 
-        if (!paymentDate || daysLeft === null) return null;
+        if (!paymentDate || !effectiveNextPaymentDate || daysLeft === null) return null;
 
         return {
           ...subscription,
           amount: Number(subscription.amount || 0),
+          nextPaymentDate: effectiveNextPaymentDate,
           paymentDate,
           daysLeft,
         };
@@ -87,7 +94,11 @@ export const PaymentCalendarScreen = () => {
   const groupedItems = useMemo(() => {
     const groups = new Map<string, CalendarItem[]>();
 
-    for (const item of calendarItems) {
+    const visibleItems = selectedDateKey
+      ? calendarItems.filter((item) => getDateKey(item.paymentDate) === selectedDateKey)
+      : calendarItems;
+
+    for (const item of visibleItems) {
       const key = getDateKey(item.paymentDate);
       const current = groups.get(key) || [];
       current.push(item);
@@ -101,7 +112,90 @@ export const PaymentCalendarScreen = () => {
       total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
       currency: items[0]?.currency || 'PLN',
     }));
-  }, [calendarItems]);
+  }, [calendarItems, selectedDateKey]);
+
+  const selectedDayItems = useMemo(
+    () => selectedDateKey
+      ? calendarItems.filter((item) => getDateKey(item.paymentDate) === selectedDateKey)
+      : [],
+    [calendarItems, selectedDateKey]
+  );
+
+  const markedDates = useMemo(() => {
+    const paymentDays = calendarItems.reduce<Record<string, CalendarItem[]>>((acc, item) => {
+      const key = getDateKey(item.paymentDate);
+      acc[key] = [...(acc[key] || []), item];
+      return acc;
+    }, {});
+
+    const marks = Object.entries(paymentDays).reduce<Record<string, any>>((acc, [key, items]) => {
+      const hasOverdue = items.some((item) => item.daysLeft < 0);
+      const hasUrgent = items.some((item) => item.daysLeft >= 0 && item.daysLeft <= 3);
+      const tone = hasOverdue ? theme.colors.danger : hasUrgent ? theme.colors.warning : theme.colors.primary;
+
+      acc[key] = {
+        marked: true,
+        dotColor: tone,
+        customStyles: {
+          container: {
+            backgroundColor: withAlpha(tone, hasOverdue ? 0.28 : 0.22),
+            borderColor: tone,
+            borderWidth: items.length > 1 ? 2 : 1.5,
+            borderRadius: 9,
+          },
+          text: {
+            color: theme.colors.text,
+            fontWeight: '900',
+          },
+        },
+      };
+      return acc;
+    }, {});
+
+    if (selectedDateKey) {
+      const selectedItems = paymentDays[selectedDateKey] || [];
+      const selectedHasOverdue = selectedItems.some((item) => item.daysLeft < 0);
+      const selectedHasUrgent = selectedItems.some((item) => item.daysLeft >= 0 && item.daysLeft <= 3);
+      const selectedTone = selectedHasOverdue ? theme.colors.danger : selectedHasUrgent ? theme.colors.warning : theme.colors.primary;
+
+      marks[selectedDateKey] = {
+        ...(marks[selectedDateKey] || {}),
+        selected: true,
+        selectedColor: theme.colors.primary,
+        selectedTextColor: theme.colors.darkText,
+        customStyles: {
+          container: {
+            backgroundColor: theme.colors.primary,
+            borderColor: selectedTone,
+            borderWidth: 2,
+            borderRadius: 9,
+          },
+          text: {
+            color: theme.colors.darkText,
+            fontWeight: '900',
+          },
+        },
+      };
+    }
+
+    return marks;
+  }, [calendarItems, selectedDateKey, theme.colors.danger, theme.colors.darkText, theme.colors.primary, theme.colors.warning]);
+
+  useEffect(() => {
+    if (!selectedDateKey) return;
+    if (!calendarItems.some((item) => getDateKey(item.paymentDate) === selectedDateKey)) {
+      setSelectedDateKey(null);
+    }
+  }, [calendarItems, selectedDateKey]);
+
+  const handleDayPress = (day: DateData) => {
+    setSelectedDateKey((current) => current === day.dateString ? null : day.dateString);
+  };
+
+  const handleHorizonChange = (value: (typeof HORIZONS)[number]) => {
+    setSelectedDateKey(null);
+    setHorizon(value);
+  };
 
   const summary = useMemo(() => {
     const upcoming = calendarItems.filter((item) => item.daysLeft >= 0);
@@ -287,13 +381,50 @@ export const PaymentCalendarScreen = () => {
                 { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
                 horizon === value && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary },
               ]}
-              onPress={() => setHorizon(value)}
+              onPress={() => handleHorizonChange(value)}
             >
               <Text style={[styles.horizonTabText, { color: theme.colors.textMuted }, horizon === value && { color: theme.colors.primary }]}>
                 {value} dni
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+
+        <View style={[styles.calendarShell, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Calendar
+            markedDates={markedDates}
+            markingType="custom"
+            onDayPress={handleDayPress}
+            firstDay={1}
+            enableSwipeMonths
+            theme={{
+              calendarBackground: 'transparent',
+              monthTextColor: theme.colors.text,
+              textMonthFontWeight: '900',
+              textMonthFontSize: 16,
+              dayTextColor: theme.colors.text,
+              todayTextColor: theme.colors.primary,
+              selectedDayBackgroundColor: theme.colors.primary,
+              selectedDayTextColor: theme.colors.darkText,
+              textDisabledColor: theme.colors.textSubtle,
+              arrowColor: theme.colors.primary,
+              textSectionTitleColor: theme.colors.textMuted,
+              textDayFontWeight: '700',
+              textDayHeaderFontWeight: '900',
+            }}
+          />
+          <View style={styles.calendarFooter}>
+            <Text style={[styles.calendarHint, { color: theme.colors.textMuted }]}>
+              {selectedDateKey
+                ? `${selectedDayItems.length} płatności w wybranym dniu`
+                : 'Kliknij podświetlony dzień, żeby zobaczyć płatności tylko z tego dnia.'}
+            </Text>
+            {selectedDateKey && (
+              <TouchableOpacity onPress={() => setSelectedDateKey(null)} style={[styles.clearDayButton, { borderColor: theme.colors.border }]}>
+                <Text style={[styles.clearDayButtonText, { color: theme.colors.primary }]}>Wyczyść</Text>
+              </TouchableOpacity>
+            )}
+          </View>
         </View>
 
         <View style={styles.weekRail}>
@@ -370,7 +501,7 @@ const styles = StyleSheet.create({
   iconButton: {
     width: 42,
     height: 42,
-    borderRadius: 21,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: vibrantTheme.colors.card,
@@ -394,7 +525,7 @@ const styles = StyleSheet.create({
     paddingBottom: 44,
   },
   heroCard: {
-    borderRadius: 28,
+    borderRadius: 12,
     padding: 22,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.2)',
@@ -409,7 +540,7 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 44,
     height: 44,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.16)',
@@ -453,7 +584,7 @@ const styles = StyleSheet.create({
   heroMetric: {
     flex: 1,
     backgroundColor: 'rgba(255,255,255,0.13)',
-    borderRadius: 16,
+    borderRadius: 10,
     padding: 12,
   },
   heroMetricValue: {
@@ -475,7 +606,7 @@ const styles = StyleSheet.create({
   horizonTab: {
     flex: 1,
     height: 42,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: vibrantTheme.colors.card,
@@ -494,6 +625,38 @@ const styles = StyleSheet.create({
   horizonTabTextActive: {
     color: '#CBD5E1',
   },
+  calendarShell: {
+    marginTop: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
+    paddingBottom: 12,
+  },
+  calendarFooter: {
+    paddingHorizontal: 14,
+    paddingTop: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  calendarHint: {
+    flex: 1,
+    fontSize: 12,
+    lineHeight: 17,
+    fontWeight: '700',
+  },
+  clearDayButton: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  clearDayButtonText: {
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
   weekRail: {
     flexDirection: 'row',
     gap: 8,
@@ -502,7 +665,7 @@ const styles = StyleSheet.create({
   weekDay: {
     flex: 1,
     minHeight: 76,
-    borderRadius: 18,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: vibrantTheme.colors.card,
@@ -548,14 +711,14 @@ const styles = StyleSheet.create({
     backgroundColor: vibrantTheme.colors.card,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
-    borderRadius: 22,
+    borderRadius: 12,
     padding: 16,
     marginTop: 16,
   },
   nextIcon: {
     width: 44,
     height: 44,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -609,7 +772,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
     backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 22,
+    borderRadius: 12,
     padding: 14,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
@@ -617,7 +780,7 @@ const styles = StyleSheet.create({
   brandMark: {
     width: 46,
     height: 46,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.14)',
@@ -670,7 +833,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
     padding: 24,
@@ -694,7 +857,7 @@ const styles = StyleSheet.create({
   },
   retryButton: {
     backgroundColor: '#CBD5E1',
-    borderRadius: 16,
+    borderRadius: 10,
     paddingVertical: 12,
     paddingHorizontal: 18,
     marginTop: 16,

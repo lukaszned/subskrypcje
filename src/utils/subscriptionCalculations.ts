@@ -1,5 +1,6 @@
 import type { BillingCycle, SavingsItem, Subscription, UpcomingPaymentItem } from '../types/api';
-import { parseAppDate, startOfLocalDay } from './date';
+import { startOfLocalDay } from './date';
+import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from './subscriptionSchedule';
 
 const WEEKS_PER_MONTH = 52 / 12;
 
@@ -87,7 +88,7 @@ export function buildUpcomingPaymentsFromSubscriptions(
   return subscriptions
     .filter((subscription) => subscription.status !== 'canceled' && Boolean(subscription.nextPaymentDate))
     .map((subscription) => {
-      const paymentDate = parseAppDate(subscription.nextPaymentDate);
+      const paymentDate = getEffectiveNextPaymentDate(subscription, now);
       if (!paymentDate || paymentDate < today || paymentDate > limit) return null;
 
       return {
@@ -97,7 +98,7 @@ export function buildUpcomingPaymentsFromSubscriptions(
         planName: subscription.planName,
         amount: Number(subscription.amount || 0),
         currency: subscription.currency || 'PLN',
-        nextPaymentDate: subscription.nextPaymentDate || '',
+        nextPaymentDate: getEffectiveNextPaymentDateString(subscription, now) || '',
         status: subscription.status,
         isTrial: Boolean(subscription.isTrial),
         reminderDaysBefore: Number(subscription.reminderDaysBefore ?? 2),

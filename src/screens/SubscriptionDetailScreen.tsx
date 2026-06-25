@@ -39,6 +39,7 @@ import { goBackOrDashboard } from '../utils/navigation';
 import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 import { getSeasonalStatus, parseSubscriptionNotes } from '../utils/subscriptionNotes';
+import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
@@ -136,12 +137,14 @@ export const SubscriptionDetailScreen = () => {
     ], { onDismiss: finishAction });
   };
 
-  const nextDate = parseAppDate(sub.nextPaymentDate);
-  const nextDaysLeft = daysUntilDate(sub.nextPaymentDate);
+  const effectiveNextPaymentDate = getEffectiveNextPaymentDateString(sub);
+  const nextDate = getEffectiveNextPaymentDate(sub);
+  const nextDaysLeft = daysUntilDate(nextDate);
   const trialDaysLeft = daysUntilDate(sub.trialEndDate);
 
   const parsedNotes = parseSubscriptionNotes(sub.notes);
   const seasonalStatus = getSeasonalStatus(sub.notes);
+  const cleanNote = /lorem\s+ipsum/i.test(parsedNotes.text || '') ? '' : (parsedNotes.text || '').trim();
 
   const statusConfig = (() => {
     if (sub.status === 'canceled') return { label: 'Anulowana', color: theme.colors.textMuted, bg: theme.colors.cardStrong };
@@ -189,7 +192,7 @@ export const SubscriptionDetailScreen = () => {
           <View style={styles.heroMetrics}>
             <View style={styles.heroMetric}>
               <Text style={styles.heroMetricLabel}>Następna</Text>
-              <Text style={styles.heroMetricValue}>{formatRelativeDay(sub.nextPaymentDate)}</Text>
+              <Text style={styles.heroMetricValue}>{formatRelativeDay(effectiveNextPaymentDate)}</Text>
             </View>
             <View style={styles.heroMetric}>
               <Text style={styles.heroMetricLabel}>Kategoria</Text>
@@ -236,7 +239,7 @@ export const SubscriptionDetailScreen = () => {
               <Text style={styles.decisionTitle}>Termin płatności</Text>
               <Text style={styles.decisionDesc}>
                 {nextDate
-                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} · ${formatRelativeDay(sub.nextPaymentDate)}`
+                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} · ${formatRelativeDay(effectiveNextPaymentDate)}`
                   : 'Brak zaplanowanej daty'}
               </Text>
             </View>
@@ -280,7 +283,7 @@ export const SubscriptionDetailScreen = () => {
               <Text style={styles.infoLabel}>Następna płatność</Text>
               <Text style={styles.infoValue}>
                 {nextDate
-                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} (${formatRelativeDay(sub.nextPaymentDate).toLowerCase()})`
+                  ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} (${formatRelativeDay(effectiveNextPaymentDate).toLowerCase()})`
                   : 'Brak zaplanowanej płatności'}
               </Text>
             </View>
@@ -319,12 +322,12 @@ export const SubscriptionDetailScreen = () => {
 
         </View>
 
-        {parsedNotes.text ? (
-          <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <Text style={styles.infoLabel}>Notatki</Text>
-            <Text style={styles.notesText}>{parsedNotes.text}</Text>
-          </View>
-        ) : null}
+        <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
+          <Text style={styles.infoLabel}>Notatki</Text>
+          <Text style={[styles.notesText, !cleanNote && styles.notesEmptyText]}>
+            {cleanNote || 'Brak notatek do tej subskrypcji.'}
+          </Text>
+        </View>
 
         <View style={[styles.infoCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <View style={styles.sectionHeader}>
@@ -442,15 +445,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(139,92,246,0.14)',
   },
   header: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 14, paddingBottom: 10, alignItems: 'center', gap: 12 },
-  headerIconButton: { width: 44, height: 44, borderRadius: 18, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border, alignItems: 'center', justifyContent: 'center' },
+  headerIconButton: { width: 44, height: 44, borderRadius: 10, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border, alignItems: 'center', justifyContent: 'center' },
   headerCenter: { flex: 1 },
   headerEyebrow: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '900', textTransform: 'uppercase' },
   headerTitle: { fontSize: 22, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 2 },
   content: { padding: 20, paddingBottom: 36 },
   hero: { alignItems: 'center', marginBottom: 30 },
-  heroCard: { borderRadius: 30, padding: 22, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', ...vibrantTheme.shadows.glow },
+  heroCard: { borderRadius: 12, padding: 22, marginBottom: 18, borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)', ...vibrantTheme.shadows.glow },
   heroTopRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 },
-  logoContainer: { width: 76, height: 76, borderRadius: 26, backgroundColor: 'rgba(255,255,255,0.16)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
+  logoContainer: { width: 76, height: 76, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.16)', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.22)' },
   logoText: { fontSize: 32, fontWeight: '900', color: '#FFFFFF' },
   statusBadge: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 999, borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' },
   statusBadgeText: { fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
@@ -460,35 +463,36 @@ const styles = StyleSheet.create({
   price: { fontSize: 34, fontWeight: '900', color: '#FFFFFF' },
   cycle: { fontSize: 14, color: 'rgba(255,255,255,0.72)', marginLeft: 6, fontWeight: '800' },
   heroMetrics: { flexDirection: 'row', gap: 10, marginTop: 20 },
-  heroMetric: { flex: 1, backgroundColor: 'rgba(255,255,255,0.13)', borderRadius: 18, padding: 13, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
+  heroMetric: { flex: 1, backgroundColor: 'rgba(255,255,255,0.13)', borderRadius: 10, padding: 13, borderWidth: 1, borderColor: 'rgba(255,255,255,0.16)' },
   heroMetricLabel: { color: 'rgba(255,255,255,0.62)', fontSize: 11, fontWeight: '900', textTransform: 'uppercase' },
   heroMetricValue: { color: '#FFFFFF', fontSize: 13, fontWeight: '900', marginTop: 5 },
   actionsRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  actionBtn: { flex: 1.25, minHeight: 54, borderRadius: 20, backgroundColor: vibrantTheme.colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, ...vibrantTheme.shadows.glow },
+  actionBtn: { flex: 1.25, minHeight: 54, borderRadius: 12, backgroundColor: vibrantTheme.colors.primary, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 12, ...vibrantTheme.shadows.glow },
   actionBtnOutline: { flex: 0.85, backgroundColor: 'rgba(255,77,109,0.08)', borderWidth: 1, borderColor: 'rgba(255,77,109,0.5)', shadowOpacity: 0, elevation: 0 },
   actionBtnDisabled: { opacity: 0.45 },
   actionBtnText: { color: vibrantTheme.colors.darkText, fontWeight: '900', fontSize: 16 },
-  canceledBadge: { flex: 1, height: 50, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
+  canceledBadge: { flex: 1, height: 50, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   canceledBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },
   decisionGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  decisionCard: { flex: 1, backgroundColor: vibrantTheme.colors.card, borderRadius: 22, padding: 15, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  decisionIcon: { width: 38, height: 38, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
+  decisionCard: { flex: 1, backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 15, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  decisionIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
   decisionText: { flex: 1 },
   decisionTitle: { color: vibrantTheme.colors.text, fontSize: 13, fontWeight: '900' },
   decisionDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 5 },
-  seasonalCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 24, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
-  seasonalIcon: { width: 46, height: 46, borderRadius: 17, alignItems: 'center', justifyContent: 'center' },
+  seasonalCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
+  seasonalIcon: { width: 46, height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   seasonalBody: { flex: 1 },
   seasonalTitle: { color: vibrantTheme.colors.text, fontSize: 15, fontWeight: '900' },
   seasonalDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 18, marginTop: 4 },
   seasonalReason: { color: vibrantTheme.colors.text, fontSize: 12, fontWeight: '800', lineHeight: 17, marginTop: 8 },
-  infoCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 26, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
+  infoCard: { backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 20, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
   infoRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
-  trialRow: { backgroundColor: 'rgba(251,191,36,0.12)', padding: 12, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)' },
+  trialRow: { backgroundColor: 'rgba(251,191,36,0.12)', padding: 12, borderRadius: 10, marginBottom: 12, borderWidth: 1, borderColor: 'rgba(251,191,36,0.28)' },
   infoTextContainer: { marginLeft: 16 },
   infoLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '700', textTransform: 'uppercase' },
   infoValue: { fontSize: 16, color: vibrantTheme.colors.text, fontWeight: '700', marginTop: 2 },
   notesText: { fontSize: 15, color: vibrantTheme.colors.textMuted, marginTop: 8, lineHeight: 22 },
+  notesEmptyText: { color: vibrantTheme.colors.textSubtle, fontStyle: 'italic' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   historyBadge: { backgroundColor: 'rgba(255,255,255,0.08)', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
   historyBadgeText: { fontSize: 10, fontWeight: '800', color: vibrantTheme.colors.textMuted, textTransform: 'uppercase' },

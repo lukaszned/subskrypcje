@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 42, fontWeight: '900', color: vibrantTheme.colors.text, marginTop: 10 },
   subtitle: { fontSize: 15, color: vibrantTheme.colors.textMuted, marginTop: 10, lineHeight: 22 },
   card: {
-    borderRadius: 30,
+    borderRadius: 12,
     padding: 18,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
@@ -141,7 +141,7 @@ const styles = StyleSheet.create({
   },
   inputShell: {
     minHeight: 58,
-    borderRadius: 20,
+    borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.08)',
     paddingHorizontal: 16,
     flexDirection: 'row',
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   button: {
-    borderRadius: 20,
+    borderRadius: 12,
     overflow: 'hidden',
     marginTop: 6,
     marginBottom: 16,

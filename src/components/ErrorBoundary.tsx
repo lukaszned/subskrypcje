@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   panel: {
-    borderRadius: 24,
+    borderRadius: 12,
     padding: 24,
     borderWidth: 1,
   },
@@ -82,7 +82,7 @@ const styles = StyleSheet.create({
   button: {
     marginTop: 22,
     alignItems: 'center',
-    borderRadius: 16,
+    borderRadius: 10,
     paddingVertical: 14,
   },
   buttonText: {

@@ -38,7 +38,8 @@ import SubscriptionListItem from './SubscriptionListItem';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../theme/themeUtils';
-import { daysUntilDate, parseAppDate } from '../utils/date';
+import { daysUntilDate } from '../utils/date';
+import { getEffectiveNextPaymentDate } from '../utils/subscriptionSchedule';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
@@ -125,12 +126,15 @@ export const SubscriptionListScreen = () => {
     const counted = normalizedSubscriptions.filter((item) => item.status !== 'canceled' && item.includeInStats !== false);
     const monthlyTotal = counted.reduce((sum, item) => sum + toMonthlyAmount(item), 0);
     const dueSoon = counted.filter((item) => {
-      const daysLeft = daysUntilDate(item.nextPaymentDate);
+      const daysLeft = daysUntilDate(getEffectiveNextPaymentDate(item));
       return daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
     }).length;
     const attention = counted.filter((item) => {
       const trialDays = daysUntilDate(item.trialEndDate);
-      return item.status === 'overdue' || (item.isTrial && trialDays !== null && trialDays >= 0 && trialDays <= 7);
+      const paymentDays = daysUntilDate(getEffectiveNextPaymentDate(item));
+      return item.status === 'overdue' ||
+        (paymentDays !== null && paymentDays < 0) ||
+        (item.isTrial && trialDays !== null && trialDays >= 0 && trialDays <= 7);
     }).length;
 
     return {
@@ -248,6 +252,10 @@ export const SubscriptionListScreen = () => {
   ), [theme.colors.text, theme.colors.textMuted]);
   const renderItem = useCallback(({ item }: { item: Subscription }) => {
     const seasonalStatus = getSeasonalStatus(item.notes);
+    const effectivePaymentDays = daysUntilDate(getEffectiveNextPaymentDate(item));
+    const displayStatus = item.status === 'overdue' || (effectivePaymentDays !== null && effectivePaymentDays < 0)
+      ? 'overdue'
+      : item.status;
 
     return (
       <SubscriptionListItem
@@ -258,12 +266,12 @@ export const SubscriptionListScreen = () => {
           amount: item.amount,
           currency: item.currency,
           nextPaymentDate: item.nextPaymentDate ? (() => {
-            const d = parseAppDate(item.nextPaymentDate);
+            const d = getEffectiveNextPaymentDate(item);
             if (!d) return '-';
             return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
           })() : '-',
           cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle || 'Co miesiąc',
-          status: item.status,
+          status: displayStatus,
           isTrial: item.isTrial,
           isSeasonal: seasonalStatus.isSeasonal,
           seasonEndLabel: seasonalStatus.label,
@@ -403,13 +411,13 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   header: { flexDirection: 'row', paddingHorizontal: 20, paddingTop: 16, paddingBottom: 12, alignItems: 'center', gap: 12 },
   headerSpacer: { width: 24, height: 24 },
-  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: vibrantTheme.colors.card, borderRadius: 20, paddingHorizontal: 16, height: 50, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  searchContainer: { flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: vibrantTheme.colors.card, borderRadius: 12, paddingHorizontal: 16, height: 50, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   searchIcon: { marginRight: 10 },
   searchInput: { flex: 1, height: '100%', fontSize: 16, color: vibrantTheme.colors.text, fontWeight: '700' },
-  sortButton: { width: 48, height: 50, backgroundColor: vibrantTheme.colors.card, borderRadius: 20, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  sortButton: { width: 48, height: 50, backgroundColor: vibrantTheme.colors.card, borderRadius: 12, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
   filterSection: { paddingBottom: 16 },
   statusTabs: { paddingHorizontal: 20, gap: 10 },
-  statusTab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 16, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  statusTab: { paddingHorizontal: 16, paddingVertical: 9, borderRadius: 10, backgroundColor: vibrantTheme.colors.card, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   statusTabText: { fontSize: 13, fontWeight: '700', color: vibrantTheme.colors.textMuted },
   statusTabTextActive: { color: vibrantTheme.colors.primary },
   listContent: { paddingHorizontal: 20, paddingBottom: 40 },
@@ -461,7 +469,7 @@ const styles = StyleSheet.create({
   emptyIconCircle: { width: 96, height: 96, borderRadius: 48, backgroundColor: vibrantTheme.colors.card, justifyContent: 'center', alignItems: 'center', marginBottom: 24, borderWidth: 1, borderColor: vibrantTheme.colors.border },
   emptyTitle: { fontSize: 18, fontWeight: '800', color: vibrantTheme.colors.text, marginBottom: 12 },
   emptyMessage: { color: vibrantTheme.colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center', marginBottom: 4 },
-  addButton: { backgroundColor: vibrantTheme.colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 24, marginTop: 12, ...vibrantTheme.shadows.glow },
+  addButton: { backgroundColor: vibrantTheme.colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, marginTop: 12, ...vibrantTheme.shadows.glow },
   addButtonText: { color: vibrantTheme.colors.darkText, fontWeight: '900' },
   loadingShell: {
     width: '100%',

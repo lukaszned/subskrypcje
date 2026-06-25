@@ -36,6 +36,7 @@ import type { Subscription } from '../types/api';
 import type { AppStackParamList } from '../types/navigation';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
+import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -68,7 +69,8 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
   const items: ReviewItem[] = [];
 
   active.forEach((subscription) => {
-    const paymentDays = daysUntilDate(subscription.nextPaymentDate);
+    const effectiveNextPaymentDate = getEffectiveNextPaymentDateString(subscription);
+    const paymentDays = daysUntilDate(getEffectiveNextPaymentDate(subscription));
     const trialDays = daysUntilDate(subscription.trialEndDate);
     const displayName = subscription.name || subscription.provider || 'Subskrypcja';
 
@@ -79,7 +81,7 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         subscription,
         title: 'Płatność po terminie',
         description: `${displayName} wymaga szybkiego sprawdzenia statusu płatności.`,
-        meta: subscription.nextPaymentDate ? formatRelativeDay(subscription.nextPaymentDate) : 'Brak daty',
+        meta: effectiveNextPaymentDate ? formatRelativeDay(effectiveNextPaymentDate) : 'Brak daty',
         tone: 'critical',
       });
     }
@@ -103,7 +105,7 @@ const buildReviewItems = (subscriptions: Subscription[]): ReviewItem[] => {
         subscription,
         title: 'Nadchodzi płatność',
         description: `${displayName} pojawi się w kosztach w najbliższych dniach.`,
-        meta: formatRelativeDay(subscription.nextPaymentDate),
+        meta: formatRelativeDay(effectiveNextPaymentDate),
         tone: 'primary',
       });
     }
@@ -388,7 +390,7 @@ const styles = StyleSheet.create({
   backButton: {
     width: 44,
     height: 44,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -415,7 +417,7 @@ const styles = StyleSheet.create({
     gap: 18,
   },
   hero: {
-    borderRadius: 30,
+    borderRadius: 12,
     padding: 22,
     overflow: 'hidden',
     borderWidth: 1,
@@ -429,7 +431,7 @@ const styles = StyleSheet.create({
   heroIcon: {
     width: 48,
     height: 48,
-    borderRadius: 18,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -472,7 +474,7 @@ const styles = StyleSheet.create({
   },
   summaryCard: {
     flex: 1,
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 14,
     borderWidth: 1,
   },
@@ -489,7 +491,7 @@ const styles = StyleSheet.create({
     gap: 14,
   },
   reviewCard: {
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 1,
     padding: 16,
     gap: 14,
@@ -505,7 +507,7 @@ const styles = StyleSheet.create({
   reviewIcon: {
     width: 42,
     height: 42,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -559,7 +561,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     minHeight: 42,
-    borderRadius: 15,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -573,7 +575,7 @@ const styles = StyleSheet.create({
   },
   decisionDone: {
     minHeight: 42,
-    borderRadius: 15,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -596,7 +598,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   emptyCard: {
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 1,
     padding: 20,
     gap: 10,

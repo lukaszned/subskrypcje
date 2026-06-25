@@ -88,7 +88,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   card: {
     width: '100%',
     padding: 28,
-    borderRadius: 26,
+    borderRadius: 12,
     alignItems: 'center',
     shadowColor: theme.colors.bg,
     shadowOffset: { width: 0, height: 12 },
@@ -104,7 +104,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   iconContainer: {
     width: 72,
     height: 72,
-    borderRadius: 26,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
@@ -124,7 +124,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
   cacheHint: {
     width: '100%',
     borderWidth: 1,
-    borderRadius: 16,
+    borderRadius: 10,
     padding: 12,
     flexDirection: 'row',
     gap: 8,
@@ -142,7 +142,7 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     flexDirection: 'row',
     paddingVertical: 14,
     paddingHorizontal: 24,
-    borderRadius: 16,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     shadowOffset: { width: 0, height: 10 },

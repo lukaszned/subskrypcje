@@ -535,7 +535,7 @@ const styles = StyleSheet.create({
   },
   settingItem: {
     backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 22,
+    borderRadius: 12,
     padding: 16,
     marginBottom: 12,
     flexDirection: 'column', // Changed to column for better responsiveness with pills
@@ -576,7 +576,7 @@ const styles = StyleSheet.create({
   themeSwatchOuter: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 2,
     borderColor: 'rgba(255,255,255,0.14)',
     alignItems: 'center',
@@ -588,7 +588,7 @@ const styles = StyleSheet.create({
   themeSwatch: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 10,
   },
   themeSwatchMono: {
     borderWidth: 1,
@@ -678,7 +678,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    borderRadius: 18,
+    borderRadius: 10,
     borderWidth: 1,
     padding: 13,
     marginBottom: 18,
@@ -715,7 +715,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
     backgroundColor: vibrantTheme.colors.cardStrong,
-    borderRadius: 24,
+    borderRadius: 12,
     marginBottom: 24,
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: 4 },
@@ -757,7 +757,7 @@ const styles = StyleSheet.create({
     marginTop: 32,
     paddingVertical: 12,
     paddingHorizontal: 24,
-    borderRadius: 16,
+    borderRadius: 10,
     borderWidth: 1,
     backgroundColor: '#FFF1F2',
   },

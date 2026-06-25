@@ -286,7 +286,7 @@ const styles = StyleSheet.create({
     backgroundColor: vibrantTheme.colors.card,
     paddingVertical: 16,
     paddingHorizontal: 18,
-    borderRadius: 24,
+    borderRadius: 12,
     marginBottom: 12,
     borderWidth: 1,
     borderColor: vibrantTheme.colors.border,
@@ -308,7 +308,7 @@ const styles = StyleSheet.create({
   avatar: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 14,

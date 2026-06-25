@@ -1,9 +1,13 @@
-import 'react-native-gesture-handler';
-
 import React from 'react';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
+import {
+  createDrawerNavigator,
+  DrawerContentScrollView,
+  type DrawerContentComponentProps,
+  type DrawerNavigationOptions,
+} from '@react-navigation/drawer';
 import {
   createNativeStackNavigator,
   type NativeStackNavigationOptions,
@@ -11,6 +15,16 @@ import {
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { enableFreeze, enableScreens } from 'react-native-screens';
+import {
+  BarChart3,
+  CalendarDays,
+  ClipboardCheck,
+  Home,
+  Inbox,
+  ListChecks,
+  LogOut,
+  Settings,
+} from 'lucide-react-native';
 
 import { getCachedDashboardSummary } from './src/api/dashboard';
 import { getCachedSubscriptions } from './src/api/subscriptions';
@@ -67,7 +81,7 @@ const queryClient = new QueryClient({
 });
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
-const AppStack = createNativeStackNavigator<AppStackParamList>();
+const AppDrawer = createDrawerNavigator<AppStackParamList>();
 
 const authScreenOptions: NativeStackNavigationOptions = {
   headerShown: false,
@@ -75,12 +89,18 @@ const authScreenOptions: NativeStackNavigationOptions = {
   freezeOnBlur: true,
 };
 
-const appScreenOptions: NativeStackNavigationOptions = {
+const appScreenOptions: DrawerNavigationOptions = {
   headerShown: false,
-  animation: 'default',
-  gestureEnabled: true,
-  fullScreenGestureEnabled: true,
-  freezeOnBlur: true,
+  drawerType: 'front',
+  swipeEdgeWidth: 60,
+  drawerStyle: {
+    width: 302,
+    backgroundColor: '#070A12',
+  },
+  sceneStyle: {
+    backgroundColor: '#070A12',
+  },
+  overlayColor: 'rgba(0,0,0,0.42)',
 };
 
 const AuthNavigator = React.memo(function AuthNavigator() {
@@ -93,30 +113,123 @@ const AuthNavigator = React.memo(function AuthNavigator() {
   );
 });
 
+type DrawerItemConfig = {
+  route: keyof AppStackParamList;
+  label: string;
+  description: string;
+  icon: React.ComponentType<{ size?: number; color?: string }>;
+};
+
+const drawerItems: DrawerItemConfig[] = [
+  { route: 'Dashboard', label: 'Dashboard', description: 'Finansowy pulpit', icon: Home },
+  { route: 'SubscriptionList', label: 'Subskrypcje', description: 'Lista i statusy', icon: ListChecks },
+  { route: 'PaymentCalendar', label: 'Kalendarz płatności', description: 'Terminy i cashflow', icon: CalendarDays },
+  { route: 'Statistics', label: 'Statystyki', description: 'Koszty i trendy', icon: BarChart3 },
+  { route: 'SubscriptionReviewQueue', label: 'Kolejka decyzji', description: 'Co wymaga uwagi', icon: ClipboardCheck },
+  { route: 'EmailScan', label: 'Skaner Gmail', description: 'Wykrywanie subskrypcji', icon: Inbox },
+  { route: 'Settings', label: 'Ustawienia', description: 'Motyw, waluty, konto', icon: Settings },
+];
+
+function AppDrawerContent(props: DrawerContentComponentProps) {
+  const { signOut } = useAuth();
+  const { theme } = useTheme();
+  const activeRoute = props.state.routeNames[props.state.index];
+
+  return (
+    <DrawerContentScrollView
+      {...props}
+      contentContainerStyle={[styles.drawerContent, { backgroundColor: theme.colors.bg }]}
+    >
+      <View style={[styles.drawerBrand, { borderBottomColor: theme.colors.border }]}>
+        <View style={[styles.drawerLogo, { backgroundColor: theme.colors.primary }]}>
+          <Text style={[styles.drawerLogoText, { color: theme.colors.darkText }]}>SS</Text>
+        </View>
+        <View>
+          <Text style={[styles.drawerTitle, { color: theme.colors.text }]}>Sub-Sentry</Text>
+          <Text style={[styles.drawerSubtitle, { color: theme.colors.textMuted }]}>Centrum kontroli kosztów</Text>
+        </View>
+      </View>
+
+      <View style={styles.drawerItems}>
+        {drawerItems.map((item) => {
+          const Icon = item.icon;
+          const focused = activeRoute === item.route;
+
+          return (
+            <TouchableOpacity
+              key={item.route}
+              activeOpacity={0.82}
+              style={[
+                styles.drawerItem,
+                { borderColor: focused ? theme.colors.primary : theme.colors.border },
+                focused && { backgroundColor: `${theme.colors.primary}18` },
+              ]}
+              onPress={() => props.navigation.navigate(item.route as never)}
+            >
+              <View style={[styles.drawerItemIcon, { backgroundColor: focused ? `${theme.colors.primary}24` : theme.colors.cardSoft }]}>
+                <Icon size={18} color={focused ? theme.colors.primary : theme.colors.textMuted} />
+              </View>
+              <View style={styles.drawerItemText}>
+                <Text style={[styles.drawerItemLabel, { color: focused ? theme.colors.primary : theme.colors.text }]}>
+                  {item.label}
+                </Text>
+                <Text style={[styles.drawerItemDescription, { color: theme.colors.textSubtle }]} numberOfLines={1}>
+                  {item.description}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+
+      <TouchableOpacity
+        activeOpacity={0.82}
+        style={[styles.drawerLogout, { borderColor: theme.colors.border }]}
+        onPress={signOut}
+      >
+        <LogOut size={18} color={theme.colors.danger} />
+        <Text style={[styles.drawerLogoutText, { color: theme.colors.danger }]}>Wyloguj</Text>
+      </TouchableOpacity>
+    </DrawerContentScrollView>
+  );
+}
+
+const hiddenDrawerOptions: DrawerNavigationOptions = {
+  drawerItemStyle: { display: 'none' },
+  swipeEnabled: false,
+};
+
 const AppNavigator = React.memo(function AppNavigator() {
   return (
-    <AppStack.Navigator screenOptions={appScreenOptions}>
-      <AppStack.Screen
+    <AppDrawer.Navigator
+      initialRouteName="Dashboard"
+      screenOptions={appScreenOptions}
+      drawerContent={(props) => <AppDrawerContent {...props} />}
+    >
+      <AppDrawer.Screen
         name="Dashboard"
         component={DashboardScreen}
-        options={{ gestureEnabled: false }}
       />
-      <AppStack.Screen name="SubscriptionList" component={SubscriptionListScreen} />
-      <AppStack.Screen name="SubscriptionDetail" component={SubscriptionDetailScreen} />
-      <AppStack.Screen
+      <AppDrawer.Screen name="SubscriptionList" component={SubscriptionListScreen} />
+      <AppDrawer.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
+      <AppDrawer.Screen name="Statistics" component={StatisticsScreen} />
+      <AppDrawer.Screen name="SubscriptionReviewQueue" component={SubscriptionReviewQueueScreen} />
+      <AppDrawer.Screen name="EmailScan" component={EmailScanScreen} />
+      <AppDrawer.Screen name="Settings" component={SettingsScreen} />
+      <AppDrawer.Screen
+        name="SubscriptionDetail"
+        component={SubscriptionDetailScreen}
+        options={hiddenDrawerOptions}
+      />
+      <AppDrawer.Screen
         name="AddSubscription"
         component={ManualAddScreen}
-        options={{ presentation: 'modal', animation: 'slide_from_bottom' }}
+        options={hiddenDrawerOptions}
       />
-      <AppStack.Screen name="Notifications" component={NotificationsScreen} />
-      <AppStack.Screen name="Settings" component={SettingsScreen} />
-      <AppStack.Screen name="EmailScan" component={EmailScanScreen} />
-      <AppStack.Screen name="Statistics" component={StatisticsScreen} />
-      <AppStack.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
-      <AppStack.Screen name="SubscriptionReviewQueue" component={SubscriptionReviewQueueScreen} />
-      <AppStack.Screen name="HealthScoreDetails" component={HealthScoreDetailsScreen} />
-      <AppStack.Screen name="SavingsDetails" component={SavingsDetailsScreen} />
-    </AppStack.Navigator>
+      <AppDrawer.Screen name="Notifications" component={NotificationsScreen} options={hiddenDrawerOptions} />
+      <AppDrawer.Screen name="HealthScoreDetails" component={HealthScoreDetailsScreen} options={hiddenDrawerOptions} />
+      <AppDrawer.Screen name="SavingsDetails" component={SavingsDetailsScreen} options={hiddenDrawerOptions} />
+    </AppDrawer.Navigator>
   );
 });
 
@@ -205,5 +318,85 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  drawerContent: {
+    flexGrow: 1,
+    paddingTop: 12,
+    paddingHorizontal: 14,
+    paddingBottom: 18,
+  },
+  drawerBrand: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingBottom: 18,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+  },
+  drawerLogo: {
+    width: 42,
+    height: 42,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerLogoText: {
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+  },
+  drawerTitle: {
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+  },
+  drawerSubtitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  drawerItems: {
+    gap: 8,
+  },
+  drawerItem: {
+    minHeight: 58,
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  drawerItemIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  drawerItemText: {
+    flex: 1,
+  },
+  drawerItemLabel: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  drawerItemDescription: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 1,
+  },
+  drawerLogout: {
+    marginTop: 'auto',
+    borderTopWidth: 1,
+    paddingTop: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  drawerLogoutText: {
+    fontSize: 14,
+    fontWeight: '900',
   },
 });

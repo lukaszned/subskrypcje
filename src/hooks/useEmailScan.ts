@@ -123,7 +123,7 @@ function reconcileCreatedSubscriptions(
       lastPaymentDate: null,
       trialEndDate: null,
       isTrial: false,
-      isRecurringBill: Boolean(item.isRecurringBill),
+      isRecurringBill: item.isRecurringBill ?? true,
       reminderDaysBefore: 2,
       paymentMethodLabel: 'Email Scan',
       notes: 'Import z Email Scan',

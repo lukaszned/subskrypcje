@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
   subtitle: { fontSize: 16, color: vibrantTheme.colors.textMuted, marginBottom: 40 },
   input: {
     backgroundColor: vibrantTheme.colors.card,
-    borderRadius: 20,
+    borderRadius: 12,
     paddingHorizontal: 18,
     paddingVertical: 16,
     fontSize: 16,
@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   button: {
-    borderRadius: 30,
+    borderRadius: 12,
     overflow: 'hidden',
     marginTop: 8,
     marginBottom: 20,

@@ -142,7 +142,7 @@ export function MetricTile({ label, value, icon: Icon, tone = 'primary', style }
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 1,
     padding: 16,
     shadowOffset: { width: 0, height: 14 },
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   },
   button: {
     minHeight: 48,
-    borderRadius: 17,
+    borderRadius: 10,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   metricIcon: {
     width: 36,
     height: 36,
-    borderRadius: 14,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,

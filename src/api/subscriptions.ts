@@ -22,7 +22,9 @@ import {
   SubscriptionHistoryResponse,
   SubscriptionPaymentsResponse,
 } from '../types/api';
+import { daysUntilDate } from '../utils/date';
 import { parseSubscriptionNotes } from '../utils/subscriptionNotes';
+import { getEffectiveNextPaymentDate } from '../utils/subscriptionSchedule';
 
 const SUBSCRIPTIONS_CACHE_KEY = 'sub-sentry.subscriptions.v1';
 const SUBSCRIPTION_WRITE_TIMEOUT_MS = 45000;
@@ -48,7 +50,7 @@ function normalizeSubscription(sub: any): Subscription {
     billingCycle: sub?.billingCycle || 'monthly',
     status: sub?.status || 'pending',
     isTrial: Boolean(sub?.isTrial),
-    isRecurringBill: Boolean(sub?.isRecurringBill),
+    isRecurringBill: sub?.isRecurringBill ?? true,
     isShared: sub?.isShared ?? parsedNotes.isShared,
     peopleCount: sub?.peopleCount ?? parsedNotes.peopleCount,
     includeInStats: sub?.includeInStats ?? parsedNotes.includeInStats ?? true,
@@ -115,7 +117,14 @@ export function filterAndSortSubscriptions(
 
   const filtered = subscriptions.filter((subscription) => {
     if (params?.category && subscription.category !== params.category) return false;
-    if (params?.status && subscription.status !== params.status) return false;
+    if (params?.status) {
+      if (params.status === 'overdue') {
+        const daysLeft = daysUntilDate(getEffectiveNextPaymentDate(subscription));
+        if (subscription.status !== 'overdue' && !(daysLeft !== null && daysLeft < 0)) return false;
+      } else if (subscription.status !== params.status) {
+        return false;
+      }
+    }
 
     if (search) {
       const haystack = [
@@ -144,8 +153,8 @@ export function filterAndSortSubscriptions(
     }
 
     if (sortBy === 'nextPaymentDate') {
-      const first = a.nextPaymentDate ? new Date(a.nextPaymentDate).getTime() : Number.MAX_SAFE_INTEGER;
-      const second = b.nextPaymentDate ? new Date(b.nextPaymentDate).getTime() : Number.MAX_SAFE_INTEGER;
+      const first = getEffectiveNextPaymentDate(a)?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const second = getEffectiveNextPaymentDate(b)?.getTime() ?? Number.MAX_SAFE_INTEGER;
       return (first - second) * sortOrder;
     }
 

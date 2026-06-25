@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
   iconContainer: {
     width: 108,
     height: 108,
-    borderRadius: 34,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 30,
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   button: {
-    borderRadius: 30,
+    borderRadius: 12,
     overflow: 'hidden',
     ...vibrantTheme.shadows.glow,
   },
