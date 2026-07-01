@@ -25,7 +25,7 @@ import type { Subscription } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../theme/themeUtils';
-import { daysUntilDate, formatRelativeDay } from '../utils/date';
+import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
 import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
 import { ErrorState } from '../components/ErrorState';
@@ -199,7 +199,6 @@ export const PaymentCalendarScreen = () => {
 
   const summary = useMemo(() => {
     const upcoming = calendarItems.filter((item) => item.daysLeft >= 0);
-    const overdue = calendarItems.filter((item) => item.daysLeft < 0);
     const dueSoon = upcoming.filter((item) => item.daysLeft <= 7);
     const total = upcoming.reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const next = upcoming[0] || null;
@@ -208,7 +207,6 @@ export const PaymentCalendarScreen = () => {
       total,
       currency: upcoming[0]?.currency || subscriptions[0]?.currency || 'PLN',
       count: upcoming.length,
-      overdueCount: overdue.length,
       dueSoonCount: dueSoon.length,
       next,
     };
@@ -366,8 +364,8 @@ export const PaymentCalendarScreen = () => {
               <Text style={styles.heroMetricLabel}>do 7 dni</Text>
             </View>
             <View style={styles.heroMetric}>
-              <Text style={styles.heroMetricValue}>{summary.overdueCount}</Text>
-              <Text style={styles.heroMetricLabel}>po terminie</Text>
+              <Text style={styles.heroMetricValue}>{summary.next ? formatShortDate(summary.next.paymentDate) : '-'}</Text>
+              <Text style={styles.heroMetricLabel}>następna</Text>
             </View>
           </View>
         </LinearGradient>

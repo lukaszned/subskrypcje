@@ -40,6 +40,7 @@ import { daysUntilDate, formatRelativeDay, parseAppDate } from '../utils/date';
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 import { getSeasonalStatus, parseSubscriptionNotes } from '../utils/subscriptionNotes';
 import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
+import { getSubscriptionDisplayStatus, getSubscriptionDisplayStatusTone } from '../utils/subscriptionDisplayStatus';
 
 export const SubscriptionDetailScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'SubscriptionDetail'>>();
@@ -139,22 +140,14 @@ export const SubscriptionDetailScreen = () => {
 
   const effectiveNextPaymentDate = getEffectiveNextPaymentDateString(sub);
   const nextDate = getEffectiveNextPaymentDate(sub);
-  const nextDaysLeft = daysUntilDate(nextDate);
   const trialDaysLeft = daysUntilDate(sub.trialEndDate);
 
   const parsedNotes = parseSubscriptionNotes(sub.notes);
   const seasonalStatus = getSeasonalStatus(sub.notes);
   const cleanNote = /lorem\s+ipsum/i.test(parsedNotes.text || '') ? '' : (parsedNotes.text || '').trim();
 
-  const statusConfig = (() => {
-    if (sub.status === 'canceled') return { label: 'Anulowana', color: theme.colors.textMuted, bg: theme.colors.cardStrong };
-    if (sub.status === 'overdue' || (nextDaysLeft !== null && nextDaysLeft < 0)) {
-      return { label: 'Po terminie', color: theme.colors.danger, bg: `${theme.colors.danger}18` };
-    }
-    if (sub.isTrial) return { label: 'Okres próbny', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
-    if (nextDaysLeft !== null && nextDaysLeft <= 3) return { label: 'Wkrótce', color: theme.colors.warning, bg: `${theme.colors.warning}18` };
-    return { label: 'Aktywna', color: theme.colors.primary, bg: `${theme.colors.primary}24` };
-  })();
+  const displayStatus = getSubscriptionDisplayStatus(sub);
+  const statusTone = getSubscriptionDisplayStatusTone(theme, displayStatus);
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
@@ -179,8 +172,8 @@ export const SubscriptionDetailScreen = () => {
             <View style={styles.logoContainer}>
               <Text style={styles.logoText}>{sub.name.charAt(0)}</Text>
             </View>
-            <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
-              <Text style={[styles.statusBadgeText, { color: statusConfig.color }]}>{statusConfig.label}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: statusTone.badgeBg, borderColor: statusTone.border }]}>
+              <Text style={[styles.statusBadgeText, { color: statusTone.accent }]}>{statusTone.label}</Text>
             </View>
           </View>
           <Text style={styles.name}>{sub.name}</Text>

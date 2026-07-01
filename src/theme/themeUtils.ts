@@ -57,7 +57,7 @@ export function getCategoryTone(theme: AppTheme, category?: SubscriptionCategory
 }
 
 export function getStatusTone(theme: AppTheme, status?: string | null) {
-  if (status === 'canceled' || status === 'risky' || status === 'overdue') {
+  if (status === 'canceled' || status === 'risky') {
     return {
       accent: theme.colors.danger,
       background: withAlpha(theme.colors.danger, 0.14),

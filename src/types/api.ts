@@ -248,9 +248,9 @@ export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
 };
 
 export const STATUS_LABELS: Record<SubscriptionStatus, string> = {
-  pending:  'Oczekująca',
-  paid:     'Opłacona',
-  overdue:  'Zaległa',
+  pending:  'Aktywna',
+  paid:     'Aktywna',
+  overdue:  'Aktywna',
   canceled: 'Anulowana',
 };
 
@@ -291,38 +291,6 @@ export interface DashboardActivityResponse {
   count: number;
   limit: number;
   items: DashboardActivityItem[];
-}
-
-export interface HealthScoreResponse {
-  score: number;
-  status: 'excellent' | 'good' | 'needs_attention' | 'risky';
-  label: string;
-  summary: string;
-  baseCurrency: string;
-  metrics: {
-    monthlySubscriptionsTotal: number;
-    monthlyIncome: number | null;
-    incomeCurrency: string;
-    freeAfterSubscriptions: number | null;
-    subscriptionsIncomePercentage: number | null;
-    activeSubscriptionsCount: number;
-    trialsCount: number;
-    overdueCount: number;
-    trialsEndingSoonCount: number;
-    upcomingPaymentsSoonCount: number;
-  };
-  factors: {
-    type: 'positive' | 'negative' | 'neutral';
-    code: string;
-    title: string;
-    description: string;
-    impact: number;
-  }[];
-  recommendedActions: {
-    type: string;
-    title: string;
-    description: string;
-  }[];
 }
 
 export interface UserSettings {

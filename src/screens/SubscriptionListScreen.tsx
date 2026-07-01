@@ -19,7 +19,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Search, ArrowUpDown, ArrowLeft, CalendarClock, ShieldAlert, Wallet } from 'lucide-react-native';
+import { Search, ArrowUpDown, ArrowLeft, CalendarClock, Clock, Wallet } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../types/navigation';
@@ -31,7 +31,7 @@ import { usePaySubscription } from '../hooks/usePaySubscription';
 import { filterAndSortSubscriptions } from '../api/subscriptions';
 
 // Typy
-import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS, SubscriptionStatus } from '../types/api';
+import { Subscription, CATEGORY_LABELS, BILLING_CYCLE_LABELS } from '../types/api';
 
 // Komponent item
 import SubscriptionListItem from './SubscriptionListItem';
@@ -48,6 +48,7 @@ import { GlassCard, MetricTile, SectionHeader } from '../components/ui/PremiumPr
 import { getSafeMutationErrorMessage } from '../utils/requestErrors';
 import { getSeasonalStatus } from '../utils/subscriptionNotes';
 import { goBackOrDashboard } from '../utils/navigation';
+import { getSubscriptionDisplayStatus, type SubscriptionDisplayStatus } from '../utils/subscriptionDisplayStatus';
 
 const toMonthlyAmount = (subscription: Subscription) => {
   const amount = Number(subscription.amount || 0);
@@ -70,11 +71,10 @@ const showActionError = (error: unknown, fallback: string) => {
   Alert.alert('Nie udało się wykonać akcji', getSafeMutationErrorMessage(error, fallback));
 };
 
-const STATUS_TABS: Array<{ id: SubscriptionStatus | 'all' | 'seasonal'; label: string }> = [
+const STATUS_TABS: Array<{ id: SubscriptionDisplayStatus | 'all' | 'seasonal'; label: string }> = [
   { id: 'all', label: 'Wszystkie' },
-  { id: 'pending', label: 'Aktywne' },
-  { id: 'paid', label: 'Opłacone' },
-  { id: 'overdue', label: 'Zaległe' },
+  { id: 'active', label: 'Aktywne' },
+  { id: 'trial', label: 'Okres próbny' },
   { id: 'seasonal', label: 'Sezonowe' },
   { id: 'canceled', label: 'Anulowane' },
 ];
@@ -86,7 +86,7 @@ export const SubscriptionListScreen = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const deferredSearchQuery = useDeferredValue(searchQuery);
-  const [activeStatus, setActiveStatus] = useState<SubscriptionStatus | 'all' | 'seasonal'>('all');
+  const [activeStatus, setActiveStatus] = useState<SubscriptionDisplayStatus | 'all' | 'seasonal'>('all');
   const [sortOption, setSortOption] = useState<{ field: string, order: 'asc' | 'desc' }>({ field: 'nextPaymentDate', order: 'asc' });
 
   const { data: allSubscriptions = [], isLoading, isFetching, isRefetching, isError, error, refetch } = useSubscriptions();
@@ -113,13 +113,16 @@ export const SubscriptionListScreen = () => {
   const subscriptions = useMemo(() => {
     const base = filterAndSortSubscriptions(normalizedSubscriptions, {
       search: deferredSearchQuery,
-      status: activeStatus === 'all' || activeStatus === 'seasonal' ? undefined : activeStatus,
       sortBy: sortOption.field,
       sortOrder: sortOption.order,
     });
 
-    if (activeStatus !== 'seasonal') return base;
-    return base.filter((item) => item.status !== 'canceled' && getSeasonalStatus(item.notes).isSeasonal);
+    if (activeStatus === 'all') return base;
+    if (activeStatus === 'seasonal') {
+      return base.filter((item) => getSubscriptionDisplayStatus(item) !== 'canceled' && getSeasonalStatus(item.notes).isSeasonal);
+    }
+
+    return base.filter((item) => getSubscriptionDisplayStatus(item) === activeStatus);
   }, [activeStatus, deferredSearchQuery, normalizedSubscriptions, sortOption.field, sortOption.order]);
 
   const portfolioStats = useMemo(() => {
@@ -129,19 +132,16 @@ export const SubscriptionListScreen = () => {
       const daysLeft = daysUntilDate(getEffectiveNextPaymentDate(item));
       return daysLeft !== null && daysLeft >= 0 && daysLeft <= 7;
     }).length;
-    const attention = counted.filter((item) => {
+    const trialEndingSoon = counted.filter((item) => {
       const trialDays = daysUntilDate(item.trialEndDate);
-      const paymentDays = daysUntilDate(getEffectiveNextPaymentDate(item));
-      return item.status === 'overdue' ||
-        (paymentDays !== null && paymentDays < 0) ||
-        (item.isTrial && trialDays !== null && trialDays >= 0 && trialDays <= 7);
+      return item.isTrial && trialDays !== null && trialDays >= 0 && trialDays <= 7;
     }).length;
 
     return {
       active: counted.length,
       monthlyTotal,
       dueSoon,
-      attention,
+      trialEndingSoon,
       currency: counted[0]?.currency || 'PLN',
     };
   }, [normalizedSubscriptions]);
@@ -252,10 +252,6 @@ export const SubscriptionListScreen = () => {
   ), [theme.colors.text, theme.colors.textMuted]);
   const renderItem = useCallback(({ item }: { item: Subscription }) => {
     const seasonalStatus = getSeasonalStatus(item.notes);
-    const effectivePaymentDays = daysUntilDate(getEffectiveNextPaymentDate(item));
-    const displayStatus = item.status === 'overdue' || (effectivePaymentDays !== null && effectivePaymentDays < 0)
-      ? 'overdue'
-      : item.status;
 
     return (
       <SubscriptionListItem
@@ -271,7 +267,7 @@ export const SubscriptionListScreen = () => {
             return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}.${d.getFullYear()}`;
           })() : '-',
           cycle: BILLING_CYCLE_LABELS[item.billingCycle] || item.billingCycle || 'Co miesiąc',
-          status: displayStatus,
+          status: item.status,
           isTrial: item.isTrial,
           isSeasonal: seasonalStatus.isSeasonal,
           seasonEndLabel: seasonalStatus.label,
@@ -301,10 +297,10 @@ export const SubscriptionListScreen = () => {
         <MetricTile label="aktywne" value={portfolioStats.active} icon={Wallet} />
         <MetricTile label="do 7 dni" value={portfolioStats.dueSoon} icon={CalendarClock} />
         <MetricTile
-          label="uwaga"
-          value={portfolioStats.attention}
-          icon={ShieldAlert}
-          tone={portfolioStats.attention > 0 ? 'warning' : 'primary'}
+          label="okresy próbne"
+          value={portfolioStats.trialEndingSoon}
+          icon={Clock}
+          tone={portfolioStats.trialEndingSoon > 0 ? 'warning' : 'primary'}
         />
       </View>
     </GlassCard>
@@ -312,17 +308,17 @@ export const SubscriptionListScreen = () => {
     isFetching,
     isLoading,
     portfolioStats.active,
-    portfolioStats.attention,
     portfolioStats.currency,
     portfolioStats.dueSoon,
     portfolioStats.monthlyTotal,
+    portfolioStats.trialEndingSoon,
     theme.colors.border,
     theme.colors.primary,
     theme.colors.text,
   ]);
 
   const keyExtractor = useCallback((item: Subscription) => item.id, []);
-  const handleStatusChange = useCallback((status: SubscriptionStatus | 'all' | 'seasonal') => {
+  const handleStatusChange = useCallback((status: SubscriptionDisplayStatus | 'all' | 'seasonal') => {
     setActiveStatus(status);
   }, []);
   const refreshControl = useMemo(() => (

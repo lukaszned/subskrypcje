@@ -17,7 +17,6 @@ import {
   NotificationPreviewResponse,
   RemindersResponse,
   DashboardActivityResponse,
-  HealthScoreResponse,
   SavingsResponse,
   Subscription,
   SubscriptionCategory,
@@ -675,11 +674,4 @@ export async function getNotificationPreview(): Promise<NotificationPreviewRespo
  */
 export async function getDashboardActivity(limit: number = 10): Promise<DashboardActivityResponse> {
   return apiGet<DashboardActivityResponse>(`/dashboard/activity?limit=${limit}`);
-}
-
-/**
- * GET /dashboard/health-score
- */
-export async function getHealthScore(): Promise<HealthScoreResponse> {
-  return apiGet<HealthScoreResponse>('/dashboard/health-score');
 }

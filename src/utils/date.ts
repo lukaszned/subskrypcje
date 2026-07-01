@@ -42,7 +42,7 @@ export function daysUntilDate(value: string | Date | null | undefined, now = new
 export function formatRelativeDay(value: string | Date | null | undefined, now = new Date()) {
   const days = daysUntilDate(value, now);
   if (days === null) return 'Brak daty';
-  if (days < 0) return days === -1 ? 'Wczoraj' : `${Math.abs(days)} dni po terminie`;
+  if (days < 0) return days === -1 ? 'Wczoraj' : `${Math.abs(days)} dni temu`;
   if (days === 0) return 'Dzisiaj';
   if (days === 1) return 'Jutro';
   return `Za ${days} dni`;

@@ -62,7 +62,6 @@ Ta lista sluzy do szybkiego smoke testu przed demo, releasem albo wiekszym merge
 - [ ] Daty relatywne sa zgodne z data platnosci.
 - [ ] Guard pokazuje ryzyka bez crasha przy pustych danych.
 - [ ] Statystyki nie maja wykresow "w dol" ani ujemnych wysokosci kolumn.
-- [ ] Kondycja subskrypcji prowadzi do ekranu wyjasnienia wyniku.
 - [ ] Oszczednosci prowadza do ekranu z anulowanymi uslugami.
 
 ## 8. Gmail / Email Scan UI

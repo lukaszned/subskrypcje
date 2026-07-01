@@ -23,6 +23,8 @@ import { CheckCircle, XCircle } from 'lucide-react-native';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme, type AppTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../theme/themeUtils';
+import { getSubscriptionDisplayStatus, getSubscriptionDisplayStatusTone } from '../utils/subscriptionDisplayStatus';
+import type { SubscriptionStatus } from '../types/api';
 
 export interface SubscriptionItem {
   id: string;
@@ -32,7 +34,7 @@ export interface SubscriptionItem {
   currency: string;
   nextPaymentDate: string;
   cycle: string;
-  status: 'pending' | 'paid' | 'overdue' | 'canceled';
+  status: SubscriptionStatus;
   isTrial?: boolean;
   isSeasonal?: boolean;
   seasonEndLabel?: string | null;
@@ -68,65 +70,8 @@ function getSubscriptionCardTone(
   isTrial: boolean | undefined,
   theme: AppTheme
 ) {
-  if (isTrial) {
-    return {
-      label: 'Okres próbny',
-      accent: theme.colors.warning,
-      badgeBg: withAlpha(theme.colors.warning, 0.16),
-      cardBg: withAlpha(theme.colors.warning, 0.08),
-      border: withAlpha(theme.colors.warning, 0.34),
-      rail: withAlpha(theme.colors.warning, 0.86),
-      shadow: theme.colors.warning,
-      muted: false,
-    };
-  }
-
-  switch (status) {
-    case 'paid':
-      return {
-        label: 'Opłacona',
-        accent: theme.colors.primary,
-        badgeBg: withAlpha(theme.colors.primary, 0.16),
-        cardBg: withAlpha(theme.colors.primary, 0.08),
-        border: withAlpha(theme.colors.primary, 0.32),
-        rail: withAlpha(theme.colors.primary, 0.88),
-        shadow: theme.colors.primary,
-        muted: false,
-      };
-    case 'overdue':
-      return {
-        label: 'Zaległa',
-        accent: theme.colors.danger,
-        badgeBg: withAlpha(theme.colors.danger, 0.16),
-        cardBg: withAlpha(theme.colors.danger, 0.09),
-        border: withAlpha(theme.colors.danger, 0.42),
-        rail: withAlpha(theme.colors.danger, 0.9),
-        shadow: theme.colors.danger,
-        muted: false,
-      };
-    case 'canceled':
-      return {
-        label: 'Anulowana',
-        accent: theme.colors.textSubtle,
-        badgeBg: withAlpha(theme.colors.text, 0.08),
-        cardBg: withAlpha(theme.colors.text, 0.045),
-        border: withAlpha(theme.colors.text, 0.11),
-        rail: withAlpha(theme.colors.textMuted, 0.42),
-        shadow: theme.colors.bg,
-        muted: true,
-      };
-    default:
-      return {
-        label: 'Aktywna',
-        accent: theme.colors.primary,
-        badgeBg: withAlpha(theme.colors.primary, 0.16),
-        cardBg: withAlpha(theme.colors.primary, 0.07),
-        border: withAlpha(theme.colors.primary, 0.28),
-        rail: withAlpha(theme.colors.primary, 0.86),
-        shadow: theme.colors.primary,
-        muted: false,
-      };
-  }
+  const displayStatus = getSubscriptionDisplayStatus({ status, isTrial });
+  return getSubscriptionDisplayStatusTone(theme, displayStatus);
 }
 
 const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPause, onPress }) => {
@@ -145,7 +90,7 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
     seasonEndLabel: item.seasonEndLabel || null,
   }), [item]);
   const catStyle = getCategoryStyle(safeItem.category, theme);
-  const isCancelled = safeItem.status === 'canceled';
+  const isCancelled = getSubscriptionDisplayStatus(safeItem) === 'canceled';
   const cardTone = getSubscriptionCardTone(safeItem.status, safeItem.isTrial, theme);
 
   const handlePayPress = useCallback(() => onPause(safeItem.id), [onPause, safeItem.id]);

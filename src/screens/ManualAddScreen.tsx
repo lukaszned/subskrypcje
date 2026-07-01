@@ -74,6 +74,12 @@ const CYCLES: Array<{ id: BillingCycle; label: string }> = [
   { id: 'one_time', label: 'Jednorazowo'},
 ];
 
+const TRIAL_DEFAULT_DAYS = 7;
+
+const addDays = (baseDate: Date, daysToAdd: number) => (
+  new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + daysToAdd)
+);
+
 const addMonthsClamped = (baseDate: Date, monthsToAdd: number) => {
   const year = baseDate.getFullYear();
   const month = baseDate.getMonth() + monthsToAdd;
@@ -421,7 +427,11 @@ export const ManualAddScreen = () => {
 
   const onTrialDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
     if (Platform.OS === 'android') setShowTrialPicker(false);
-    if (selectedDate) setTrialEndDate(selectedDate);
+    if (selectedDate) {
+      setTrialEndDate(selectedDate);
+      setDate(selectedDate);
+      setHasManualDate(false);
+    }
   };
 
   const onSeasonDateChange = (event: DateTimePickerEvent, selectedDate?: Date) => {
@@ -438,6 +448,18 @@ export const ManualAddScreen = () => {
 
     if (!subscriptionId && !hasManualDate) {
       setDate(getSuggestedNextPaymentDate(nextCycle));
+    }
+  };
+
+  const handleTrialToggle = () => {
+    const nextIsTrial = !isTrial;
+    setIsTrial(nextIsTrial);
+
+    if (nextIsTrial) {
+      const firstPaymentDate = addDays(new Date(), TRIAL_DEFAULT_DAYS);
+      setTrialEndDate(firstPaymentDate);
+      setDate(firstPaymentDate);
+      setHasManualDate(false);
     }
   };
 
@@ -522,16 +544,18 @@ export const ManualAddScreen = () => {
       seasonEndDate: dateToSeasonInput(seasonEndDate),
       seasonReason,
     });
+    const billingCycleForPayload: BillingCycle = isTrial ? 'monthly' : cycle;
+    const firstPaymentDate = isTrial ? trialEndDate : date;
 
     const payload = {
       name: name.trim(),
       amount: finalCalculatedCost,
       currency,
       category,
-      billingCycle: cycle,
+      billingCycle: billingCycleForPayload,
       provider: provider.trim() || undefined,
       planName: planName.trim() || undefined,
-      nextPaymentDate: formatInputDate(date),
+      nextPaymentDate: formatInputDate(firstPaymentDate),
       isTrial,
       trialEndDate: isTrial ? formatInputDate(trialEndDate) : undefined,
       notes: notesPayload,
@@ -1056,20 +1080,22 @@ export const ManualAddScreen = () => {
                     <Text style={styles.sectionHeaderHint}>Plan, cykl, data, kategoria i współdzielenie</Text>
                   </View>
 
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Cykl</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
-                    {CYCLES.map(c => (
-                      <TouchableOpacity 
-                        key={c.id} 
-                        style={[styles.pill, cycle === c.id && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
-                        onPress={() => handleCycleChange(c.id)}
-                      >
-                        <Text style={[styles.pillText, cycle === c.id && { color: theme.colors.primary }]}>{c.label}</Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
-                </View>
+                {!isTrial && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Cykl</Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} nestedScrollEnabled keyboardShouldPersistTaps="handled">
+                      {CYCLES.map(c => (
+                        <TouchableOpacity
+                          key={c.id}
+                          style={[styles.pill, cycle === c.id && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary }]}
+                          onPress={() => handleCycleChange(c.id)}
+                        >
+                          <Text style={[styles.pillText, cycle === c.id && { color: theme.colors.primary }]}>{c.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
 
                 {shouldShowNextPaymentDate && (
                   <View style={styles.inputGroup}>
@@ -1126,7 +1152,7 @@ export const ManualAddScreen = () => {
                   <View style={styles.rowBetween}>
                     <Text style={styles.labelOptional}>Okres próbny</Text>
                     <TouchableOpacity 
-                      onPress={() => setIsTrial(!isTrial)}
+                      onPress={handleTrialToggle}
                       style={[styles.toggle, isTrial && { backgroundColor: theme.colors.primary }]}
                     >
                       <View style={[styles.toggleDot, isTrial && styles.toggleDotActive]} />
@@ -1141,6 +1167,9 @@ export const ManualAddScreen = () => {
                       <Calendar size={20} color={theme.colors.warning} style={{ marginRight: 8 }} />
                       <Text style={[styles.dateText, { color: theme.colors.warning }]}>{formatDate(trialEndDate)}</Text>
                     </TouchableOpacity>
+                    <Text style={[styles.dateHint, { color: theme.colors.textMuted }]}>
+                      Pierwsza płatność ruszy po okresie próbnym, a dalsze odnowienia będą miesięczne.
+                    </Text>
                     {showTrialPicker && (
                       <DateTimePicker
                         value={trialEndDate}
@@ -1319,7 +1348,7 @@ export const ManualAddScreen = () => {
                   <View style={styles.saveSummaryAmountBlock}>
                     <Text style={[styles.saveSummaryAmount, { color: theme.colors.primary }]}>{finalCalculatedCost.toFixed(2)}</Text>
                     <Text style={[styles.saveSummaryCurrency, { color: theme.colors.textMuted }]}>
-                      {currency} · {CYCLES.find((item) => item.id === cycle)?.label || cycle}
+                      {currency} · {isTrial ? 'po trialu co miesiąc' : CYCLES.find((item) => item.id === cycle)?.label || cycle}
                     </Text>
                   </View>
                 </View>

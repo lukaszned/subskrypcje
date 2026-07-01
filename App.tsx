@@ -34,7 +34,6 @@ import { DASHBOARD_SUMMARY_KEY } from './src/hooks/useDashboardSummary';
 import { SUBSCRIPTIONS_KEY } from './src/hooks/useSubscriptions';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { EmailScanScreen } from './src/screens/EmailScanScreen';
-import { HealthScoreDetailsScreen } from './src/screens/HealthScoreDetailsScreen';
 import LoginScreen from './src/screens/LoginScreen';
 import { ManualAddScreen } from './src/screens/ManualAddScreen';
 import { NotificationsScreen } from './src/screens/NotificationsScreen';
@@ -242,7 +241,6 @@ const AppNavigator = React.memo(function AppNavigator() {
         options={hiddenDrawerOptions}
       />
       <AppDrawer.Screen name="Notifications" component={NotificationsScreen} options={hiddenDrawerOptions} />
-      <AppDrawer.Screen name="HealthScoreDetails" component={HealthScoreDetailsScreen} options={hiddenDrawerOptions} />
       <AppDrawer.Screen name="SavingsDetails" component={SavingsDetailsScreen} options={hiddenDrawerOptions} />
     </AppDrawer.Navigator>
   );

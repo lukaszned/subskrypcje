@@ -67,10 +67,12 @@ const API_BASE_URLS = resolveApiBaseUrls();
 const READ_TIMEOUT_MS = 12000;
 const WRITE_TIMEOUT_MS = 45000;
 const AUTH_FAILURE_COOLDOWN_MS = 10000;
+const HOST_PROBE_TIMEOUT_MS = 3000;
 
 let accessTokenPromise: Promise<string> | null = null;
 let authFailureUntil = 0;
 let lastAuthFailure: ApiError | null = null;
+let preferredApiBaseUrl: string | null = null;
 
 if (API_BASE_URLS.length === 0) {
   throw new Error(
@@ -85,6 +87,63 @@ if (__DEV__) {
 
 function getErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error || '');
+}
+
+function normalizeBaseUrl(url: string): string {
+  return url.endsWith('/') ? url.slice(0, -1) : url;
+}
+
+function getOrderedApiBaseUrls(): string[] {
+  const normalizedUrls = API_BASE_URLS.map(normalizeBaseUrl);
+
+  if (preferredApiBaseUrl && normalizedUrls.includes(preferredApiBaseUrl)) {
+    return [
+      preferredApiBaseUrl,
+      ...normalizedUrls.filter((url) => url !== preferredApiBaseUrl),
+    ];
+  }
+
+  return normalizedUrls;
+}
+
+async function probeApiBaseUrl(baseUrl: string, headers: Record<string, string>): Promise<boolean> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), HOST_PROBE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(`${baseUrl}/subscriptions`, {
+      method: 'GET',
+      headers,
+      signal: controller.signal,
+    });
+    if (response.status === 404 || response.status >= 500) {
+      return false;
+    }
+
+    preferredApiBaseUrl = baseUrl;
+    return true;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function getWritableBaseUrls(headers: Record<string, string>): Promise<string[]> {
+  const orderedUrls = getOrderedApiBaseUrls();
+  if (preferredApiBaseUrl || orderedUrls.length <= 1) return orderedUrls;
+
+  for (const baseUrl of orderedUrls) {
+    const isReachable = await probeApiBaseUrl(baseUrl, headers);
+    if (isReachable) {
+      return [
+        baseUrl,
+        ...orderedUrls.filter((url) => url !== baseUrl),
+      ];
+    }
+  }
+
+  return orderedUrls;
 }
 
 function isRetriableConnectionError(error: unknown): boolean {
@@ -197,11 +256,18 @@ async function request<T>(
   let lastError: unknown;
 
   reportRequestStart();
+  let baseUrls: string[];
+  try {
+    baseUrls = method === 'GET'
+      ? getOrderedApiBaseUrls()
+      : await getWritableBaseUrls(headers);
+  } catch (error) {
+    reportRequestFailure(error, Date.now() - startedAt);
+    throw error;
+  }
 
-  for (let attempt = 0; attempt < API_BASE_URLS.length; attempt += 1) {
-    const baseUrl = API_BASE_URLS[attempt].endsWith('/')
-      ? API_BASE_URLS[attempt].slice(0, -1)
-      : API_BASE_URLS[attempt];
+  for (let attempt = 0; attempt < baseUrls.length; attempt += 1) {
+    const baseUrl = baseUrls[attempt];
     const url = `${baseUrl}${path}`;
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -241,11 +307,13 @@ async function request<T>(
 
       if (response.status === 204) {
         reportRequestSuccess(latencyMs);
+        preferredApiBaseUrl = baseUrl;
         return undefined as any;
       }
 
       const responseBody = await response.json();
       reportRequestSuccess(latencyMs);
+      preferredApiBaseUrl = baseUrl;
       return responseBody;
     } catch (error: any) {
       clearTimeout(timeoutId);
@@ -256,7 +324,7 @@ async function request<T>(
       lastError = normalizedError;
 
       const canTryNextHost =
-        attempt < API_BASE_URLS.length - 1 &&
+        attempt < baseUrls.length - 1 &&
         isRetriableConnectionError(normalizedError) &&
         method === 'GET';
 

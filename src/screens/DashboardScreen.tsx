@@ -32,7 +32,6 @@ import {
   History,
   BarChart3,
   CalendarDays,
-  Sparkles,
   Menu,
 } from 'lucide-react-native';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
@@ -52,7 +51,6 @@ import { useAuth } from '../context/AuthContext';
 import { NetworkStatusBanner } from '../components/NetworkStatusBanner';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
-import { useHealthScore } from '../hooks/useHealthScore';
 import { useDashboardActivity } from '../hooks/useDashboardActivity';
 import { usePersistentIncome } from '../hooks/usePersistentIncome';
 import { useSubscriptions } from '../hooks/useSubscriptions';
@@ -63,7 +61,7 @@ import {
   DashboardActivityItem
 } from '../types/api';
 import { useTheme } from '../theme/ThemeContext';
-import { getCategoryTone, getStatusTone, withAlpha } from '../theme/themeUtils';
+import { getCategoryTone, withAlpha } from '../theme/themeUtils';
 import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
 import {
   buildSavingsFromSubscriptions,
@@ -187,7 +185,6 @@ export const DashboardScreen = () => {
   const { data: savingsData, refetch: refetchSavings } = useDashboardSavings(stageTwoEnabled);
   const { data: trendsData, refetch: refetchTrends } = useDashboardTrends(6, trendType, stageThreeEnabled);
   const { data: remindersData, refetch: refetchReminders } = useReminders(stageThreeEnabled);
-  const { data: healthData, refetch: refetchHealth } = useHealthScore(stageTwoEnabled);
   const { data: activityData, refetch: refetchActivity } = useDashboardActivity(10, stageThreeEnabled);
 
   const { data: budgetImpact, refetch: refetchBudgetImpact } = useBudgetImpact(stageTwoEnabled);
@@ -267,17 +264,6 @@ export const DashboardScreen = () => {
     (countedCurrencies[0] || baseCurrency) === baseCurrency;
   const monthlyTotal = canUseLocalMonthlyTotal ? localMonthlyTotal : summaryMonthlyTotal;
   const yearlyTotal = monthlyTotal * 12;
-  const localOverdueCount = useMemo(
-    () => subscriptions
-      .filter((subscription) => subscription.status !== 'canceled' && subscription.includeInStats !== false)
-      .filter((subscription) => {
-        if (subscription.status === 'overdue') return true;
-        const daysLeft = daysUntilDate(getEffectiveNextPaymentDate(subscription));
-        return daysLeft !== null && daysLeft < 0;
-      }).length,
-    [subscriptions]
-  );
-  const overdueCount = subscriptions.length > 0 ? localOverdueCount : summaryData?.overdueCount ?? 0;
   const averagePerService = summaryData?.activeSubscriptionsCount && summaryData.activeSubscriptionsCount > 0
     ? monthlyTotal / summaryData.activeSubscriptionsCount
     : 0;
@@ -448,7 +434,6 @@ export const DashboardScreen = () => {
         stageTwoEnabled ? refetchSavings() : Promise.resolve(),
         stageThreeEnabled ? refetchTrends() : Promise.resolve(),
         stageThreeEnabled ? refetchReminders() : Promise.resolve(),
-        stageTwoEnabled ? refetchHealth() : Promise.resolve(),
         stageThreeEnabled ? refetchActivity() : Promise.resolve(),
         stageTwoEnabled ? refetchBudgetImpact() : Promise.resolve(),
       ]);
@@ -847,31 +832,6 @@ export const DashboardScreen = () => {
       color: theme.textDim,
       lineHeight: 18,
     },
-    overdueSection: {
-      marginBottom: 20,
-    },
-    overdueBanner: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: withAlpha(theme.error, 0.14),
-      paddingHorizontal: 12,
-      paddingVertical: 8,
-      borderRadius: 10,
-      borderWidth: 1,
-      borderColor: withAlpha(theme.error, 0.26),
-    },
-    overdueBannerText: {
-      flex: 1,
-      fontSize: 13,
-      fontWeight: '600',
-      color: theme.error,
-    },
-    overdueActionText: {
-      fontSize: 13,
-      fontWeight: '700',
-      color: theme.error,
-      textDecorationLine: 'underline',
-    },
     infoBox: {
       flexDirection: 'row',
       padding: 12,
@@ -958,43 +918,6 @@ export const DashboardScreen = () => {
       fontSize: 12,
       color: theme.textDim,
       lineHeight: 16,
-    },
-    healthCard: {
-      backgroundColor: theme.card,
-      borderRadius: 12,
-      padding: 20,
-      borderLeftWidth: 6,
-      marginBottom: 24,
-    },
-    healthTop: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 16,
-    },
-    scoreCircle: {
-      width: 56,
-      height: 56,
-      borderRadius: 12,
-      borderWidth: 3,
-      alignItems: 'center',
-      justifyContent: 'center',
-    },
-    scoreText: {
-      fontSize: 20,
-      fontWeight: '800',
-    },
-    healthMain: {
-      flex: 1,
-    },
-    healthLabel: {
-      fontSize: 18,
-      fontWeight: '800',
-      marginBottom: 2,
-    },
-    healthSummary: {
-      fontSize: 13,
-      color: theme.textDim,
-      lineHeight: 18,
     },
     activityCard: {
       backgroundColor: theme.card,
@@ -1298,18 +1221,6 @@ export const DashboardScreen = () => {
   // SMART SUGGESTIONS GENERATOR
   const smartSuggestions = useMemo(() => {
     const list = [];
-    
-    if (overdueCount > 0) {
-      list.push({
-        id: 'overdue',
-        title: overdueCount === 1 ? 'Jedna płatność wymaga uwagi' : 'Masz zaległe płatności',
-        desc: overdueCount === 1
-          ? 'Sprawdź najbliższą zaległą subskrypcję i oznacz płatność po opłaceniu.'
-          : `${overdueCount} płatności wymagają sprawdzenia na liście subskrypcji.`,
-        icon: AlertCircle,
-        color: theme.error
-      });
-    }
 
     if (trialsData && trialsData.count > 0) {
       const nextTrial = trialsData.items[0];
@@ -1344,7 +1255,7 @@ export const DashboardScreen = () => {
     }
 
     return list;
-  }, [overdueCount, trialsData, effectiveBudgetImpact, savingsView, theme]);
+  }, [trialsData, effectiveBudgetImpact, savingsView, theme]);
 
   const renderBudgetCard = () => {
     if (!effectiveBudgetImpact.hasIncome) return null;
@@ -1403,37 +1314,6 @@ export const DashboardScreen = () => {
       </View>
     );
   };
-  const renderHealthScore = () => {
-    if (!healthData) return null;
-    
-    const { score, label, status, summary } = healthData;
-    
-    const getStatusColor = () => {
-      return getStatusTone(appTheme, status).accent;
-    };
-
-    return (
-      <View style={dynamicStyles.sectionContainer}>
-        <Text style={dynamicStyles.sectionTitle}>Kondycja subskrypcji</Text>
-        <TouchableOpacity 
-          style={[dynamicStyles.healthCard, dynamicStyles.shadowSm, { borderLeftColor: getStatusColor() }]}
-          activeOpacity={0.9}
-        >
-          <View style={dynamicStyles.healthTop}>
-            <View style={[dynamicStyles.scoreCircle, { borderColor: getStatusColor() }]}>
-              <Text style={[dynamicStyles.scoreText, { color: getStatusColor() }]}>{score}</Text>
-            </View>
-            <View style={dynamicStyles.healthMain}>
-              <Text style={[dynamicStyles.healthLabel, { color: getStatusColor() }]}>{label}</Text>
-              <Text style={dynamicStyles.healthSummary}>{summary}</Text>
-            </View>
-            <ChevronRight size={20} color={theme.textDim} />
-          </View>
-        </TouchableOpacity>
-      </View>
-    );
-  };
-
   const renderRecentActivity = () => {
     if (!activityData || activityData.items.length === 0) return null;
 
@@ -1550,10 +1430,6 @@ export const DashboardScreen = () => {
             <Text style={dynamicStyles.statLabel}>Okresy próbne</Text>
           </View>
           <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
-            <Text style={[dynamicStyles.statValue, { color: theme.error }]}>{overdueCount}</Text>
-            <Text style={dynamicStyles.statLabel}>Zaległe</Text>
-          </View>
-          <View style={[dynamicStyles.statBox, { borderLeftWidth: 1, borderLeftColor: theme.border }]}>
             <Text style={[dynamicStyles.statValue, { color: theme.primary }]}>{upcomingPaymentsCount}</Text>
             <Text style={dynamicStyles.statLabel}>Wkrótce</Text>
           </View>
@@ -1582,19 +1458,6 @@ export const DashboardScreen = () => {
           </View>
         )}
 
-        {overdueCount > 0 && (
-          <View style={dynamicStyles.overdueSection}>
-            <View style={dynamicStyles.overdueBanner}>
-              <AlertCircle size={14} color={theme.error} style={{ marginRight: 6 }} />
-              <Text style={dynamicStyles.overdueBannerText}>
-                Masz {overdueCount} {overdueCount === 1 ? 'zaległą płatność' : 'zaległe płatności'}!
-              </Text>
-              <TouchableOpacity onPress={() => navigation.navigate('SubscriptionList')}>
-                <Text style={dynamicStyles.overdueActionText}>Pokaż</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
       </View>
     );
   };
@@ -1901,7 +1764,7 @@ export const DashboardScreen = () => {
       <Text style={dynamicStyles.widgetTitle}>Twoje Subskrypcje</Text>
       <Text style={dynamicStyles.subscriptionMetric}>{summaryData?.activeSubscriptionsCount ?? 0}</Text>
       <Text style={dynamicStyles.widgetCaption}>
-        {summaryData?.trialsCount ?? 0} okresów próbnych · {overdueCount} zaległych
+        {summaryData?.trialsCount ?? 0} okresów próbnych
       </Text>
     </TouchableOpacity>
   );
@@ -1966,10 +1829,6 @@ export const DashboardScreen = () => {
   };
 
   const renderPremiumInsights = () => {
-    const estimatedScore = Math.max(35, Math.min(100, 100 - overdueCount * 14 - (summaryData?.trialsCount ?? 0) * 4));
-    const healthLabel = healthData
-      ? `${healthData.label} · ${healthData.score}/100`
-      : `Szacunkowo ${estimatedScore}/100 · dotknij po szczegóły`;
     const savingsLabel = savingsView.monthlySavings > 0
       ? `Oszczędzasz ok. ${savingsView.monthlySavings.toFixed(2)} ${savingsView.baseCurrency} / mc`
       : 'Zobacz anulowane koszty i miesięczny efekt';
@@ -1977,21 +1836,6 @@ export const DashboardScreen = () => {
 
     return (
       <View style={dynamicStyles.insightStrip}>
-        <TouchableOpacity
-          style={dynamicStyles.insightRow}
-          activeOpacity={0.84}
-          onPress={() => navigation.navigate('HealthScoreDetails')}
-        >
-          <View style={dynamicStyles.widgetIcon}>
-            <Sparkles size={18} color={theme.primary} />
-          </View>
-          <View style={dynamicStyles.insightTextBlock}>
-            <Text style={dynamicStyles.insightTitle}>Kondycja subskrypcji</Text>
-            <Text style={dynamicStyles.insightDesc}>{healthLabel}</Text>
-          </View>
-          <ChevronRight size={17} color={theme.textDim} />
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={dynamicStyles.insightRow}
           activeOpacity={0.84}
