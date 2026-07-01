@@ -14,7 +14,6 @@ export type AppStackParamList = {
   EmailScan: undefined;
   Statistics: undefined;
   PaymentCalendar: undefined;
-  SubscriptionReviewQueue: undefined;
   HealthScoreDetails: undefined;
   SavingsDetails: undefined;
 };

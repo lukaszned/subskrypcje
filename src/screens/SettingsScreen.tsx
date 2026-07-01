@@ -358,7 +358,7 @@ export const SettingsScreen = () => {
               </View>
               <View>
                 <Text style={styles.settingTitle}>Miesięczny dochód netto</Text>
-                <Text style={styles.settingDesc}>Zapisywany lokalnie i używany na Dashboardzie</Text>
+                <Text style={styles.settingDesc}>Zapisywany lokalnie i używany w Menu głównym</Text>
               </View>
             </View>
             <View style={styles.incomeInputRow}>

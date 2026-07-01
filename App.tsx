@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import {
@@ -14,11 +14,11 @@ import {
 } from '@react-navigation/native-stack';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { enableFreeze, enableScreens } from 'react-native-screens';
 import {
   BarChart3,
   CalendarDays,
-  ClipboardCheck,
   Home,
   Inbox,
   ListChecks,
@@ -46,7 +46,6 @@ import { SettingsScreen } from './src/screens/SettingsScreen';
 import { StatisticsScreen } from './src/screens/StatisticsScreen';
 import { SubscriptionDetailScreen } from './src/screens/SubscriptionDetailScreen';
 import { SubscriptionListScreen } from './src/screens/SubscriptionListScreen';
-import { SubscriptionReviewQueueScreen } from './src/screens/SubscriptionReviewQueueScreen';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import type { AppStackParamList, AuthStackParamList } from './src/types/navigation';
 import { requestNotificationPermissions } from './src/utils/notifications';
@@ -82,6 +81,8 @@ const queryClient = new QueryClient({
 
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const AppDrawer = createDrawerNavigator<AppStackParamList>();
+const DRAWER_MAX_WIDTH = 302;
+const DRAWER_SCREEN_RATIO = 0.86;
 
 const authScreenOptions: NativeStackNavigationOptions = {
   headerShown: false,
@@ -94,7 +95,6 @@ const appScreenOptions: DrawerNavigationOptions = {
   drawerType: 'front',
   swipeEdgeWidth: 60,
   drawerStyle: {
-    width: 302,
     backgroundColor: '#070A12',
   },
   sceneStyle: {
@@ -121,11 +121,10 @@ type DrawerItemConfig = {
 };
 
 const drawerItems: DrawerItemConfig[] = [
-  { route: 'Dashboard', label: 'Dashboard', description: 'Finansowy pulpit', icon: Home },
+  { route: 'Dashboard', label: 'Menu główne', description: 'Start aplikacji', icon: Home },
   { route: 'SubscriptionList', label: 'Subskrypcje', description: 'Lista i statusy', icon: ListChecks },
   { route: 'PaymentCalendar', label: 'Kalendarz płatności', description: 'Terminy i cashflow', icon: CalendarDays },
   { route: 'Statistics', label: 'Statystyki', description: 'Koszty i trendy', icon: BarChart3 },
-  { route: 'SubscriptionReviewQueue', label: 'Kolejka decyzji', description: 'Co wymaga uwagi', icon: ClipboardCheck },
   { route: 'EmailScan', label: 'Skaner Gmail', description: 'Wykrywanie subskrypcji', icon: Inbox },
   { route: 'Settings', label: 'Ustawienia', description: 'Motyw, waluty, konto', icon: Settings },
 ];
@@ -133,12 +132,20 @@ const drawerItems: DrawerItemConfig[] = [
 function AppDrawerContent(props: DrawerContentComponentProps) {
   const { signOut } = useAuth();
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
   const activeRoute = props.state.routeNames[props.state.index];
 
   return (
     <DrawerContentScrollView
       {...props}
-      contentContainerStyle={[styles.drawerContent, { backgroundColor: theme.colors.bg }]}
+      contentContainerStyle={[
+        styles.drawerContent,
+        {
+          backgroundColor: theme.colors.bg,
+          paddingTop: Math.max(insets.top + 16, 28),
+          paddingBottom: Math.max(insets.bottom + 18, 22),
+        },
+      ]}
     >
       <View style={[styles.drawerBrand, { borderBottomColor: theme.colors.border }]}>
         <View style={[styles.drawerLogo, { backgroundColor: theme.colors.primary }]}>
@@ -200,10 +207,19 @@ const hiddenDrawerOptions: DrawerNavigationOptions = {
 };
 
 const AppNavigator = React.memo(function AppNavigator() {
+  const { width } = useWindowDimensions();
+  const drawerWidth = Math.min(DRAWER_MAX_WIDTH, Math.round(width * DRAWER_SCREEN_RATIO));
+
   return (
     <AppDrawer.Navigator
       initialRouteName="Dashboard"
-      screenOptions={appScreenOptions}
+      screenOptions={{
+        ...appScreenOptions,
+        drawerStyle: {
+          backgroundColor: '#070A12',
+          width: drawerWidth,
+        },
+      }}
       drawerContent={(props) => <AppDrawerContent {...props} />}
     >
       <AppDrawer.Screen
@@ -213,7 +229,6 @@ const AppNavigator = React.memo(function AppNavigator() {
       <AppDrawer.Screen name="SubscriptionList" component={SubscriptionListScreen} />
       <AppDrawer.Screen name="PaymentCalendar" component={PaymentCalendarScreen} />
       <AppDrawer.Screen name="Statistics" component={StatisticsScreen} />
-      <AppDrawer.Screen name="SubscriptionReviewQueue" component={SubscriptionReviewQueueScreen} />
       <AppDrawer.Screen name="EmailScan" component={EmailScanScreen} />
       <AppDrawer.Screen name="Settings" component={SettingsScreen} />
       <AppDrawer.Screen
@@ -321,9 +336,7 @@ const styles = StyleSheet.create({
   },
   drawerContent: {
     flexGrow: 1,
-    paddingTop: 12,
     paddingHorizontal: 14,
-    paddingBottom: 18,
   },
   drawerBrand: {
     flexDirection: 'row',

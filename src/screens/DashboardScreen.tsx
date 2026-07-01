@@ -33,7 +33,6 @@ import {
   BarChart3,
   CalendarDays,
   Sparkles,
-  ShieldCheck,
   Menu,
 } from 'lucide-react-native';
 import { DrawerActions, useNavigation } from '@react-navigation/native';
@@ -1278,51 +1277,6 @@ export const DashboardScreen = () => {
     insightTextBlock: {
       flex: 1,
     },
-    decisionGrid: {
-      gap: 12,
-      marginBottom: 18,
-    },
-    decisionCard: {
-      backgroundColor: theme.card,
-      borderRadius: 12,
-      padding: 16,
-      borderWidth: 1,
-      borderColor: theme.border,
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-    },
-    decisionAccent: {
-      width: 46,
-      height: 46,
-      borderRadius: 10,
-      alignItems: 'center',
-      justifyContent: 'center',
-      backgroundColor: `${theme.primary}24`,
-      borderWidth: 1,
-      borderColor: `${theme.primary}3D`,
-    },
-    decisionBody: {
-      flex: 1,
-    },
-    decisionTitle: {
-      color: theme.text,
-      fontSize: 15,
-      fontWeight: '900',
-    },
-    decisionDesc: {
-      color: theme.textDim,
-      fontSize: 12,
-      fontWeight: '600',
-      lineHeight: 17,
-      marginTop: 3,
-    },
-    decisionCta: {
-      color: theme.primary,
-      fontSize: 12,
-      fontWeight: '900',
-      marginTop: 8,
-    },
     fab: {
       position: 'absolute',
       bottom: Math.max(insets.bottom + 20, 30),
@@ -1544,7 +1498,7 @@ export const DashboardScreen = () => {
     return (
       <View style={[dynamicStyles.headerCard, dynamicStyles.shadow]}>
         <View style={dynamicStyles.headerTop}>
-          <Text style={dynamicStyles.sectionTitle}>Dashboard</Text>
+          <Text style={dynamicStyles.sectionTitle}>Menu główne</Text>
           <View style={dynamicStyles.headerActions}>
             <TouchableOpacity onPress={() => setIsDark(!isDark)}>
               {isDark ? <Sun size={20} color={theme.textDim} /> : <Moon size={20} color={theme.textDim} />}
@@ -2011,28 +1965,6 @@ export const DashboardScreen = () => {
     );
   };
 
-  const renderDecisionQueueWidget = () => {
-    const riskCount = (summaryData?.trialsCount ?? 0) + overdueCount;
-
-    return (
-      <TouchableOpacity
-        style={[dynamicStyles.widgetCard, dynamicStyles.halfWidget]}
-        activeOpacity={0.86}
-        onPress={() => navigation.navigate('SubscriptionReviewQueue')}
-      >
-        <View style={dynamicStyles.widgetTop}>
-          <View style={dynamicStyles.widgetIcon}>
-            <ShieldCheck size={20} color={theme.primary} />
-          </View>
-          <Sparkles size={18} color={theme.primary} />
-        </View>
-        <Text style={dynamicStyles.widgetTitle}>Kolejka decyzji</Text>
-        <Text style={dynamicStyles.subscriptionMetric}>{riskCount}</Text>
-        <Text style={dynamicStyles.widgetCaption}>sprawy wymagające Twojej uwagi</Text>
-      </TouchableOpacity>
-    );
-  };
-
   const renderPremiumInsights = () => {
     const estimatedScore = Math.max(35, Math.min(100, 100 - overdueCount * 14 - (summaryData?.trialsCount ?? 0) * 4));
     const healthLabel = healthData
@@ -2110,69 +2042,6 @@ export const DashboardScreen = () => {
     );
   };
 
-  const renderDecisionCenter = () => {
-    const nextPayment = reliableUpcomingItems[0];
-    const nextTrial = trialsData?.items?.[0];
-    const cards = [
-      nextPayment ? {
-        id: 'next-payment',
-        icon: CalendarDays,
-        title: 'Najbliższa płatność',
-        desc: `${nextPayment.name} · ${formatRelativeDay(nextPayment.nextPaymentDate)} · ${nextPayment.amount.toFixed(2)} ${nextPayment.currency}`,
-        cta: 'Otwórz szczegóły',
-        onPress: () => navigation.navigate('SubscriptionDetail', { id: nextPayment.id }),
-      } : {
-        id: 'calendar',
-        icon: CalendarDays,
-        title: 'Kalendarz płatności',
-        desc: 'Zobacz listę subskrypcji posortowaną po najbliższym terminie.',
-        cta: 'Otwórz kalendarz',
-        onPress: () => navigation.navigate('PaymentCalendar'),
-      },
-      nextTrial ? {
-        id: 'trial',
-        icon: Clock,
-        title: 'Radar okresu próbnego',
-        desc: `${nextTrial.name} kończy się za ${formatDays(nextTrial.daysLeft)}. To dobry moment na decyzję.`,
-        cta: 'Sprawdź okres próbny',
-        onPress: () => navigation.navigate('SubscriptionDetail', { id: nextTrial.id }),
-      } : {
-        id: 'email-scan',
-        icon: Sparkles,
-        title: 'Automatyczne wykrywanie',
-        desc: 'Przeskanuj pocztę i dodawaj tylko te pozycje, które zatwierdzisz.',
-        cta: 'Otwórz Gmail Scan',
-        onPress: () => navigation.navigate('EmailScan'),
-      },
-    ];
-
-    return (
-      <View style={dynamicStyles.sectionContainer}>
-        <Text style={dynamicStyles.sectionTitle}>Centrum decyzji</Text>
-        <View style={dynamicStyles.decisionGrid}>
-          {cards.map((card) => (
-            <TouchableOpacity
-              key={card.id}
-              style={dynamicStyles.decisionCard}
-              activeOpacity={0.86}
-              onPress={card.onPress}
-            >
-              <View style={dynamicStyles.decisionAccent}>
-                <card.icon size={20} color={theme.primary} />
-              </View>
-              <View style={dynamicStyles.decisionBody}>
-                <Text style={dynamicStyles.decisionTitle}>{card.title}</Text>
-                <Text style={dynamicStyles.decisionDesc}>{card.desc}</Text>
-                <Text style={dynamicStyles.decisionCta}>{card.cta}</Text>
-              </View>
-              <ChevronRight size={18} color={theme.textDim} />
-            </TouchableOpacity>
-          ))}
-        </View>
-      </View>
-    );
-  };
-
   const renderDashboardNotice = () => {
     if (isError) {
       return (
@@ -2193,7 +2062,7 @@ export const DashboardScreen = () => {
       return (
         <View style={dynamicStyles.dashboardNotice}>
           <ActivityIndicator size="small" color={theme.primary} />
-          <Text style={dynamicStyles.dashboardNoticeText}>Przygotowuję Twoje centrum decyzji...</Text>
+          <Text style={dynamicStyles.dashboardNoticeText}>Przygotowuję Twoje menu główne...</Text>
         </View>
       );
     }
@@ -2225,12 +2094,10 @@ export const DashboardScreen = () => {
           {renderUpcomingWidget()}
           {renderSubscriptionsWidget()}
           {renderStatsWidget()}
-          {renderDecisionQueueWidget()}
         </View>
         {renderDeferredSections && (
           <>
             {renderPremiumInsights()}
-            {renderDecisionCenter()}
           </>
         )}
 
