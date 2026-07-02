@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   RefreshControl,
   ScrollView,
@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Calendar, DateData } from 'react-native-calendars';
+import { Calendar, DateData, LocaleConfig } from 'react-native-calendars';
 import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import {
@@ -25,20 +25,64 @@ import type { Subscription } from '../types/api';
 import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../theme/themeUtils';
-import { daysUntilDate, formatRelativeDay, formatShortDate } from '../utils/date';
+import { daysUntilDate, formatInputDate, formatRelativeDay, formatShortDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
-import { getEffectiveNextPaymentDate, getEffectiveNextPaymentDateString } from '../utils/subscriptionSchedule';
+import { getPaymentOccurrencesBetween } from '../utils/subscriptionSchedule';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
 
 type CalendarItem = Omit<Subscription, 'nextPaymentDate'> & {
+  occurrenceKey: string;
   nextPaymentDate: string;
   paymentDate: Date;
   daysLeft: number;
 };
 
-const HORIZONS = [30, 60, 90] as const;
+const CALENDAR_PAST_GRACE_DAYS = 7;
+
+LocaleConfig.locales.pl = {
+  monthNames: [
+    'Styczeń',
+    'Luty',
+    'Marzec',
+    'Kwiecień',
+    'Maj',
+    'Czerwiec',
+    'Lipiec',
+    'Sierpień',
+    'Wrzesień',
+    'Październik',
+    'Listopad',
+    'Grudzień',
+  ],
+  monthNamesShort: [
+    'Sty',
+    'Lut',
+    'Mar',
+    'Kwi',
+    'Maj',
+    'Cze',
+    'Lip',
+    'Sie',
+    'Wrz',
+    'Paź',
+    'Lis',
+    'Gru',
+  ],
+  dayNames: [
+    'Niedziela',
+    'Poniedziałek',
+    'Wtorek',
+    'Środa',
+    'Czwartek',
+    'Piątek',
+    'Sobota',
+  ],
+  dayNamesShort: ['Nd', 'Pn', 'Wt', 'Śr', 'Cz', 'Pt', 'Sb'],
+  today: 'Dzisiaj',
+};
+LocaleConfig.defaultLocale = 'pl';
 
 function formatDateHeading(date: Date) {
   return date.toLocaleDateString('pl-PL', {
@@ -55,6 +99,30 @@ function getDateKey(date: Date) {
   return `${year}-${month}-${day}`;
 }
 
+function getMonthKey(dateKey: string) {
+  return dateKey.slice(0, 7);
+}
+
+function dateFromDateKey(dateKey: string) {
+  const [year, month, day] = dateKey.split('-').map(Number);
+  return new Date(year, month - 1, day);
+}
+
+function getMonthRange(dateKey: string) {
+  const date = dateFromDateKey(dateKey);
+  return {
+    start: new Date(date.getFullYear(), date.getMonth(), 1),
+    end: new Date(date.getFullYear(), date.getMonth() + 1, 0),
+  };
+}
+
+function formatMonthBadge(dateKey: string) {
+  return dateFromDateKey(dateKey).toLocaleDateString('pl-PL', {
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function getBrandInitial(item: CalendarItem) {
   return (item.name || item.provider || '?').charAt(0).toUpperCase();
 }
@@ -62,34 +130,45 @@ function getBrandInitial(item: CalendarItem) {
 export const PaymentCalendarScreen = () => {
   const navigation = useNavigation<NativeStackNavigationProp<AppStackParamList, 'PaymentCalendar'>>();
   const { theme } = useTheme();
-  const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(30);
+  const todayKey = useMemo(() => getDateKey(new Date()), []);
+  const currentMonthKey = useMemo(() => getMonthKey(todayKey), [todayKey]);
+  const [visibleMonthDateKey, setVisibleMonthDateKey] = useState(todayKey);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const { data: subscriptions = [], isLoading, isError, error, refetch, isRefetching } = useSubscriptions();
+  const isCurrentMonthVisible = getMonthKey(visibleMonthDateKey) === currentMonthKey;
+  const visibleMonthRange = useMemo(() => getMonthRange(visibleMonthDateKey), [visibleMonthDateKey]);
+  const visibleMonthBadge = useMemo(() => formatMonthBadge(visibleMonthDateKey), [visibleMonthDateKey]);
 
   const calendarItems = useMemo<CalendarItem[]>(() => {
     return subscriptions
       .filter((subscription) => subscription.status !== 'canceled')
-      .map((subscription) => {
-        const paymentDate = getEffectiveNextPaymentDate(subscription);
-        const effectiveNextPaymentDate = getEffectiveNextPaymentDateString(subscription);
-        const daysLeft = daysUntilDate(paymentDate);
+      .flatMap((subscription) => {
+        const occurrences = getPaymentOccurrencesBetween(
+          subscription,
+          visibleMonthRange.start,
+          visibleMonthRange.end
+        );
 
-        if (!paymentDate || !effectiveNextPaymentDate || daysLeft === null) return null;
+        return occurrences.map((paymentDate) => {
+          const paymentDateKey = formatInputDate(paymentDate);
+          const daysLeft = daysUntilDate(paymentDate);
 
-        return {
-          ...subscription,
-          amount: Number(subscription.amount || 0),
-          nextPaymentDate: effectiveNextPaymentDate,
-          paymentDate,
-          daysLeft,
-        };
+          return {
+            ...subscription,
+            occurrenceKey: `${subscription.id}:${paymentDateKey}`,
+            amount: Number(subscription.amount || 0),
+            nextPaymentDate: paymentDateKey,
+            paymentDate,
+            daysLeft: daysLeft ?? 0,
+          };
+        });
       })
       .filter((item): item is CalendarItem => {
         if (!item) return false;
-        return item.daysLeft >= -7 && item.daysLeft <= horizon;
+        return item.daysLeft >= -CALENDAR_PAST_GRACE_DAYS;
       })
       .sort((a, b) => a.paymentDate.getTime() - b.paymentDate.getTime());
-  }, [subscriptions, horizon]);
+  }, [subscriptions, visibleMonthRange.end, visibleMonthRange.start]);
 
   const groupedItems = useMemo(() => {
     const groups = new Map<string, CalendarItem[]>();
@@ -129,16 +208,17 @@ export const PaymentCalendarScreen = () => {
     }, {});
 
     const marks = Object.entries(paymentDays).reduce<Record<string, any>>((acc, [key, items]) => {
+      const hasTrial = items.some((item) => item.isTrial);
       const hasOverdue = items.some((item) => item.daysLeft < 0);
       const hasUrgent = items.some((item) => item.daysLeft >= 0 && item.daysLeft <= 3);
-      const tone = hasOverdue ? theme.colors.danger : hasUrgent ? theme.colors.warning : theme.colors.primary;
+      const tone = hasTrial ? theme.colors.cyan : hasOverdue ? theme.colors.danger : hasUrgent ? theme.colors.warning : theme.colors.primary;
 
       acc[key] = {
         marked: true,
         dotColor: tone,
         customStyles: {
           container: {
-            backgroundColor: withAlpha(tone, hasOverdue ? 0.28 : 0.22),
+            backgroundColor: withAlpha(tone, hasOverdue && !hasTrial ? 0.28 : 0.22),
             borderColor: tone,
             borderWidth: items.length > 1 ? 2 : 1.5,
             borderRadius: 9,
@@ -154,18 +234,19 @@ export const PaymentCalendarScreen = () => {
 
     if (selectedDateKey) {
       const selectedItems = paymentDays[selectedDateKey] || [];
+      const selectedHasTrial = selectedItems.some((item) => item.isTrial);
       const selectedHasOverdue = selectedItems.some((item) => item.daysLeft < 0);
       const selectedHasUrgent = selectedItems.some((item) => item.daysLeft >= 0 && item.daysLeft <= 3);
-      const selectedTone = selectedHasOverdue ? theme.colors.danger : selectedHasUrgent ? theme.colors.warning : theme.colors.primary;
+      const selectedTone = selectedHasTrial ? theme.colors.cyan : selectedHasOverdue ? theme.colors.danger : selectedHasUrgent ? theme.colors.warning : theme.colors.primary;
 
       marks[selectedDateKey] = {
         ...(marks[selectedDateKey] || {}),
         selected: true,
-        selectedColor: theme.colors.primary,
+        selectedColor: selectedTone,
         selectedTextColor: theme.colors.darkText,
         customStyles: {
           container: {
-            backgroundColor: theme.colors.primary,
+            backgroundColor: selectedTone,
             borderColor: selectedTone,
             borderWidth: 2,
             borderRadius: 9,
@@ -179,22 +260,22 @@ export const PaymentCalendarScreen = () => {
     }
 
     return marks;
-  }, [calendarItems, selectedDateKey, theme.colors.danger, theme.colors.darkText, theme.colors.primary, theme.colors.warning]);
-
-  useEffect(() => {
-    if (!selectedDateKey) return;
-    if (!calendarItems.some((item) => getDateKey(item.paymentDate) === selectedDateKey)) {
-      setSelectedDateKey(null);
-    }
-  }, [calendarItems, selectedDateKey]);
+  }, [calendarItems, selectedDateKey, theme.colors.cyan, theme.colors.danger, theme.colors.darkText, theme.colors.primary, theme.colors.warning]);
 
   const handleDayPress = (day: DateData) => {
     setSelectedDateKey((current) => current === day.dateString ? null : day.dateString);
   };
 
-  const handleHorizonChange = (value: (typeof HORIZONS)[number]) => {
+  const handleMonthChange = (month: DateData) => {
+    setVisibleMonthDateKey(month.dateString);
+    setSelectedDateKey((current) => (
+      current && getMonthKey(current) !== getMonthKey(month.dateString) ? null : current
+    ));
+  };
+
+  const handleReturnToCurrentMonth = () => {
+    setVisibleMonthDateKey(todayKey);
     setSelectedDateKey(null);
-    setHorizon(value);
   };
 
   const summary = useMemo(() => {
@@ -213,9 +294,9 @@ export const PaymentCalendarScreen = () => {
   }, [calendarItems, subscriptions]);
 
   const weekRail = useMemo(() => {
-    const today = new Date();
+    const weekStart = visibleMonthRange.start;
     const days = Array.from({ length: 7 }, (_, index) => {
-      const date = new Date(today.getFullYear(), today.getMonth(), today.getDate() + index);
+      const date = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + index);
       const key = getDateKey(date);
       const items = calendarItems.filter((item) => getDateKey(item.paymentDate) === key);
 
@@ -224,11 +305,12 @@ export const PaymentCalendarScreen = () => {
         date,
         count: items.length,
         total: items.reduce((sum, item) => sum + Number(item.amount || 0), 0),
+        hasTrial: items.some((item) => item.isTrial),
       };
     });
 
     return days;
-  }, [calendarItems]);
+  }, [calendarItems, visibleMonthRange.start]);
 
   const renderContent = () => {
     if (isLoading) {
@@ -255,7 +337,9 @@ export const PaymentCalendarScreen = () => {
         <EmptyState
           type="calm"
           title="Spokojny horyzont"
-          message="Nie widzę zaplanowanych płatności w wybranym okresie. Możesz rozszerzyć zakres albo dodać brakującą subskrypcję."
+          message={selectedDateKey
+            ? 'W tym dniu nie ma zapisanych płatności. Możesz wybrać inny dzień albo dodać brakującą subskrypcję.'
+            : 'Nie widzę zaplanowanych płatności. Możesz dodać brakującą subskrypcję.'}
           actionLabel="Dodaj subskrypcję"
           onAction={() => navigation.navigate('AddSubscription')}
         />
@@ -278,21 +362,27 @@ export const PaymentCalendarScreen = () => {
             {group.items.map((item) => {
               const isOverdue = item.daysLeft < 0;
               const isSoon = item.daysLeft >= 0 && item.daysLeft <= 3;
+              const isTrial = item.isTrial;
+              const paymentTone = isTrial
+                ? theme.colors.cyan
+                : isOverdue
+                  ? theme.colors.danger
+                  : isSoon
+                    ? theme.colors.warning
+                    : theme.colors.primary;
 
               return (
                 <TouchableOpacity
-                  key={item.id}
+                  key={item.occurrenceKey}
                   style={[styles.paymentCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}
                   activeOpacity={0.86}
                   onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
                 >
                   <View style={[
                     styles.brandMark,
-                    { backgroundColor: `${theme.colors.primary}18` },
-                    isOverdue && { backgroundColor: `${theme.colors.danger}18` },
-                    isSoon && { backgroundColor: `${theme.colors.warning}18` },
+                    { backgroundColor: withAlpha(paymentTone, 0.14), borderColor: withAlpha(paymentTone, 0.28) },
                   ]}>
-                    <Text style={[styles.brandMarkText, { color: theme.colors.text }]}>{getBrandInitial(item)}</Text>
+                    <Text style={[styles.brandMarkText, { color: isTrial ? theme.colors.cyan : theme.colors.text }]}>{getBrandInitial(item)}</Text>
                   </View>
                   <View style={styles.paymentMain}>
                     <Text style={[styles.paymentName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
@@ -302,7 +392,7 @@ export const PaymentCalendarScreen = () => {
                   </View>
                   <View style={styles.paymentAmountBlock}>
                     <Text style={[styles.paymentAmount, { color: theme.colors.text }]}>{item.amount.toFixed(2)} {item.currency}</Text>
-                    <Text style={[styles.paymentStatus, { color: theme.colors.textMuted }, isOverdue && { color: theme.colors.danger }, isSoon && { color: theme.colors.warning }]}>
+                    <Text style={[styles.paymentStatus, { color: theme.colors.textMuted }, (isOverdue || isSoon || isTrial) && { color: paymentTone }]}>
                       {formatRelativeDay(item.paymentDate)}
                     </Text>
                   </View>
@@ -327,7 +417,6 @@ export const PaymentCalendarScreen = () => {
         </TouchableOpacity>
         <View style={styles.headerText}>
           <Text style={[styles.title, { color: theme.colors.text }]}>Kalendarz płatności</Text>
-          <Text style={[styles.subtitle, { color: theme.colors.textMuted }]}>Cashflow subskrypcji bez zaskoczeń</Text>
         </View>
       </View>
 
@@ -347,7 +436,7 @@ export const PaymentCalendarScreen = () => {
             <View style={styles.heroIcon}>
               <CalendarDays size={22} color="#FFFFFF" />
             </View>
-            <Text style={styles.heroBadge}>{horizon} dni</Text>
+            <Text style={styles.heroBadge}>{visibleMonthBadge}</Text>
           </View>
           <Text style={styles.heroLabel}>Zaplanowane obciążenia</Text>
           <View style={styles.heroAmountRow}>
@@ -370,29 +459,13 @@ export const PaymentCalendarScreen = () => {
           </View>
         </LinearGradient>
 
-        <View style={styles.horizonTabs}>
-          {HORIZONS.map((value) => (
-            <TouchableOpacity
-              key={value}
-              style={[
-                styles.horizonTab,
-                { backgroundColor: theme.colors.card, borderColor: theme.colors.border },
-                horizon === value && { backgroundColor: `${theme.colors.primary}24`, borderColor: theme.colors.primary },
-              ]}
-              onPress={() => handleHorizonChange(value)}
-            >
-              <Text style={[styles.horizonTabText, { color: theme.colors.textMuted }, horizon === value && { color: theme.colors.primary }]}>
-                {value} dni
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
         <View style={[styles.calendarShell, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
           <Calendar
+            initialDate={visibleMonthDateKey}
             markedDates={markedDates}
             markingType="custom"
             onDayPress={handleDayPress}
+            onMonthChange={handleMonthChange}
             firstDay={1}
             enableSwipeMonths
             theme={{
@@ -417,11 +490,23 @@ export const PaymentCalendarScreen = () => {
                 ? `${selectedDayItems.length} płatności w wybranym dniu`
                 : 'Kliknij podświetlony dzień, żeby zobaczyć płatności tylko z tego dnia.'}
             </Text>
-            {selectedDateKey && (
-              <TouchableOpacity onPress={() => setSelectedDateKey(null)} style={[styles.clearDayButton, { borderColor: theme.colors.border }]}>
-                <Text style={[styles.clearDayButtonText, { color: theme.colors.primary }]}>Wyczyść</Text>
-              </TouchableOpacity>
-            )}
+            <View style={styles.calendarActions}>
+              {!isCurrentMonthVisible && (
+                <TouchableOpacity
+                  onPress={handleReturnToCurrentMonth}
+                  style={[styles.calendarActionButton, { borderColor: theme.colors.border }]}
+                  accessibilityLabel="Wróć do aktualnego miesiąca"
+                >
+                  <CalendarDays size={13} color={theme.colors.primary} />
+                  <Text style={[styles.calendarActionButtonText, { color: theme.colors.primary }]}>Ten miesiąc</Text>
+                </TouchableOpacity>
+              )}
+              {selectedDateKey && (
+                <TouchableOpacity onPress={() => setSelectedDateKey(null)} style={[styles.calendarActionButton, { borderColor: theme.colors.border }]}>
+                  <Text style={[styles.calendarActionButtonText, { color: theme.colors.primary }]}>Wyczyść</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
         </View>
 
@@ -429,15 +514,17 @@ export const PaymentCalendarScreen = () => {
           {weekRail.map((day) => {
             const isBusy = day.count > 0;
 
+            const busyTone = day.hasTrial ? theme.colors.cyan : theme.colors.primary;
+
             return (
-              <View key={day.key} style={[styles.weekDay, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, isBusy && { backgroundColor: `${theme.colors.primary}18`, borderColor: `${theme.colors.primary}33` }]}>
-                <Text style={[styles.weekDayName, { color: theme.colors.textSubtle }, isBusy && { color: theme.colors.primary }]}>
+              <View key={day.key} style={[styles.weekDay, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }, isBusy && { backgroundColor: withAlpha(busyTone, 0.14), borderColor: withAlpha(busyTone, 0.28) }]}>
+                <Text style={[styles.weekDayName, { color: theme.colors.textSubtle }, isBusy && { color: busyTone }]}>
                   {day.date.toLocaleDateString('pl-PL', { weekday: 'short' })}
                 </Text>
                 <Text style={[styles.weekDayNumber, { color: theme.colors.textMuted }, isBusy && { color: theme.colors.text }]}>
                   {day.date.getDate()}
                 </Text>
-                <View style={[styles.weekDot, isBusy && { backgroundColor: theme.colors.primary }]} />
+                <View style={[styles.weekDot, isBusy && { backgroundColor: busyTone }]} />
               </View>
             );
           })}
@@ -511,12 +598,6 @@ const styles = StyleSheet.create({
     color: vibrantTheme.colors.text,
     fontSize: 24,
     fontWeight: '900',
-  },
-  subtitle: {
-    color: vibrantTheme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '600',
-    marginTop: 2,
   },
   content: {
     padding: 20,
@@ -596,33 +677,6 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginTop: 2,
   },
-  horizonTabs: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  horizonTab: {
-    flex: 1,
-    height: 42,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: vibrantTheme.colors.card,
-    borderWidth: 1,
-    borderColor: vibrantTheme.colors.border,
-  },
-  horizonTabActive: {
-    backgroundColor: 'rgba(255,255,255,0.16)',
-    borderColor: '#CBD5E1',
-  },
-  horizonTabText: {
-    color: vibrantTheme.colors.textMuted,
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  horizonTabTextActive: {
-    color: '#CBD5E1',
-  },
   calendarShell: {
     marginTop: 16,
     borderRadius: 12,
@@ -644,13 +698,25 @@ const styles = StyleSheet.create({
     lineHeight: 17,
     fontWeight: '700',
   },
-  clearDayButton: {
+  calendarActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    flexShrink: 0,
+    gap: 8,
+  },
+  calendarActionButton: {
+    minHeight: 32,
     borderWidth: 1,
     borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingVertical: 6,
   },
-  clearDayButtonText: {
+  calendarActionButtonText: {
     fontSize: 11,
     fontWeight: '900',
     textTransform: 'uppercase',
@@ -782,6 +848,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(255,255,255,0.14)',
+    borderWidth: 1,
+    borderColor: vibrantTheme.colors.border,
   },
   brandMarkDanger: {
     backgroundColor: 'rgba(255,77,109,0.16)',

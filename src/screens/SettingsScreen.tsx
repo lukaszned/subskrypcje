@@ -14,9 +14,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   ArrowLeft,
   Bell,
-  CheckCircle2,
-  ChevronRight,
-  CloudOff,
   CreditCard,
   LogOut,
   Mail,
@@ -31,7 +28,6 @@ import { useNavigation } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUserSettings, useUpdateUserSettings } from '../hooks/useUserSettings';
 import { usePersistentIncome, useSavePersistentIncome } from '../hooks/usePersistentIncome';
-import { useEmailScanStatus } from '../hooks/useEmailScan';
 import { useAuth } from '../context/AuthContext';
 import type { AppStackParamList } from '../types/navigation';
 import type { UpdateUserSettingsPayload } from '../api/dashboard';
@@ -43,10 +39,8 @@ import { goBackOrDashboard } from '../utils/navigation';
 const USER_SETTING_CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 
 type SaveFeedback = {
-  kind: 'synced' | 'pending' | 'error';
   title: string;
   message: string;
-  syncStartedAt?: number;
 };
 
 export const SettingsScreen = () => {
@@ -54,12 +48,9 @@ export const SettingsScreen = () => {
   const { user, signOut } = useAuth();
   const {
     data: settings,
-    dataUpdatedAt: settingsUpdatedAt,
-    isFetching: isSettingsFetching,
     isLoading,
   } = useUserSettings();
   const { data: localIncome } = usePersistentIncome();
-  const { data: emailScanStatus } = useEmailScanStatus();
   const updateMutation = useUpdateUserSettings();
   const savePersistentIncome = useSavePersistentIncome();
   const { theme, themeName, setThemeName, themes } = useTheme();
@@ -94,31 +85,6 @@ export const SettingsScreen = () => {
     }
   }, [settings, localIncome]);
 
-  useEffect(() => {
-    if (
-      saveFeedback?.kind !== 'pending' ||
-      !settings ||
-      isSettingsFetching ||
-      (settings as any).__localOnly ||
-      settingsUpdatedAt < (saveFeedback.syncStartedAt ?? Number.POSITIVE_INFINITY)
-    ) {
-      return;
-    }
-
-    setSaveFeedback({
-      kind: 'synced',
-      title: 'Synchronizacja zakończona',
-      message: 'Ustawienia są zapisane na tym urządzeniu i na Twoim koncie.',
-    });
-  }, [isSettingsFetching, saveFeedback, settings, settingsUpdatedAt]);
-
-  useEffect(() => {
-    if (saveFeedback?.kind !== 'synced') return;
-
-    const timeout = setTimeout(() => setSaveFeedback(null), 3500);
-    return () => clearTimeout(timeout);
-  }, [saveFeedback?.kind]);
-
   const getErrorMessage = (error: any) => {
     const validationErrors = error?.body?.errors;
     if (Array.isArray(validationErrors) && validationErrors.length > 0) {
@@ -130,7 +96,7 @@ export const SettingsScreen = () => {
     return error?.body?.message || error?.message || 'Nie udało się zapisać ustawień.';
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (isSaving) return;
 
     setSaveFeedback(null);
@@ -151,52 +117,45 @@ export const SettingsScreen = () => {
       incomeCurrency: incomeCurrency,
     };
 
-    savePersistentIncome.mutate({
-      monthlyIncome: parsedIncome,
-      incomeCurrency,
-    });
+    try {
+      const [updatedSettings] = await Promise.all([
+        updateMutation.mutateAsync(payload),
+        savePersistentIncome.mutateAsync({
+          monthlyIncome: parsedIncome,
+          incomeCurrency,
+        }),
+      ]);
 
-    updateMutation.mutate(payload, {
-      onSuccess: (updatedSettings) => {
-        if ((updatedSettings as any).__localOnly) {
-          setSaveFeedback({
-            kind: 'pending',
-            title: 'Zapisano na urządzeniu',
-            message: 'Połączenie jest chwilowo niedostępne. Synchronizacja ponowi się automatycznie w tle.',
-            syncStartedAt: Date.now(),
-          });
-          return;
-        }
+      const isLocalOnly = (updatedSettings as any).__localOnly;
 
-        setSaveFeedback({
-          kind: 'synced',
-          title: 'Ustawienia zapisane',
-          message: 'Zmiany są już aktywne.',
-        });
-      },
-      onError: (error) => {
-        if (__DEV__) {
-          console.warn('[SettingsScreen] Save settings error:', error);
-        }
-        setSaveFeedback({
-          kind: 'error',
-          title: 'Nie udało się zapisać',
-          message: getErrorMessage(error),
-        });
+      setSaveFeedback(null);
+      Alert.alert(
+        isLocalOnly ? 'Zapisano na urządzeniu' : 'Ustawienia zapisane',
+        isLocalOnly
+          ? 'Zmiany zapisano lokalnie. Synchronizacja konta ponowi się w tle. Przejdź do Menu głównego.'
+          : 'Zmiany są już aktywne. Przejdź do Menu głównego.',
+        [
+          {
+            text: 'Menu główne',
+            onPress: () => navigation.navigate('Dashboard'),
+          },
+        ],
+        { cancelable: false }
+      );
+    } catch (error) {
+      if (__DEV__) {
+        console.warn('[SettingsScreen] Save settings error:', error);
       }
-    });
+      setSaveFeedback({
+        title: 'Nie udało się zapisać',
+        message: getErrorMessage(error),
+      });
+    }
   };
   const renderSaveFeedback = () => {
     if (!saveFeedback) return null;
 
-    const isSynced = saveFeedback.kind === 'synced';
-    const isPending = saveFeedback.kind === 'pending';
-    const accent = isSynced
-      ? theme.colors.primary
-      : isPending
-        ? theme.colors.warning
-        : theme.colors.danger;
-    const Icon = isSynced ? CheckCircle2 : isPending ? CloudOff : TriangleAlert;
+    const accent = theme.colors.danger;
 
     return (
       <View
@@ -209,26 +168,24 @@ export const SettingsScreen = () => {
         ]}
       >
         <View style={[styles.saveFeedbackIcon, { backgroundColor: withAlpha(accent, 0.14) }]}>
-          <Icon size={19} color={accent} />
+          <TriangleAlert size={19} color={accent} />
         </View>
         <View style={styles.saveFeedbackCopy}>
           <Text style={[styles.saveFeedbackTitle, { color: theme.colors.text }]}>{saveFeedback.title}</Text>
           <Text style={[styles.saveFeedbackMessage, { color: theme.colors.textMuted }]}>{saveFeedback.message}</Text>
         </View>
-        {!isSynced ? (
-          <TouchableOpacity
-            style={[styles.retrySaveButton, { backgroundColor: withAlpha(accent, 0.14) }]}
-            onPress={handleSave}
-            disabled={isSaving}
-            accessibilityLabel="Ponów zapis ustawień"
-          >
-            {isSaving ? (
-              <ActivityIndicator size="small" color={accent} />
-            ) : (
-              <RefreshCw size={17} color={accent} />
-            )}
-          </TouchableOpacity>
-        ) : null}
+        <TouchableOpacity
+          style={[styles.retrySaveButton, { backgroundColor: withAlpha(accent, 0.14) }]}
+          onPress={handleSave}
+          disabled={isSaving}
+          accessibilityLabel="Ponów zapis ustawień"
+        >
+          {isSaving ? (
+            <ActivityIndicator size="small" color={accent} />
+          ) : (
+            <RefreshCw size={17} color={accent} />
+          )}
+        </TouchableOpacity>
       </View>
     );
   };
@@ -356,9 +313,9 @@ export const SettingsScreen = () => {
               <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.cyan}18` }]}>
                 <Wallet size={20} color={theme.colors.cyan} />
               </View>
-              <View>
+              <View style={styles.settingTextBlock}>
                 <Text style={styles.settingTitle}>Miesięczny dochód netto</Text>
-                <Text style={styles.settingDesc}>Zapisywany lokalnie i używany w Menu głównym</Text>
+                <Text style={styles.settingDesc}>Zapisywany lokalnie</Text>
               </View>
             </View>
             <View style={styles.incomeInputRow}>
@@ -451,36 +408,6 @@ export const SettingsScreen = () => {
           </View>
         </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionLabel}>Automatyzacja</Text>
-
-          <TouchableOpacity
-            style={styles.settingItem}
-            activeOpacity={0.8}
-            onPress={() => navigation.navigate('EmailScan')}
-          >
-            <View style={[styles.settingInfo, { marginBottom: 0 }]}>
-              <View style={[styles.iconContainer, { backgroundColor: `${theme.colors.primary}20` }]}>
-                <Mail size={20} color={theme.colors.primary} />
-              </View>
-              <View style={styles.settingTextBlock}>
-                <View style={styles.settingTitleRow}>
-                  <Text style={styles.settingTitle}>Znalezione z Gmaila</Text>
-                  {emailScanStatus?.pendingDetectionsCount ? (
-                    <View style={[styles.pendingBadge, { backgroundColor: theme.colors.primary }]}>
-                      <Text style={[styles.pendingBadgeText, { color: theme.colors.darkText }]}>{emailScanStatus.pendingDetectionsCount}</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.settingDesc}>
-                  Przegląd pozycji znalezionych w mailach, bez automatycznego dodawania
-                </Text>
-              </View>
-              <ChevronRight size={20} color={theme.colors.textSubtle} />
-            </View>
-          </TouchableOpacity>
-        </View>
-
         <View style={styles.footer}>
           <Text style={styles.versionText}>Sub-Sentry v1.0.0 (MVP)</Text>
           <Text style={styles.footerInfo}>Twoje dane są bezpieczne i szyfrowane.</Text>
@@ -560,9 +487,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 16
   },
-  settingTitle: { fontSize: 15, fontWeight: '900', color: vibrantTheme.colors.text },
-  settingDesc: { fontSize: 12, color: vibrantTheme.colors.textMuted, marginTop: 2 },
-  settingTextBlock: { flex: 1 },
+  settingTitle: { fontSize: 15, fontWeight: '900', color: vibrantTheme.colors.text, flexShrink: 1 },
+  settingDesc: { fontSize: 12, color: vibrantTheme.colors.textMuted, marginTop: 2, lineHeight: 17, flexShrink: 1 },
+  settingTextBlock: { flex: 1, minWidth: 0 },
   themePickerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -599,17 +526,6 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '900',
   },
-  settingTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  pendingBadge: {
-    minWidth: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: vibrantTheme.colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 6,
-  },
-  pendingBadgeText: { color: vibrantTheme.colors.darkText, fontSize: 11, fontWeight: '900' },
   currencyRow: { flexDirection: 'row', gap: 8, marginTop: 4 },
   currencyPill: {
     paddingHorizontal: 16,

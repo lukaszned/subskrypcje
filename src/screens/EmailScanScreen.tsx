@@ -1298,7 +1298,6 @@ export const EmailScanScreen = () => {
         category,
         billingCycle: cycle,
         nextPaymentDate: toInputDate(nextPaymentDate),
-        paymentMethodLabel: 'Gmail import',
         notes: notes.trim() || 'Import z Gmail Email Scan',
       },
     }, {

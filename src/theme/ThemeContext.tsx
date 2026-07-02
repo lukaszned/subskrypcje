@@ -39,7 +39,8 @@ const makeTheme = (
   accent: string,
   heroEnd: string,
   swatch: ColorValue,
-  overrides: Partial<ThemeColors> = {}
+  overrides: Partial<ThemeColors> = {},
+  heroGradient: ThemeGradient = [primary, accent, heroEnd] as const
 ): AppTheme => ({
   ...vibrantTheme,
   name,
@@ -60,7 +61,7 @@ const makeTheme = (
     ...(vibrantTheme.gradients as ThemeGradients),
     app: [vibrantTheme.colors.bg, vibrantTheme.colors.bg2, heroEnd] as const,
     aurora: [`${primary}55`, `${accent}2E`, 'transparent'] as const,
-    hero: [primary, accent, heroEnd] as const,
+    hero: heroGradient,
     primary: [primary, accent] as const,
   } as ThemeGradients,
   shadows: {
@@ -73,7 +74,16 @@ const makeTheme = (
 });
 
 export const APP_THEMES: Record<ThemeName, AppTheme> = {
-  default: makeTheme('default', 'Emerald', '#20F6B5', '#22D3EE', '#7C3AED', '#20F6B5'),
+  default: makeTheme(
+    'default',
+    'Emerald',
+    '#20F6B5',
+    '#22D3EE',
+    '#7C3AED',
+    '#20F6B5',
+    {},
+    ['#16B394', '#1A9EC1', '#5B37C8'] as const
+  ),
   yellow: makeTheme('yellow', 'Gold', '#FBBF24', '#F97316', '#7C2D12', '#FBBF24', {
     success: '#FBBF24',
     darkText: '#17120A',

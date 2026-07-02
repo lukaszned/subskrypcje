@@ -77,6 +77,20 @@ const formatDays = (days: number) => {
   return `${days} dni`;
 };
 
+const formatTrialCount = (count: number) => {
+  const value = Number(count || 0);
+  const absolute = Math.abs(value);
+  const lastDigit = absolute % 10;
+  const lastTwoDigits = absolute % 100;
+
+  if (value === 1) return '1 okres próbny';
+  if (lastDigit >= 2 && lastDigit <= 4 && !(lastTwoDigits >= 12 && lastTwoDigits <= 14)) {
+    return `${value} okresy próbne`;
+  }
+
+  return `${value} okresów próbnych`;
+};
+
 type BrandToken = {
   bg: string;
   fg: string;
@@ -1764,7 +1778,7 @@ export const DashboardScreen = () => {
       <Text style={dynamicStyles.widgetTitle}>Twoje Subskrypcje</Text>
       <Text style={dynamicStyles.subscriptionMetric}>{summaryData?.activeSubscriptionsCount ?? 0}</Text>
       <Text style={dynamicStyles.widgetCaption}>
-        {summaryData?.trialsCount ?? 0} okresów próbnych
+        {formatTrialCount(summaryData?.trialsCount ?? 0)}
       </Text>
     </TouchableOpacity>
   );

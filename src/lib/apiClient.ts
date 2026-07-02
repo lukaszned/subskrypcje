@@ -67,7 +67,7 @@ const API_BASE_URLS = resolveApiBaseUrls();
 const READ_TIMEOUT_MS = 12000;
 const WRITE_TIMEOUT_MS = 45000;
 const AUTH_FAILURE_COOLDOWN_MS = 10000;
-const HOST_PROBE_TIMEOUT_MS = 3000;
+const HOST_PROBE_TIMEOUT_MS = 2500;
 
 let accessTokenPromise: Promise<string> | null = null;
 let authFailureUntil = 0;
@@ -131,19 +131,28 @@ async function probeApiBaseUrl(baseUrl: string, headers: Record<string, string>)
 
 async function getWritableBaseUrls(headers: Record<string, string>): Promise<string[]> {
   const orderedUrls = getOrderedApiBaseUrls();
-  if (preferredApiBaseUrl || orderedUrls.length <= 1) return orderedUrls;
+  if (preferredApiBaseUrl) return orderedUrls;
 
-  for (const baseUrl of orderedUrls) {
-    const isReachable = await probeApiBaseUrl(baseUrl, headers);
-    if (isReachable) {
-      return [
-        baseUrl,
-        ...orderedUrls.filter((url) => url !== baseUrl),
-      ];
-    }
+  const probeResults = await Promise.all(
+    orderedUrls.map(async (baseUrl) => ({
+      baseUrl,
+      isReachable: await probeApiBaseUrl(baseUrl, headers),
+    }))
+  );
+  const reachableBaseUrl = probeResults.find((result) => result.isReachable)?.baseUrl;
+
+  if (reachableBaseUrl) {
+    return [
+      reachableBaseUrl,
+      ...orderedUrls.filter((url) => url !== reachableBaseUrl),
+    ];
   }
 
-  return orderedUrls;
+  throw new ApiError(
+    0,
+    'Nie można połączyć się z backendem. Sprawdź, czy backend działa na porcie 3000 oraz czy EXPO_PUBLIC_API_BASE_URL wskazuje aktualny adres komputera.',
+    { attemptedBaseUrls: orderedUrls }
+  );
 }
 
 function isRetriableConnectionError(error: unknown): boolean {

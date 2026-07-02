@@ -17,7 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import {
-  ArrowLeft, Edit, Trash2, Calendar, CreditCard,
+  ArrowLeft, Edit, Trash2, Calendar,
   Tag, Clock, CheckCircle, XCircle, ArrowRight, Users,
 } from 'lucide-react-native';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -148,6 +148,7 @@ export const SubscriptionDetailScreen = () => {
 
   const displayStatus = getSubscriptionDisplayStatus(sub);
   const statusTone = getSubscriptionDisplayStatusTone(theme, displayStatus);
+  const canMarkAsPaid = sub.status !== 'canceled' && !sub.isTrial;
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: theme.colors.bg }]}>
@@ -195,7 +196,7 @@ export const SubscriptionDetailScreen = () => {
         </LinearGradient>
 
         <View style={styles.actionsRow}>
-          {sub.status !== 'canceled' && (
+          {canMarkAsPaid && (
             <TouchableOpacity
               style={[styles.actionBtn, { backgroundColor: theme.colors.primary, shadowColor: theme.colors.primary }, pendingAction && pendingAction !== 'pay' && styles.actionBtnDisabled]}
               onPress={handlePay}
@@ -235,16 +236,6 @@ export const SubscriptionDetailScreen = () => {
                   ? `${String(nextDate.getDate()).padStart(2, '0')}.${String(nextDate.getMonth() + 1).padStart(2, '0')}.${nextDate.getFullYear()} · ${formatRelativeDay(effectiveNextPaymentDate)}`
                   : 'Brak zaplanowanej daty'}
               </Text>
-            </View>
-          </View>
-
-          <View style={[styles.decisionCard, { backgroundColor: theme.colors.card, borderColor: theme.colors.border }]}>
-            <View style={[styles.decisionIcon, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
-              <CreditCard size={19} color={theme.colors.primary} />
-            </View>
-            <View style={styles.decisionText}>
-              <Text style={styles.decisionTitle}>Metoda płatności</Text>
-              <Text style={styles.decisionDesc}>{sub.paymentMethodLabel || 'Nie ustawiono'}</Text>
             </View>
           </View>
         </View>
@@ -466,12 +457,12 @@ const styles = StyleSheet.create({
   actionBtnText: { color: vibrantTheme.colors.darkText, fontWeight: '900', fontSize: 16 },
   canceledBadge: { flex: 1, height: 50, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center' },
   canceledBadgeText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },
-  decisionGrid: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  decisionCard: { flex: 1, backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 15, borderWidth: 1, borderColor: vibrantTheme.colors.border },
-  decisionIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12, borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
-  decisionText: { flex: 1 },
-  decisionTitle: { color: vibrantTheme.colors.text, fontSize: 13, fontWeight: '900' },
-  decisionDesc: { color: vibrantTheme.colors.textMuted, fontSize: 12, fontWeight: '700', lineHeight: 17, marginTop: 5 },
+  decisionGrid: { marginBottom: 16 },
+  decisionCard: { flex: 1, backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 20, minHeight: 124, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: vibrantTheme.colors.border },
+  decisionIcon: { width: 42, height: 42, borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 14, borderWidth: 1, borderColor: 'rgba(255,255,255,0.24)' },
+  decisionText: { alignItems: 'center' },
+  decisionTitle: { color: vibrantTheme.colors.text, fontSize: 14, fontWeight: '900', textAlign: 'center' },
+  decisionDesc: { color: vibrantTheme.colors.textMuted, fontSize: 15, fontWeight: '800', lineHeight: 21, marginTop: 7, textAlign: 'center' },
   seasonalCard: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: vibrantTheme.colors.card, borderRadius: 12, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: vibrantTheme.colors.border, ...vibrantTheme.shadows.card },
   seasonalIcon: { width: 46, height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   seasonalBody: { flex: 1 },

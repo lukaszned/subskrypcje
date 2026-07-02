@@ -125,7 +125,6 @@ function reconcileCreatedSubscriptions(
       isTrial: false,
       isRecurringBill: item.isRecurringBill ?? true,
       reminderDaysBefore: 2,
-      paymentMethodLabel: 'Email Scan',
       notes: 'Import z Email Scan',
       status: (item.status || 'pending') as Subscription['status'],
       includeInStats: true,

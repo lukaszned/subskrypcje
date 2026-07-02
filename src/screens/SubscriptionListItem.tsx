@@ -91,6 +91,7 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
   }), [item]);
   const catStyle = getCategoryStyle(safeItem.category, theme);
   const isCancelled = getSubscriptionDisplayStatus(safeItem) === 'canceled';
+  const canMarkAsPaid = !isCancelled && !safeItem.isTrial;
   const cardTone = getSubscriptionCardTone(safeItem.status, safeItem.isTrial, theme);
 
   const handlePayPress = useCallback(() => onPause(safeItem.id), [onPause, safeItem.id]);
@@ -101,7 +102,7 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
     dragX: Animated.AnimatedInterpolation<number>
   ) => {
     const scale = dragX.interpolate({
-      inputRange: [-140, 0],
+      inputRange: [canMarkAsPaid ? -140 : -70, 0],
       outputRange: [1, 0],
       extrapolate: 'clamp',
     });
@@ -109,18 +110,20 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
     if (isCancelled) return null;
 
     return (
-      <View style={styles.actionsContainer}>
+      <View style={[styles.actionsContainer, !canMarkAsPaid && styles.actionsContainerSingle]}>
         {/* Opłać — zielony */}
-        <TouchableOpacity
-          style={[styles.actionButton, styles.payAction, { backgroundColor: theme.colors.primary }]}
-          onPress={handlePayPress}
-          activeOpacity={0.8}
-        >
-          <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
-            <CheckCircle size={22} color={theme.colors.darkText} />
-            <Text style={[styles.actionText, { color: theme.colors.darkText }]}>Opłać</Text>
-          </Animated.View>
-        </TouchableOpacity>
+        {canMarkAsPaid && (
+          <TouchableOpacity
+            style={[styles.actionButton, styles.payAction, { backgroundColor: theme.colors.primary }]}
+            onPress={handlePayPress}
+            activeOpacity={0.8}
+          >
+            <Animated.View style={[styles.actionInner, { transform: [{ scale }] }]}>
+              <CheckCircle size={22} color={theme.colors.darkText} />
+              <Text style={[styles.actionText, { color: theme.colors.darkText }]}>Opłać</Text>
+            </Animated.View>
+          </TouchableOpacity>
+        )}
 
         {/* Anuluj — czerwony */}
         <TouchableOpacity
@@ -309,6 +312,9 @@ const styles = StyleSheet.create({
   actionsContainer: {
     flexDirection: 'row',
     width: 140,
+  },
+  actionsContainerSingle: {
+    width: 70,
   },
   actionButton: {
     width: 70,

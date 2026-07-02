@@ -61,7 +61,6 @@ export interface Subscription {
   isTrial: boolean;
   isRecurringBill: boolean;
   reminderDaysBefore: number;
-  paymentMethodLabel: string | null;
   notes: string | null;
   status: SubscriptionStatus;
   isShared?: boolean;
@@ -85,7 +84,6 @@ export interface CreateSubscriptionPayload {
   isTrial?: boolean;
   isRecurringBill?: boolean;
   reminderDaysBefore?: number;
-  paymentMethodLabel?: string;
   notes?: string;
   isShared?: boolean;
   peopleCount?: number;
@@ -684,7 +682,6 @@ export interface AcceptDetectedSubscriptionPayload {
   category?: SubscriptionCategory;
   billingCycle?: BillingCycle;
   nextPaymentDate?: string;
-  paymentMethodLabel?: string;
   notes?: string;
 }
 
