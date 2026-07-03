@@ -29,6 +29,10 @@ function normalizeSubscriptionPlan(item: any): PopularSubscription | null {
   const defaultPrice = String(item?.defaultPrice ?? item?.amount ?? '').trim();
   const category = item?.category as SubscriptionCategory | undefined;
   const color = String(item?.color ?? '#0B6B3A');
+  const localPlan = LOCAL_SUBSCRIPTION_PLANS.find(
+    (plan) => plan.name.toLowerCase() === name.toLowerCase()
+  );
+  const logoUrl = String(item?.logoUrl ?? item?.logo ?? localPlan?.logoUrl ?? '').trim();
   const rawPlans = Array.isArray(item?.availablePlans) ? item.availablePlans : item?.plans;
   const availablePlans = Array.isArray(rawPlans)
     ? rawPlans.map(normalizePlan).filter(Boolean) as SubscriptionPlanVariant[]
@@ -44,6 +48,7 @@ function normalizeSubscriptionPlan(item: any): PopularSubscription | null {
     defaultPrice,
     category,
     color,
+    logoUrl: logoUrl || undefined,
     availablePlans: availablePlans && availablePlans.length > 0 ? availablePlans : undefined,
   };
 }

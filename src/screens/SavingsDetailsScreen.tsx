@@ -21,6 +21,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { formatShortDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
 import { buildSavingsFromSubscriptions } from '../utils/subscriptionCalculations';
+import { BrandLogo } from '../components/BrandLogo';
 
 type Nav = NativeStackNavigationProp<AppStackParamList, 'SavingsDetails'>;
 
@@ -140,9 +141,15 @@ export function SavingsDetailsScreen() {
           ) : (
             items.map((item) => (
               <View key={item.id} style={[styles.savingRow, { borderTopColor: theme.colors.border }]}>
-                <View style={[styles.brandBadge, { backgroundColor: `${theme.colors.primary}20`, borderColor: `${theme.colors.primary}33` }]}>
-                  <Text style={[styles.brandLetter, { color: theme.colors.primary }]}>{(item.provider || item.name || '?').charAt(0).toUpperCase()}</Text>
-                </View>
+                <BrandLogo
+                  name={item.name}
+                  provider={item.provider}
+                  size={42}
+                  iconSize={25}
+                  fallbackColor={theme.colors.primary}
+                  containerStyle={[styles.brandBadge, { borderColor: `${theme.colors.primary}33` }]}
+                  fallbackTextStyle={[styles.brandLetter, { color: theme.colors.primary }]}
+                />
                 <View style={styles.savingCopy}>
                   <Text style={[styles.savingName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
                   <Text style={[styles.savingMeta, { color: theme.colors.textMuted }]}>

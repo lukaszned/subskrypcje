@@ -25,10 +25,12 @@ import { useTheme, type AppTheme } from '../theme/ThemeContext';
 import { withAlpha } from '../theme/themeUtils';
 import { getSubscriptionDisplayStatus, getSubscriptionDisplayStatusTone } from '../utils/subscriptionDisplayStatus';
 import type { SubscriptionStatus } from '../types/api';
+import { BrandLogo } from '../components/BrandLogo';
 
 export interface SubscriptionItem {
   id: string;
   name: string;
+  provider?: string | null;
   category: string;
   amount: number;
   currency: string;
@@ -79,6 +81,7 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
   const safeItem: SubscriptionItem = useMemo(() => ({
     ...item,
     name: item.name || 'Subskrypcja',
+    provider: item.provider || null,
     category: item.category || 'Inne',
     amount: Number(item.amount || 0),
     currency: item.currency || 'PLN',
@@ -162,21 +165,16 @@ const SubscriptionListItemComponent: React.FC<Props> = ({ item, onDelete, onPaus
       >
         <View style={[styles.statusRail, { backgroundColor: cardTone.rail }]} />
         {/* Avatar */}
-        <View
-          style={[
-            styles.avatar,
-            { backgroundColor: isCancelled ? cardTone.badgeBg : catStyle.bg },
-          ]}
-        >
-          <Text
-            style={[
-              styles.avatarText,
-              { color: isCancelled ? theme.colors.textSubtle : catStyle.text },
-            ]}
-          >
-            {safeItem.name.charAt(0).toUpperCase()}
-          </Text>
-        </View>
+        <BrandLogo
+          name={safeItem.name}
+          provider={safeItem.provider}
+          fallbackColor={isCancelled ? theme.colors.textSubtle : catStyle.text}
+          size={48}
+          iconSize={30}
+          muted={isCancelled}
+          containerStyle={[styles.avatar, { borderColor: isCancelled ? cardTone.border : withAlpha(catStyle.text, 0.26) }]}
+          fallbackTextStyle={styles.avatarText}
+        />
 
         {/* Środek — nazwa + status + data */}
         <View style={styles.middleContent}>

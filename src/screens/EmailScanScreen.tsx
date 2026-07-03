@@ -76,6 +76,7 @@ import { vibrantTheme } from '../theme/vibrantTheme';
 import { useTheme } from '../theme/ThemeContext';
 import { formatInputDate, parseAppDate } from '../utils/date';
 import { goBackOrDashboard } from '../utils/navigation';
+import { BrandLogo } from '../components/BrandLogo';
 
 const CURRENCIES = ['PLN', 'EUR', 'USD', 'GBP'];
 const ENABLE_GMAIL_SCAN = process.env.EXPO_PUBLIC_ENABLE_GMAIL_SCAN === 'true';
@@ -1518,9 +1519,15 @@ export const EmailScanScreen = () => {
     return (
       <View key={`${item.id || item.sourceMessageId || item.name || item.provider || 'detection'}-${index}`} style={styles.detectionCard}>
         <View style={styles.detectionTop}>
-          <View style={[styles.providerIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
-            <Text style={[styles.providerIconText, { color: theme.colors.primary }]}>{(item.name || item.provider || '?').charAt(0)}</Text>
-          </View>
+          <BrandLogo
+            name={item.name}
+            provider={item.provider}
+            size={42}
+            iconSize={25}
+            fallbackColor={theme.colors.primary}
+            containerStyle={styles.providerIcon}
+            fallbackTextStyle={styles.providerIconText}
+          />
           <View style={styles.detectionMain}>
             <Text style={styles.detectionName} numberOfLines={1}>{item.name || item.provider || 'Nieznana subskrypcja'}</Text>
             <Text style={styles.detectionMeta}>
@@ -2228,11 +2235,15 @@ export const EmailScanScreen = () => {
                   return (
                     <View key={key} style={[styles.importDraftCard, !edit.selected && styles.importDraftCardMuted]}>
                       <View style={styles.importDraftTop}>
-                        <View style={[styles.importDraftIcon, { backgroundColor: `${theme.colors.primary}22` }]}>
-                          <Text style={[styles.importDraftIconText, { color: theme.colors.primary }]}>
-                            {String(title).charAt(0).toUpperCase()}
-                          </Text>
-                        </View>
+                        <BrandLogo
+                          name={String(title)}
+                          provider={String((payload as any).provider || '')}
+                          size={40}
+                          iconSize={24}
+                          fallbackColor={theme.colors.primary}
+                          containerStyle={styles.importDraftIcon}
+                          fallbackTextStyle={styles.importDraftIconText}
+                        />
                         <View style={styles.importDraftMain}>
                           <Text style={styles.importDraftTitle} numberOfLines={1}>{title}</Text>
                           <Text style={styles.importDraftMeta} numberOfLines={1}>

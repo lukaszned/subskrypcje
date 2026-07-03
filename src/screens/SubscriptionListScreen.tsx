@@ -258,6 +258,7 @@ export const SubscriptionListScreen = () => {
         item={{
           id: item.id,
           name: item.name,
+          provider: item.provider,
           category: CATEGORY_LABELS[item.category] || item.category || 'Inne',
           amount: item.amount,
           currency: item.currency,

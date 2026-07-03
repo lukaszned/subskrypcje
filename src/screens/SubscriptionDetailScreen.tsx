@@ -24,6 +24,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { AppStackParamList } from '../types/navigation';
 import { Skeleton, SkeletonList } from '../components/LoadingState';
+import { BrandLogo } from '../components/BrandLogo';
 
 // Hooks
 import { useSubscription } from '../hooks/useSubscription';
@@ -170,9 +171,14 @@ export const SubscriptionDetailScreen = () => {
       <ScrollView contentContainerStyle={styles.content}>
         <LinearGradient colors={theme.gradients.hero} style={[styles.heroCard, { shadowColor: theme.colors.primary }]}>
           <View style={styles.heroTopRow}>
-            <View style={styles.logoContainer}>
-              <Text style={styles.logoText}>{sub.name.charAt(0)}</Text>
-            </View>
+            <BrandLogo
+              name={sub.name}
+              provider={sub.provider}
+              size={76}
+              iconSize={48}
+              containerStyle={styles.logoContainer}
+              fallbackTextStyle={styles.logoText}
+            />
             <View style={[styles.statusBadge, { backgroundColor: statusTone.badgeBg, borderColor: statusTone.border }]}>
               <Text style={[styles.statusBadgeText, { color: statusTone.accent }]}>{statusTone.label}</Text>
             </View>

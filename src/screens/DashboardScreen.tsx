@@ -49,6 +49,7 @@ import { useReminders } from '../hooks/useReminders';
 import { getNotificationPermissionStatus, syncReminders } from '../utils/notifications';
 import { useAuth } from '../context/AuthContext';
 import { NetworkStatusBanner } from '../components/NetworkStatusBanner';
+import { BrandLogo } from '../components/BrandLogo';
 import { useBudgetImpact } from '../hooks/useBudgetImpact';
 import { useNotificationPreview } from '../hooks/useNotificationPreview';
 import { useDashboardActivity } from '../hooks/useDashboardActivity';
@@ -90,87 +91,6 @@ const formatTrialCount = (count: number) => {
 
   return `${value} okresów próbnych`;
 };
-
-type BrandToken = {
-  bg: string;
-  fg: string;
-  label: string;
-  weight?: '700' | '800' | '900';
-};
-
-const getBrandToken = (theme: ReturnType<typeof useTheme>['theme'], name?: string | null, provider?: string | null): BrandToken => {
-  const source = `${name || ''} ${provider || ''}`.toLowerCase();
-  const accent =
-    source.includes('netflix') || source.includes('youtube') ? theme.colors.danger :
-    source.includes('spotify') || source.includes('chatgpt') || source.includes('openai') ? theme.colors.success :
-    source.includes('hbo') || source.includes('max') || source.includes('disney') ? theme.colors.violet :
-    source.includes('amazon') || source.includes('prime') || source.includes('allegro') ? theme.colors.warning :
-    source.includes('google') || source.includes('canva') ? theme.colors.cyan :
-    source.includes('apple') || source.includes('icloud') ? theme.colors.text :
-    source.includes('xbox') || source.includes('strava') ? theme.colors.primary :
-    theme.colors.textMuted;
-
-  if (source.includes('netflix')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'N', weight: '900' };
-  if (source.includes('spotify')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'S', weight: '900' };
-  if (source.includes('hbo') || source.includes('max')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'max', weight: '900' };
-  if (source.includes('youtube')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'YT', weight: '900' };
-  if (source.includes('disney')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'D+', weight: '900' };
-  if (source.includes('amazon') || source.includes('prime')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'a', weight: '900' };
-  if (source.includes('apple') || source.includes('icloud')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'A', weight: '900' };
-  if (source.includes('chatgpt') || source.includes('openai')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'AI', weight: '900' };
-  if (source.includes('google') || source.includes('play')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'G', weight: '900' };
-  if (source.includes('canva')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'C', weight: '900' };
-  if (source.includes('xbox')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'X', weight: '900' };
-  if (source.includes('allegro')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'A', weight: '900' };
-  if (source.includes('strava')) return { bg: withAlpha(accent, 0.14), fg: accent, label: 'S', weight: '900' };
-
-  return {
-    bg: withAlpha(accent, 0.14),
-    fg: accent,
-    label: (name || provider || '?').charAt(0).toUpperCase(),
-    weight: '900',
-  };
-};
-
-const BrandMark = React.memo(({
-  name,
-  provider,
-  size = 42,
-}: {
-  name?: string | null;
-  provider?: string | null;
-  size?: number;
-}) => {
-  const { theme } = useTheme();
-  const brand = getBrandToken(theme, name, provider);
-
-  return (
-    <View
-      style={{
-        width: size,
-        height: size,
-        borderRadius: Math.round(size * 0.32),
-        backgroundColor: brand.bg,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: 1,
-        borderColor: theme.colors.border,
-      }}
-    >
-      <Text
-        style={{
-          color: brand.fg,
-          fontSize: brand.label.length > 1 ? Math.round(size * 0.28) : Math.round(size * 0.48),
-          fontWeight: brand.weight || '900',
-          letterSpacing: 0,
-        }}
-      >
-        {brand.label}
-      </Text>
-    </View>
-  );
-});
-
 
 // ─────────────────────────────────────────────────────────────
 // COMPONENT
@@ -1514,11 +1434,15 @@ export const DashboardScreen = () => {
       >
         <View style={[dynamicStyles.upcomingCard, isTomorrow && dynamicStyles.upcomingCardWarning, dynamicStyles.shadowSm]}>
           <View style={dynamicStyles.upcomingTop}>
-            <View style={[dynamicStyles.upcomingIconPlaceholder, isTomorrow && dynamicStyles.upcomingIconPlaceholderWarning]}>
-              <Text style={[dynamicStyles.upcomingIconText, isTomorrow && dynamicStyles.upcomingIconTextWarning]}>
-                {item.name.charAt(0)}
-              </Text>
-            </View>
+            <BrandLogo
+              name={item.name}
+              provider={item.provider}
+              size={42}
+              iconSize={25}
+              fallbackColor={isTomorrow ? theme.warning : theme.primary}
+              containerStyle={[dynamicStyles.upcomingIconPlaceholder, isTomorrow && dynamicStyles.upcomingIconPlaceholderWarning]}
+              fallbackTextStyle={[dynamicStyles.upcomingIconText, isTomorrow && dynamicStyles.upcomingIconTextWarning]}
+            />
             <Text style={[dynamicStyles.upcomingDate, isTomorrow && dynamicStyles.upcomingDateWarning]} numberOfLines={1}>
               {dateLabel}
             </Text>
@@ -1545,12 +1469,15 @@ export const DashboardScreen = () => {
           dynamicStyles.shadowSm
         ]}>
           <View style={dynamicStyles.upcomingTop}>
-            <View style={[
-              dynamicStyles.upcomingIconPlaceholder, 
-              { backgroundColor: withAlpha(theme.warning, 0.13) }
-            ]}>
-              <Clock size={16} color={theme.warning} />
-            </View>
+            <BrandLogo
+              name={item.name}
+              provider={item.provider}
+              size={42}
+              iconSize={25}
+              fallbackColor={theme.warning}
+              containerStyle={[dynamicStyles.upcomingIconPlaceholder, { borderColor: withAlpha(theme.warning, 0.3) }]}
+              fallbackTextStyle={[dynamicStyles.upcomingIconText, { color: theme.warning }]}
+            />
             <Text style={[
               dynamicStyles.upcomingDate, 
               { color: theme.warning }
@@ -1748,7 +1675,7 @@ export const DashboardScreen = () => {
               activeOpacity={0.78}
               onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
             >
-              <BrandMark name={item.name} provider={item.provider} />
+              <BrandLogo name={item.name} provider={item.provider} size={42} iconSize={26} />
               <View style={dynamicStyles.paymentText}>
                 <Text style={dynamicStyles.paymentName} numberOfLines={1}>{item.name}</Text>
                 <Text style={dynamicStyles.paymentDate}>

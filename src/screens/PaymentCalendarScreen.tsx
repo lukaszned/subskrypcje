@@ -31,6 +31,7 @@ import { getPaymentOccurrencesBetween } from '../utils/subscriptionSchedule';
 import { ErrorState } from '../components/ErrorState';
 import { EmptyState } from '../components/EmptyState';
 import { SkeletonList } from '../components/LoadingState';
+import { BrandLogo } from '../components/BrandLogo';
 
 type CalendarItem = Omit<Subscription, 'nextPaymentDate'> & {
   occurrenceKey: string;
@@ -121,10 +122,6 @@ function formatMonthBadge(dateKey: string) {
     month: 'short',
     year: 'numeric',
   });
-}
-
-function getBrandInitial(item: CalendarItem) {
-  return (item.name || item.provider || '?').charAt(0).toUpperCase();
 }
 
 export const PaymentCalendarScreen = () => {
@@ -378,12 +375,15 @@ export const PaymentCalendarScreen = () => {
                   activeOpacity={0.86}
                   onPress={() => navigation.navigate('SubscriptionDetail', { id: item.id })}
                 >
-                  <View style={[
-                    styles.brandMark,
-                    { backgroundColor: withAlpha(paymentTone, 0.14), borderColor: withAlpha(paymentTone, 0.28) },
-                  ]}>
-                    <Text style={[styles.brandMarkText, { color: isTrial ? theme.colors.cyan : theme.colors.text }]}>{getBrandInitial(item)}</Text>
-                  </View>
+                  <BrandLogo
+                    name={item.name}
+                    provider={item.provider}
+                    size={46}
+                    iconSize={28}
+                    fallbackColor={paymentTone}
+                    containerStyle={[styles.brandMark, { borderColor: withAlpha(paymentTone, 0.28) }]}
+                    fallbackTextStyle={[styles.brandMarkText, { color: paymentTone }]}
+                  />
                   <View style={styles.paymentMain}>
                     <Text style={[styles.paymentName, { color: theme.colors.text }]} numberOfLines={1}>{item.name}</Text>
                     <Text style={[styles.paymentMeta, { color: theme.colors.textMuted }]} numberOfLines={1}>

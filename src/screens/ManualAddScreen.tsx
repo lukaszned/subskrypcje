@@ -50,6 +50,7 @@ import { isTimeoutLikeError } from '../utils/requestErrors';
 import { fetchEstimatedCost, type EstimatedCostPlan } from '../services/aiPricePredictor';
 import { buildSubscriptionNotesPayload, dateToSeasonInput, parseSubscriptionNotes } from '../utils/subscriptionNotes';
 import { goBackOrDashboard } from '../utils/navigation';
+import { BrandLogo } from '../components/BrandLogo';
 
 const CATEGORIES: Array<{
   id: SubscriptionCategory;
@@ -784,9 +785,16 @@ export const ManualAddScreen = () => {
                           style={styles.suggestionChip}
                           onPress={() => handleSelectPopular(s)}
                         >
-                          <View style={[styles.suggestionIcon, { backgroundColor: s.color }]}>
-                            <Text style={styles.suggestionIconText}>{s.name.charAt(0)}</Text>
-                          </View>
+                          <BrandLogo
+                            name={s.name}
+                            provider={s.provider}
+                            logoUrl={s.logoUrl}
+                            color={s.color}
+                            size={24}
+                            iconSize={20}
+                            containerStyle={styles.suggestionIcon}
+                            fallbackTextStyle={styles.suggestionIconText}
+                          />
                           <Text style={styles.suggestionText}>{s.name}</Text>
                         </TouchableOpacity>
                       ))}
@@ -1792,6 +1800,12 @@ const createStyles = (theme: AppTheme) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 8,
+  },
+  suggestionLogoIcon: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.55)',
+    overflow: 'hidden',
   },
   suggestionIconText: {
     color: theme.colors.text,
